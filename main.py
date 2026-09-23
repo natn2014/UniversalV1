@@ -325,6 +325,14 @@ QPushButton#jobButton {{
     font-weight: 700;
     min-height: 72px;
 }}
+QLabel#dangerTitle {{
+    color: #ff7a6b;
+    font-size: 15pt;
+    font-weight: 800;
+}}
+QLabel#dangerText {{
+    color: #ffb4a8;
+}}
 QLabel#panelText {{
     color: #1a1d22;
 }}
@@ -1219,6 +1227,97 @@ class BarcodeScanDialog(QDialog):
         super().closeEvent(event)
 
 
+class RemoveJobDialog(QDialog):
+    """Type-to-confirm removal: the Remove button only enables once the exact
+    part number is typed, so a stray tap can't delete a job."""
+
+    def __init__(self, part_numbers: list, current_part: Optional[str], parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Remove Job")
+        self.setModal(True)
+        self.resize(560, 360)
+
+        top_bar = QFrame()
+        top_bar.setObjectName("monitorTopBar")
+        top_layout = QHBoxLayout(top_bar)
+        top_layout.setContentsMargins(10, 6, 10, 6)
+        title = QLabel("Remove Job")
+        title.setObjectName("dangerTitle")
+        top_layout.addWidget(title)
+        top_layout.addStretch(1)
+
+        self.part_combo = QComboBox()
+        for part_no in part_numbers:
+            self.part_combo.addItem(part_no)
+        if current_part in part_numbers:
+            self.part_combo.setCurrentText(current_part)
+
+        self.warning_label = QLabel()
+        self.warning_label.setObjectName("dangerText")
+        self.warning_label.setWordWrap(True)
+        self.prompt_label = QLabel()
+        self.prompt_label.setWordWrap(True)
+        self.confirm_field = QLineEdit()
+        self.confirm_field.setPlaceholderText("Type the part number here")
+
+        card = QFrame()
+        card.setObjectName("card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(12, 10, 12, 12)
+        card_layout.setSpacing(8)
+        job_row = QHBoxLayout()
+        job_row.addWidget(QLabel("Job:"))
+        job_row.addWidget(self.part_combo, 1)
+        card_layout.addLayout(job_row)
+        card_layout.addWidget(self.warning_label)
+        card_layout.addWidget(self.prompt_label)
+        card_layout.addWidget(self.confirm_field)
+        card_layout.addStretch(1)
+
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        self.remove_button = QPushButton("Remove")
+        self.remove_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["stop"]))
+        self.remove_button.clicked.connect(self.accept)
+        for button in (self.cancel_button, self.remove_button):
+            button.setFixedHeight(44)
+            button.setMinimumWidth(140)
+
+        bottom_bar = QFrame()
+        bottom_bar.setObjectName("monitorBottomBar")
+        bottom_layout = QHBoxLayout(bottom_bar)
+        bottom_layout.setContentsMargins(6, 4, 6, 4)
+        bottom_layout.addStretch(1)
+        bottom_layout.addWidget(self.cancel_button)
+        bottom_layout.addWidget(self.remove_button)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(top_bar)
+        layout.addWidget(card, 1)
+        layout.addWidget(bottom_bar)
+
+        self.part_combo.currentTextChanged.connect(self._on_part_changed)
+        self.confirm_field.textChanged.connect(self._update_remove_enabled)
+        self._on_part_changed(self.part_combo.currentText())
+        self.confirm_field.setFocus()
+
+    def selected_part(self) -> str:
+        return self.part_combo.currentText()
+
+    def _on_part_changed(self, part_no: str) -> None:
+        self.warning_label.setText(
+            f"This permanently deletes the saved job \"{part_no}\" (model, filters and "
+            "target classes). NG images in the Log are kept. This cannot be undone.")
+        self.prompt_label.setText(f"To confirm, type  <b>{part_no}</b>  below:")
+        self.confirm_field.clear()
+        self._update_remove_enabled()
+
+    def _update_remove_enabled(self) -> None:
+        # Exact match (case-sensitive): part numbers like "ab-1" / "AB-1" differ.
+        part_no = self.part_combo.currentText()
+        self.remove_button.setEnabled(bool(part_no) and self.confirm_field.text().strip() == part_no)
+
+
 class ZoomImageView(QWidget):
     """Image view with pinch-zoom for the touch panel: two fingers zoom around
     their midpoint (and pan as they move), one finger drags, double-tap fits.
@@ -1593,6 +1692,10 @@ class MainWindow(QWidget):
         self.buzzer_test_button.clicked.connect(self.on_buzzer_test_clicked)
 
         self.part_config_label = QLabel("No part scanned")
+        self.remove_job_button = QPushButton("Remove Job...")
+        self.remove_job_button.setFixedHeight(44)
+        self.remove_job_button.clicked.connect(self._on_remove_job_clicked)
+
         self.scan_barcode_button = QPushButton("Scan Barcode...")
         self.scan_barcode_button.setFixedHeight(44)
         self.scan_barcode_button.setMinimumWidth(200)
@@ -2109,6 +2212,8 @@ class MainWindow(QWidget):
         bottom_bar.setObjectName("monitorBottomBar")
         bottom_layout = QHBoxLayout(bottom_bar)
         bottom_layout.setContentsMargins(10, 4, 6, 4)
+        bottom_layout.addWidget(self.remove_job_button)
+        bottom_layout.addSpacing(10)
         hint = QLabel("Tap a job to switch  ·  Scan a barcode to load or create a job")
         hint.setObjectName("hint")
         bottom_layout.addWidget(hint)
@@ -2126,6 +2231,49 @@ class MainWindow(QWidget):
 
     JOB_GRID_COLUMNS = 4
 
+    def _list_saved_jobs(self) -> list:
+        """[(part_no, config_path, config)] for every readable saved job."""
+        jobs = []
+        config_paths = sorted(PART_CONFIGS_DIR.glob("*.json")) if PART_CONFIGS_DIR.exists() else []
+        for config_path in config_paths:
+            try:
+                config = json.loads(config_path.read_text())
+            except Exception:
+                continue
+            jobs.append((config.get("part_no") or config_path.stem, config_path, config))
+        return jobs
+
+    @Slot()
+    def _on_remove_job_clicked(self) -> None:
+        jobs = self._list_saved_jobs()
+        if not jobs:
+            self.status_label.setText("No saved jobs to remove.")
+            return
+        dialog = RemoveJobDialog([j[0] for j in jobs], self._current_part_no, parent=self)
+        if dialog.exec() != QDialog.Accepted:
+            return
+        part_no = dialog.selected_part()
+        config_path = next((path for p, path, _ in jobs if p == part_no), None)
+        if config_path is None:
+            return
+        try:
+            config_path.unlink()
+        except OSError as exc:
+            self.status_label.setText(f"Could not remove job '{part_no}': {exc}")
+            return
+        if part_no == self._current_part_no:
+            # The loaded model and filters stay active until another job is
+            # chosen; only the part association (and boot auto-load) is dropped.
+            self._current_part_no = None
+            self.part_config_label.setText("No part selected")
+            try:
+                LAST_PART_FILE.unlink()
+            except OSError:
+                pass
+            self._refresh_monitor_info()
+        self._refresh_job_buttons()
+        self.status_label.setText(f"Removed job '{part_no}'.")
+
     def _refresh_job_buttons(self) -> None:
         while self.job_buttons_layout.count() > 0:
             item = self.job_buttons_layout.takeAt(0)
@@ -2135,20 +2283,16 @@ class MainWindow(QWidget):
                 item.widget().hide()
                 item.widget().deleteLater()
 
-        config_paths = sorted(PART_CONFIGS_DIR.glob("*.json")) if PART_CONFIGS_DIR.exists() else []
-        if not config_paths:
+        jobs = self._list_saved_jobs()
+        self.remove_job_button.setEnabled(bool(jobs))
+        if not jobs:
             empty = QLabel("No saved jobs yet. Scan a barcode to create one.")
             empty.setObjectName("hint")
             self.job_buttons_layout.addWidget(empty, 0, 0)
             return
 
         position = 0
-        for config_path in config_paths:
-            try:
-                config = json.loads(config_path.read_text())
-            except Exception:
-                continue
-            part_no = config.get("part_no") or config_path.stem
+        for part_no, _, config in jobs:
             model_path = config.get("model_path")
             model = Path(model_path).stem if model_path else "no model"
             # Tile shows the part and its model; the active job is highlighted.
