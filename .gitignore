@@ -1,0 +1,12 @@
+# Python / environment
+.venv/
+__pycache__/
+*.pyc
+
+# Runtime data written by the app (per machine, not source)
+app_settings.json
+part_configs/.last_part
+ng_logs/
+captures/
+runs/
+.ui_assets/

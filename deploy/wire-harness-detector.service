@@ -1,0 +1,15 @@
+[Unit]
+Description=Wire Harness Detection App
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+Environment=QT_QPA_PLATFORM=xcb
+WorkingDirectory=/home/orin_nano/dev/Wire_harness_module
+ExecStart=/home/orin_nano/dev/Wire_harness_module/.venv/bin/python3 /home/orin_nano/dev/Wire_harness_module/main.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target
