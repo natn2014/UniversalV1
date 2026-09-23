@@ -1,0 +1,42 @@
+PySide6
+ultralytics
+opencv-python-headless
+hidapi
+pyzbar
+
+# opencv-python-headless (not opencv-python) avoids bundling its own Qt
+# plugins, which otherwise conflict with PySide6's at runtime.
+
+# pyzbar wraps the system `zbar` shared library for barcode/QR decoding
+# (Code 39, Code 128, EAN, QR, etc.), used by the "Scan Barcode" part-config
+# feature. Needs the `libzbar0` system package (already present on this
+# Jetson; on a fresh image: `sudo apt install libzbar0`). No pip-installable
+# substitute exists — pyzbar only binds to the system library via ctypes.
+
+# hidapi drives the PATLITE LR6-USB tower light (patlite_lr6.py, vendored
+# from https://github.com/natn2014/TowerLightUSB). On Linux this also needs
+# a udev rule granting non-root access to the device's hidraw node; see
+# /etc/udev/rules.d/99-patlite-lr6.rules. If hidapi can't open the device,
+# `pyusb` is an alternate backend (TowerLight(backend='pyusb')).
+
+# torch/torchvision: install separately, matched to this device's CUDA
+# version, BEFORE installing the packages above (so `ultralytics` doesn't
+# pull in a mismatched torch on its own):
+#
+#   pip install torch torchvision --index-url https://pypi.org/simple
+#
+# On this Jetson Orin Nano (JetPack with CUDA 13.2, driver 595.78+), the
+# plain PyPI index publishes CUDA-enabled aarch64 wheels that pull matching
+# nvidia-cu13-* runtime packages and correctly detect the Orin GPU. This is
+# newer than NVIDIA's own Jetson wheel index (developer.download.nvidia.com/
+# compute/redist/jp/), which as of writing only covers JetPack <= 6.1 /
+# CUDA 12.x, so it does NOT have a build for this device.
+#
+# Note: PyTorch's public wheel has no precompiled kernels for Orin's exact
+# compute capability (8.7 falls between the published 8.0 and 9.0 kernel
+# buckets), so the driver JIT-compiles kernels from PTX on first inference
+# call (a few seconds, one-time only, not per-frame).
+#
+# If NVIDIA later publishes a Jetson-specific wheel matching this JetPack
+# release, prefer that instead for natively-compiled (non-JIT) kernels:
+# https://developer.download.nvidia.com/compute/redist/jp/
