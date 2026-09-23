@@ -118,6 +118,7 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 | `*.pt`, `weights/` | YOLO models |
 | `deploy/` | systemd service and udev rule |
 | `docs/` | User manuals and screenshots |
+| `.claude/skills/industrial-hmi-ui/` | Claude Code skill: this app's UI/UX design system (theme module `industrial_theme.py`, layout recipes) for reuse in other apps |
 | `app_settings.json` *(runtime)* | Buzzer, hold time and OK/NG counters (git-ignored) |
 | `ng_logs/` *(runtime)* | NG images, `ng_logs/<part>/<timestamp>.jpg` (git-ignored) |
 | `captures/` *(runtime)* | **Capture** images and YOLO labels (git-ignored) |
