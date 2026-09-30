@@ -99,6 +99,14 @@ Each **job** stores the settings for one part number: the model, the detection f
 
 ![Scan dialog](images/scan_dialog.png)
 
+▶ **Demo:** a Code 39 label is held on the red line. The app reads it, asks to save a new job, and the new job tile becomes active.
+
+![Barcode scan demo](gifs/barcode.gif)
+
+The label in the demo, which you can print for testing: `15K45(40)-MM-4FYMX-C3(LF)`, Code 39 Extended with a one-character prefix.
+
+![Mock Code 39 label](images/mock_label_code39.png)
+
 1. Tap **Scan Barcode...** on the Job Change tab.
 2. Hold the barcode in front of the camera, **lined up with the red line**.
 3. When it is read, the part number appears in the large **Detected** box.
@@ -112,6 +120,10 @@ Each **job** stores the settings for one part number: the model, the detection f
 ## 6. Log tab — reviewing NG images
 
 ![Log tab](images/log.png)
+
+▶ **Demo:** open an NG picture, pinch to zoom on the detections, drag, double-tap to fit, then close.
+
+![Log demo](gifs/log.gif)
 
 - Every NG result saves a picture of the moment it happened, with the detection boxes.
 - Pictures are **grouped by part number**. The part with the most recent NG is at the top.
@@ -134,6 +146,10 @@ Each **job** stores the settings for one part number: the model, the detection f
 ## 7. Settings tab (supervisor)
 
 ![Settings tab](images/settings.png)
+
+▶ **Demo:** adjust the confidence threshold, max detections and state hold time, then return to the live view.
+
+![Settings demo](gifs/settings.gif)
 
 > Changes on this tab take effect **immediately**. The detection settings are stored in a job only when you **Save** the job (section 5, step 4). Buzzer settings and hold time are saved automatically.
 
@@ -176,6 +192,10 @@ Use this to improve the model when it makes mistakes.
 **Step 2 — Correct the boxes**
 
 ![Train tab](images/train.png)
+
+▶ **Demo:** load the dataset, pick an image, tap a box, change its class, **Confirm**, and move to the next image.
+
+![Train demo](gifs/train.gif)
 
 1. **Stop** the Monitor, then open the **Train** tab.
 2. **Select Folder...** and choose `captures/images`. The top strip shows the **Active Model** and the **Dataset**.

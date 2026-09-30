@@ -8,6 +8,10 @@ A Keyence-style inspection station for wire harnesses. A USB camera and a YOLO m
 
 📘 **User manual:** [English](docs/USER_MANUAL_EN.md) · [ภาษาไทย](docs/USER_MANUAL_TH.md)
 
+| Scan a part barcode | Review NG pictures |
+|---|---|
+| ![Barcode scan demo](docs/gifs/barcode.gif) | ![NG log demo](docs/gifs/log.gif) |
+
 ## Features
 
 - **Live detection:** Ultralytics YOLO runs on the Jetson GPU (CUDA). You can filter by confidence, class and a maximum number of detections.
@@ -117,7 +121,9 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 | `part_configs/<part>.json` | Saved jobs, one per part number |
 | `*.pt`, `weights/` | YOLO models |
 | `deploy/` | systemd service and udev rule |
-| `docs/` | User manuals and screenshots |
+| `docs/` | User manuals, screenshots and demo GIFs (`docs/gifs/`) |
+| `tools/record_demo_gifs.py` | Re-records the demo GIFs from the running app (live camera; uses scratch copies of all data) |
+| `tools/code39.py` | Code 39 / Code 39 Extended label renderer (mock labels for demos and tests) |
 | `.claude/skills/industrial-hmi-ui/` | Claude Code skill: this app's UI/UX design system (theme module `industrial_theme.py`, layout recipes) for reuse in other apps |
 | `app_settings.json` *(runtime)* | Buzzer, hold time and OK/NG counters (git-ignored) |
 | `ng_logs/` *(runtime)* | NG images, `ng_logs/<part>/<timestamp>.jpg` (git-ignored) |
