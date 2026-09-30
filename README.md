@@ -8,9 +8,17 @@ A Keyence-style inspection station for wire harnesses. A USB camera and a YOLO m
 
 📘 **User manual:** [English](docs/USER_MANUAL_EN.md) · [ภาษาไทย](docs/USER_MANUAL_TH.md)
 
-| Scan a part barcode | Review NG pictures |
+## See it in action
+
+Recorded on the real station, with the live camera and a real harness.
+
+| 1. Switch job by barcode | 2. Review NG pictures |
 |---|---|
 | ![Barcode scan demo](docs/gifs/barcode.gif) | ![NG log demo](docs/gifs/log.gif) |
+| **Job Change → Scan Barcode...**: hold the label on the red line. The part number is read, and the job is loaded or created. | **Log** tab: tap a thumbnail, pinch with two fingers to zoom on the detections, double-tap to fit. |
+| **3. Adjust detection settings** | **4. Correct labels for training** |
+| ![Settings demo](docs/gifs/settings.gif) | ![Train demo](docs/gifs/train.gif) |
+| **Settings** tab: confidence, max detections and state hold time take effect immediately on the live view. | **Train** tab: pick an image, tap a box, choose the right class, **Confirm**. |
 
 ## Features
 
@@ -148,6 +156,18 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 ระบบตรวจสอบชุดสายไฟ (Wire Harness) ด้วยกล้อง ออกแบบหน้าจอแบบ Keyence ใช้กล้อง USB ร่วมกับโมเดล YOLO ตัดสินผล **OK / NG / STANDBY** และแสดงผลผ่านไฟสัญญาณ (Tower Light) PATLITE พร้อมเสียงเตือน ทำงานแบบเต็มจอ (Kiosk) บนจอสัมผัส ด้วยบอร์ด NVIDIA Jetson Orin Nano
 
 📘 **คู่มือการใช้งาน:** [English](docs/USER_MANUAL_EN.md) · [ภาษาไทย](docs/USER_MANUAL_TH.md)
+
+### ตัวอย่างการใช้งาน
+
+บันทึกจากเครื่องจริง ด้วยกล้องจริงและชิ้นงานจริง
+
+| 1. เปลี่ยนงานด้วยบาร์โค้ด | 2. ดูภาพ NG ย้อนหลัง |
+|---|---|
+| ![ตัวอย่างการสแกนบาร์โค้ด](docs/gifs/barcode.gif) | ![ตัวอย่างแท็บ Log](docs/gifs/log.gif) |
+| **Job Change → Scan Barcode...** ถือฉลากไว้บนเส้นสีแดง ระบบอ่านรหัสชิ้นงาน แล้วโหลดงานหรือสร้างงานใหม่ | แท็บ **Log** แตะภาพย่อ ใช้ 2 นิ้วซูมที่จุดที่ตรวจพบ แตะ 2 ครั้งให้พอดีจอ |
+| **3. ปรับค่าการตรวจจับ** | **4. แก้ไข Label สำหรับเทรน** |
+| ![ตัวอย่างแท็บ Settings](docs/gifs/settings.gif) | ![ตัวอย่างแท็บ Train](docs/gifs/train.gif) |
+| แท็บ **Settings** ค่า Confidence, Max Detections และ State hold time มีผลกับภาพสดทันที | แท็บ **Train** เลือกภาพ แตะกรอบ เลือกคลาสที่ถูกต้อง แล้วกด **Confirm** |
 
 ### ความสามารถหลัก
 
