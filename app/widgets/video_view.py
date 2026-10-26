@@ -1,0 +1,107 @@
+from typing import Optional
+
+from PySide6.QtCore import QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
+from PySide6.QtWidgets import QWidget
+
+from ..roi import normalize_roi
+
+
+class VideoView(QWidget):
+    """Live frame scaled to fit. In ROI mode, dragging on the image draws a
+    new detection area, emitted as fractions of the frame (x1, y1, x2, y2)."""
+
+    roi_drawn = Signal(tuple)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._pixmap: Optional[QPixmap] = None
+        self._image_rect = QRectF()
+        self._roi_mode = False
+        self._drag_start: Optional[QPointF] = None  # fractions of the frame
+        self._drag_end: Optional[QPointF] = None
+        self._overlay_text: Optional[str] = None
+
+    def setPixmap(self, pixmap: QPixmap) -> None:
+        self._pixmap = pixmap
+        self.update()
+
+    def pixmap(self) -> Optional[QPixmap]:
+        return self._pixmap
+
+    def set_overlay_text(self, text: Optional[str]) -> None:
+        """Large warning drawn over the image (e.g. camera lost); None hides it."""
+        self._overlay_text = text
+        self.update()
+
+    def set_roi_mode(self, enabled: bool) -> None:
+        self._roi_mode = enabled
+        self._drag_start = self._drag_end = None
+        self.setCursor(Qt.CrossCursor if enabled else Qt.ArrowCursor)
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor("#0b0d10"))
+        if self._pixmap is None or self._pixmap.isNull():
+            self._draw_overlay(painter)
+            painter.end()
+            return
+        scale = min(self.width() / self._pixmap.width(), self.height() / self._pixmap.height())
+        w, h = self._pixmap.width() * scale, self._pixmap.height() * scale
+        self._image_rect = QRectF((self.width() - w) / 2, (self.height() - h) / 2, w, h)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform)
+        painter.drawPixmap(self._image_rect, self._pixmap, QRectF(self._pixmap.rect()))
+
+        if self._roi_mode:
+            painter.setPen(QColor("#ffd54f"))
+            painter.drawText(self._image_rect.adjusted(8, 6, -8, -6), Qt.AlignTop | Qt.AlignLeft,
+                             "Drag on the image to set the detection area")
+        if self._drag_start is not None and self._drag_end is not None:
+            r = self._image_rect
+            pen = QPen(QColor("#ffd54f"), 2, Qt.DashLine)
+            painter.setPen(pen)
+            painter.drawRect(QRectF(
+                QPointF(r.x() + self._drag_start.x() * r.width(), r.y() + self._drag_start.y() * r.height()),
+                QPointF(r.x() + self._drag_end.x() * r.width(), r.y() + self._drag_end.y() * r.height()),
+            ).normalized())
+        self._draw_overlay(painter)
+        painter.end()
+
+    def _draw_overlay(self, painter: QPainter) -> None:
+        if not self._overlay_text:
+            return
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 170))
+        font = painter.font()
+        font.setPointSize(20)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(QColor("#ff5a4a"))
+        painter.drawText(self.rect().adjusted(20, 0, -20, 0), Qt.AlignCenter | Qt.TextWordWrap, self._overlay_text)
+
+    def _to_fraction(self, pos: QPointF) -> QPointF:
+        r = self._image_rect
+        return QPointF(min(max((pos.x() - r.x()) / r.width(), 0.0), 1.0),
+                       min(max((pos.y() - r.y()) / r.height(), 0.0), 1.0))
+
+    def mousePressEvent(self, event) -> None:
+        if not self._roi_mode or self._image_rect.isEmpty():
+            return
+        if self._image_rect.contains(event.position()):
+            self._drag_start = self._drag_end = self._to_fraction(event.position())
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag_start is None:
+            return
+        self._drag_end = self._to_fraction(event.position())
+        self.update()
+
+    def mouseReleaseEvent(self, event) -> None:
+        if self._drag_start is None:
+            return
+        start, end = self._drag_start, self._to_fraction(event.position())
+        self._drag_start = self._drag_end = None
+        self.update()
+        roi = normalize_roi((start.x(), start.y(), end.x(), end.y()))
+        if roi is not None:
+            self.roi_drawn.emit(roi)

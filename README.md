@@ -124,7 +124,13 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 
 | Path | Purpose |
 |---|---|
-| `main.py` | The application (PySide6 UI, camera and YOLO worker, tower light, jobs, training) |
+| `main.py` | Entry point (`python3 main.py`); the application lives in `app/` |
+| `app/main_window.py` | Main window: hosts the tabs and the cross-tab flows (switching jobs, barcode scan, shutdown) |
+| `app/tabs/` | One widget per tab: Monitor, Settings, Job Change, Train, Log |
+| `app/context.py` | `AppContext`: state the tabs share (video worker, filters, current part, model, settings, tower light) |
+| `app/camera.py`, `app/tower.py`, `app/judgement.py` | Camera + YOLO worker, tower light/buzzer controller, OK/NG decision and hold-time latch |
+| `app/jobs.py`, `app/ng_log.py`, `app/settings.py`, `app/paths.py` | Saved jobs, NG image log, `app_settings.json`, data paths |
+| `app/widgets/`, `app/theme.py` | Reusable widgets and dialogs; dark industrial stylesheet and icons |
 | `patlite_lr6.py` | PATLITE LR6-USB driver (from [TowerLightUSB](https://github.com/natn2014/TowerLightUSB)) |
 | `part_configs/<part>.json` | Saved jobs, one per part number |
 | `*.pt`, `weights/` | YOLO models |

@@ -23,13 +23,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import main  # noqa: E402
+import cv2  # noqa: E402
+from app import main_window, paths  # noqa: E402
+from app.ng_log import collect_ng_log, ng_stamp_text  # noqa: E402
+from app.theme import DARK_INDUSTRIAL_QSS  # noqa: E402
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer  # noqa: E402
 from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPen  # noqa: E402
 from PySide6.QtTest import QTest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QMessageBox, QStyle, QStyleOptionSlider  # noqa: E402
+from PySide6.QtWidgets import (  # noqa: E402
+    QApplication, QMessageBox, QScrollArea, QStyle, QStyleOptionSlider, QToolButton,
+)
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import code39  # noqa: E402
@@ -45,6 +50,15 @@ FINGER_MS = 450       # how long a tap marker stays visible
 
 
 # ------------------------------------------------------------ data sandbox ---
+def redirect_paths(**values: Path) -> None:
+    """The app modules import these constants by name, so rebind each copy."""
+    for name, module in list(sys.modules.items()):
+        if name == "app" or name.startswith("app."):
+            for attr, value in values.items():
+                if hasattr(module, attr):
+                    setattr(module, attr, value)
+
+
 def sandbox_data() -> Path:
     """Point the app at scratch copies of everything it reads or writes."""
     tmp = Path(tempfile.mkdtemp(prefix="demo_gifs_"))
@@ -53,13 +67,15 @@ def sandbox_data() -> Path:
             shutil.copytree(ROOT / name, tmp / name)
     if (ROOT / "app_settings.json").exists():
         shutil.copy(ROOT / "app_settings.json", tmp / "app_settings.json")
-    main.APP_SETTINGS_FILE = tmp / "app_settings.json"
-    main.PART_CONFIGS_DIR = tmp / "part_configs"
-    main.LAST_PART_FILE = main.PART_CONFIGS_DIR / ".last_part"
-    main.NG_LOGS_DIR = tmp / "ng_logs"
-    main.CAPTURES_DIR = tmp / "captures"
-    main.CAPTURES_IMAGES_DIR = main.CAPTURES_DIR / "images"
-    main.CAPTURES_LABELS_DIR = main.CAPTURES_DIR / "labels"
+    redirect_paths(
+        APP_SETTINGS_FILE=tmp / "app_settings.json",
+        PART_CONFIGS_DIR=tmp / "part_configs",
+        LAST_PART_FILE=tmp / "part_configs" / ".last_part",
+        NG_LOGS_DIR=tmp / "ng_logs",
+        CAPTURES_DIR=tmp / "captures",
+        CAPTURES_IMAGES_DIR=tmp / "captures" / "images",
+        CAPTURES_LABELS_DIR=tmp / "captures" / "labels",
+    )
     return tmp
 
 
@@ -245,30 +261,30 @@ def detection_focus(image_path: Path):
 def prepare_log(rec: Recorder, w) -> None:
     """Off camera: run the live inspection briefly so a fresh NG frame (real
     harness, current timestamp) lands in the scratch NG log."""
-    before = w._ng_count
+    before = w.monitor_tab.ng_count
     w.start_stream()
     deadline = time.monotonic() + 40
-    while w._ng_count == before and time.monotonic() < deadline:
+    while w.monitor_tab.ng_count == before and time.monotonic() < deadline:
         rec.pump(0.3)
     rec.pump(1.0)
     w.stop_stream()
-    while w._worker.isRunning():
+    while w.ctx.worker.isRunning():
         rec.pump(0.2)
-    w._ng_log_dirty = True
-    print("fresh NG frame:", "yes" if w._ng_count > before else "no (using existing log)")
+    w.log_tab._dirty = True
+    print("fresh NG frame:", "yes" if w.monitor_tab.ng_count > before else "no (using existing log)")
 
 
 def scene_log(rec: Recorder, w) -> None:
     rec.tap_tab(w.tabs, w.log_tab_index, after=1.5)
-    thumbs = [b for b in w.tabs.widget(w.log_tab_index).findChildren(main.QToolButton)
+    thumbs = [b for b in w.tabs.widget(w.log_tab_index).findChildren(QToolButton)
               if not b.isHidden()]
     # Of the thumbnails on screen, open the NG picture with the most visible
     # detections (the newest one may be an almost empty frame).
     shown = []
-    for part_name, thumb_paths, _ in w._collect_ng_log():
-        for thumb in thumb_paths[:main.NG_THUMBS_PER_PART]:
-            full = thumb.with_name(thumb.name[: -len(main.NG_THUMB_SUFFIX)] + ".jpg")
-            shown.append((detection_focus(full), w._ng_stamp_text(thumb), part_name))
+    for part_name, thumb_paths, _ in collect_ng_log():
+        for thumb in thumb_paths[:paths.NG_THUMBS_PER_PART]:
+            full = thumb.with_name(thumb.name[: -len(paths.NG_THUMB_SUFFIX)] + ".jpg")
+            shown.append((detection_focus(full), ng_stamp_text(thumb), part_name))
     # Prefer frames with a sane timestamp (1970 = saved before the clock synced).
     dated = [item for item in shown if not item[1].startswith("1970")] or shown
     # A frame recorded just now (prepare_log) wins if it shows detections.
@@ -278,7 +294,7 @@ def scene_log(rec: Recorder, w) -> None:
     else:
         (_, focus), stamp, _ = max(dated, key=lambda item: item[0][0])
     target = next(b for b in thumbs if b.text() == stamp)
-    w.tabs.widget(w.log_tab_index).findChild(main.QScrollArea).ensureWidgetVisible(target)
+    w.tabs.widget(w.log_tab_index).findChild(QScrollArea).ensureWidgetVisible(target)
     rec.pump(0.4)
     rec.tap(target, after=1.4)
     view = w.image_overlay.view
@@ -299,15 +315,15 @@ def scene_log(rec: Recorder, w) -> None:
 
 def scene_settings(rec: Recorder, w) -> None:
     rec.tap_tab(w.tabs, 1, after=1.2)
-    rec.slide(w.confidence_slider, 75, 1.0)
-    rec.slide(w.confidence_slider, 60, 0.8)
-    rec.spin_step(w.max_detections_spinbox, up=True, times=2)
-    rec.spin_step(w.max_detections_spinbox, up=False, times=2)
-    if w._tower_connected:                         # skip if the tower is unplugged
-        rec.tap(w.buzzer_test_button, after=1.2)   # plays one NG alarm cycle
-        rec.tap(w.ok_beep_test_button, after=0.8)
-    rec.spin_step(w.state_hold_spinbox, up=True, times=2)
-    rec.spin_step(w.state_hold_spinbox, up=False, times=2)
+    rec.slide(w.settings_tab.confidence_slider, 75, 1.0)
+    rec.slide(w.settings_tab.confidence_slider, 60, 0.8)
+    rec.spin_step(w.settings_tab.max_detections_spinbox, up=True, times=2)
+    rec.spin_step(w.settings_tab.max_detections_spinbox, up=False, times=2)
+    if w.ctx.tower.connected:                         # skip if the tower is unplugged
+        rec.tap(w.settings_tab.buzzer_test_button, after=1.2)   # plays one NG alarm cycle
+        rec.tap(w.settings_tab.ok_beep_test_button, after=0.8)
+    rec.spin_step(w.settings_tab.state_hold_spinbox, up=True, times=2)
+    rec.spin_step(w.settings_tab.state_hold_spinbox, up=False, times=2)
     rec.tap_tab(w.tabs, 0, after=2.0)              # back to the live view
 
 
@@ -315,28 +331,28 @@ def scene_train(rec: Recorder, w) -> None:
     train_index = 3
     rec.tap_tab(w.tabs, train_index, after=1.0)
     # The real button opens a native folder dialog; show the tap, load directly.
-    rec.mark_only(w.train_select_folder_button, after=0.2)
-    w._scan_train_folder(main.CAPTURES_IMAGES_DIR)
+    rec.mark_only(w.train_tab.train_select_folder_button, after=0.2)
+    w.train_tab.scan_train_folder(paths.CAPTURES_IMAGES_DIR)
     rec.pump(1.0)
-    lst = w.train_list_widget
+    lst = w.train_tab.train_list_widget
     rec.tap(lst.viewport(), lst.visualItemRect(lst.item(2)).center(), after=1.0)
 
-    widget = w.train_image_widget
-    box = w._train_boxes[0]
+    widget = w.train_tab.train_image_widget
+    box = w.train_tab._train_boxes[0]
     draw = widget._draw_rect
     scale = draw.width() / widget.pixmap().width()
     local = QPoint(int(draw.x() + (box["x1"] + box["x2"]) / 2 * scale),
                    int(draw.y() + (box["y1"] + box["y2"]) / 2 * scale))
     rec.tap(widget, local, after=1.0)              # select a box
 
-    combo = w.train_class_combo
+    combo = w.train_tab.train_class_combo
     current = combo.currentIndex()
     rec.choose(combo, (current + 1) % combo.count())
-    rec.tap(w.train_confirm_button, after=1.2)     # label file updated
+    rec.tap(w.train_tab.train_confirm_button, after=1.2)     # label file updated
     rec.choose(combo, current)                     # put the class back
-    rec.tap(w.train_confirm_button, after=1.0)
-    rec.tap(w.train_next_button, after=0.9)
-    rec.tap(w.train_next_button, after=1.2)
+    rec.tap(w.train_tab.train_confirm_button, after=1.0)
+    rec.tap(w.train_tab.train_next_button, after=0.9)
+    rec.tap(w.train_tab.train_next_button, after=1.2)
 
 
 class MockLabel:
@@ -417,23 +433,23 @@ def answer_next_question(rec: Recorder, button=QMessageBox.Yes, after: float = 2
 
 
 def scene_barcode(rec: Recorder, w) -> None:
-    real_capture = main.cv2.VideoCapture
-    main.cv2.VideoCapture = lambda *a, **k: LabelCamera(real_capture(*a, **k))
+    real_capture = cv2.VideoCapture
+    cv2.VideoCapture = lambda *a, **k: LabelCamera(real_capture(*a, **k))
     try:
         rec.tap_tab(w.tabs, 2, after=1.0)                     # Job Change
-        rec.tap(w.scan_barcode_button, after=2.5)             # live camera opens
+        rec.tap(w.job_change_tab.scan_barcode_button, after=2.5)             # live camera opens
         dialog = w._barcode_dialog
         answer_next_question(rec, QMessageBox.Yes, after=2.2)  # "save as new job?" -> Yes
         LABEL.show()
         deadline = time.monotonic() + 15
-        while w._current_part_no != MOCK_PART and time.monotonic() < deadline:
+        while w.ctx.current_part_no != MOCK_PART and time.monotonic() < deadline:
             rec.pump(0.2)
         rec.pump(1.2)
         LABEL.hide()
         rec.pump(1.2)
         rec.tap(dialog.close_button, after=2.2)               # new job tile is active
     finally:
-        main.cv2.VideoCapture = real_capture
+        cv2.VideoCapture = real_capture
 
 
 PREPARE = {"log": prepare_log}
@@ -451,8 +467,8 @@ def main_entry() -> None:
     wanted = [a for a in sys.argv[1:] if a in SCENES] or list(SCENES)
     scratch = sandbox_data()
     app = QApplication(sys.argv)
-    app.setStyleSheet(main.DARK_INDUSTRIAL_QSS)
-    window = main.MainWindow()
+    app.setStyleSheet(DARK_INDUSTRIAL_QSS)
+    window = main_window.MainWindow()
     window.showFullScreen()
     rec = Recorder(app)
     rec.pump(2.0)
@@ -465,7 +481,7 @@ def main_entry() -> None:
                 PREPARE[name](rec, window)
             if needs_stream:
                 frames = [0]
-                window._worker.frame_ready.connect(lambda *a: frames.__setitem__(0, frames[0] + 1))
+                window.ctx.worker.frame_ready.connect(lambda *a: frames.__setitem__(0, frames[0] + 1))
                 window.start_stream()
                 deadline = time.monotonic() + 60
                 while frames[0] < 20 and time.monotonic() < deadline:
@@ -477,13 +493,13 @@ def main_entry() -> None:
             captured = rec.stop()
             if needs_stream:
                 window.stop_stream()
-                while window._worker.isRunning():
+                while window.ctx.worker.isRunning():
                     rec.pump(0.2)
             save_gif(captured, OUT_DIR / f"{name}.gif")
     finally:
         window.stop_stream()
-        window._worker.wait()
-        window._shutdown_tower_light()
+        window.ctx.worker.wait()
+        window.ctx.tower.shutdown()
         window.close()
         shutil.rmtree(scratch, ignore_errors=True)
 
