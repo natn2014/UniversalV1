@@ -20,6 +20,35 @@ Recorded on the real station, with the live camera and a real harness.
 | ![Settings demo](docs/gifs/settings.gif) | ![Train demo](docs/gifs/train.gif) |
 | **Settings** tab: confidence, max detections and state hold time take effect immediately on the live view. | **Train** tab: pick an image, tap a box, choose the right class, **Confirm**. |
 
+## Image-processing tools (Keyence IV4 / CV-X style)
+
+Next to YOLO, each job can hold rule-based **vision tools**. They work like the tools of a Keyence IV4 / CV-X vision sensor: each one checks one thing in its own area of the image, and together they decide OK / NG (gate **AND** or **OR**, together with YOLO). They are set up in the **Tools** tab.
+
+| 1. Tool Catalog | 2. Eyedropper (Pick Color / Pick Gray) |
+|---|---|
+| ![Tool Catalog demo](docs/gifs/tool_catalog.gif) | ![Eyedropper demo](docs/gifs/eyedropper.gif) |
+| **Add Tool** opens the catalog. Tap a category, then a tool: the **Application Navigator** on the right explains it with an example. **Add** (or a double tap) confirms, then you drag the tool's area on the image. | Tap the color (or gray level) to count on the image, and tap more spots to add them. **− Narrower / + Wider** adjust it in steps. What is counted is shown live in yellow. |
+| **3. Pattern Search** | **4. What each tool counts** |
+| ![Pattern Search demo](docs/gifs/pattern_search.gif) | ![Counted pixels demo](docs/gifs/counted_pixels.gif) |
+| Teach one mark (drag a box around it). Every copy is then found at any angle and counted, with its score and angle. | Area, Edge Pixels, Blob Count and Color Prohibit show exactly the pixels they count: see-through yellow, or red for a forbidden color. |
+
+| Category | Tools |
+|---|---|
+| Position | **Position Adjust**: finds the part, and the other tools follow it when it moves or turns |
+| Color | **Color Area** (% of the taught color), **Color Average** (ΔE to the master), **Color Prohibit** (NG on a forbidden color) |
+| Brightness | **Area (mono)**, **Brightness Average**, **Edge Pixels**, **Shading Uniformity** |
+| Measure | **Width**, **Edge Presence**, **Pitch**, **Diameter** (px, or mm after **Calibrate mm**) |
+| Text & Code | **OCR Text** (Tesseract), **Code QR / 1D** (zbar). They run at 2 Hz in their own thread, so the live view stays at full frame rate. |
+| Pattern & Count | **Outline**, **Pattern Search** (ShapeTrax-style, any angle), **Blob Count** |
+
+How to set up a tool:
+1. **Tools** tab. The camera starts live; **Snapshot** freezes a frame and **Resume Live** goes back.
+2. **Add Tool** → pick it in the catalog → drag its area on the image. Pattern Search then asks for a box around one copy of the pattern.
+3. **Teach** (from the frozen frame), or **Pick Color / Pick Gray** for the color and brightness tools.
+4. Set the OK range under **Limits**. **Set from current ±10 %** is a quick start. Tools are saved with the job and judged live on the Monitor tab.
+
+The tool design and the per-tool details are in [core_function.md](core_function.md); the development log is in [develop_record.md](develop_record.md). The GIFs above are drawn scenes recorded offscreen by `tools/make_readme_gifs.py`.
+
 ## Features
 
 - **Live detection:** Ultralytics YOLO runs on the Jetson GPU (CUDA). You can filter by confidence, class and a maximum number of detections.
@@ -57,8 +86,8 @@ Recorded on the real station, with the live camera and a real harness.
 git clone https://github.com/natn2014/UniversalV1.git
 cd UniversalV1
 
-# System library for barcode decoding
-sudo apt install libzbar0
+# System libraries: barcode / QR decoding, and the OCR engine for the OCR tool
+sudo apt install libzbar0 tesseract-ocr
 
 # Python environment
 python3 -m venv .venv
@@ -126,7 +155,8 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 |---|---|
 | `main.py` | Entry point (`python3 main.py`); the application lives in `app/` |
 | `app/main_window.py` | Main window: hosts the tabs and the cross-tab flows (switching jobs, barcode scan, shutdown) |
-| `app/tabs/` | One widget per tab: Monitor, Settings, Job Change, Train, Log |
+| `app/tabs/` | One widget per tab: Monitor, Settings, Tools, Job Change, Train, Log |
+| `app/vision/` | Rule-based vision tools (no Qt): position, color, brightness, measure, OCR / code, outline, pattern search, blob count; the slow-tool thread and the total judgement |
 | `app/context.py` | `AppContext`: state the tabs share (video worker, filters, current part, model, settings, tower light) |
 | `app/camera.py`, `app/tower.py`, `app/judgement.py` | Camera + YOLO worker, tower light/buzzer controller, OK/NG decision and hold-time latch |
 | `app/jobs.py`, `app/ng_log.py`, `app/settings.py`, `app/paths.py` | Saved jobs, NG image log, `app_settings.json`, data paths |
@@ -137,6 +167,7 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 | `deploy/` | systemd service and udev rule |
 | `docs/` | User manuals, screenshots and demo GIFs (`docs/gifs/`) |
 | `tools/record_demo_gifs.py` | Re-records the demo GIFs from the running app (live camera; uses scratch copies of all data) |
+| `tools/make_tool_thumbs.py`, `tools/make_readme_gifs.py` | Draw the Tool Catalog example pictures (`app/assets/tool_thumbs/`) and record the vision-tool GIFs offscreen |
 | `tools/code39.py` | Code 39 / Code 39 Extended label renderer (mock labels for demos and tests) |
 | `.claude/skills/industrial-hmi-ui/` | Claude Code skill: this app's UI/UX design system (theme module `industrial_theme.py`, layout recipes) for reuse in other apps |
 | `app_settings.json` *(runtime)* | Buzzer, hold time and OK/NG counters (git-ignored) |
@@ -175,6 +206,20 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 | ![ตัวอย่างแท็บ Settings](docs/gifs/settings.gif) | ![ตัวอย่างแท็บ Train](docs/gifs/train.gif) |
 | แท็บ **Settings** ค่า Confidence, Max Detections และ State hold time มีผลกับภาพสดทันที | แท็บ **Train** เลือกภาพ แตะกรอบ เลือกคลาสที่ถูกต้อง แล้วกด **Confirm** |
 
+### เครื่องมือประมวลผลภาพ (แบบ Keyence IV4 / CV-X)
+
+นอกจาก YOLO แล้ว แต่ละงานสามารถมี **เครื่องมือตรวจสอบภาพ** แบบกฎ (rule-based) ได้ เหมือนเครื่องมือของเซนเซอร์ภาพ Keyence IV4 / CV-X เครื่องมือแต่ละตัวตรวจสิ่งเดียวในพื้นที่ของตัวเอง แล้วรวมผลเป็น OK / NG (แบบ **AND** หรือ **OR** ร่วมกับ YOLO) ตั้งค่าได้ที่แท็บ **Tools**
+
+| 1. Tool Catalog | 2. ดูดสี (Pick Color / Pick Gray) |
+|---|---|
+| ![ตัวอย่าง Tool Catalog](docs/gifs/tool_catalog.gif) | ![ตัวอย่างการดูดสี](docs/gifs/eyedropper.gif) |
+| กด **Add Tool** เลือกหมวด แล้วเลือกเครื่องมือ ช่อง **Application Navigator** ด้านขวาอธิบายพร้อมภาพตัวอย่าง กด **Add** (หรือแตะ 2 ครั้ง) แล้วลากพื้นที่บนภาพ | แตะสี (หรือระดับความสว่าง) ที่ต้องการนับบนภาพ แตะจุดอื่นเพิ่มได้ ปรับด้วย **− Narrower / + Wider** ส่วนที่นับจะแสดงเป็นสีเหลืองทันที |
+| **3. Pattern Search** | **4. สิ่งที่เครื่องมือนับ** |
+| ![ตัวอย่าง Pattern Search](docs/gifs/pattern_search.gif) | ![ตัวอย่างพิกเซลที่นับ](docs/gifs/counted_pixels.gif) |
+| สอนเครื่องหมาย 1 ตัว (ลากกรอบรอบมัน) ระบบจะค้นหาทุกตัวได้ทุกมุม พร้อมนับจำนวน คะแนน และมุม | Area, Edge Pixels, Blob Count และ Color Prohibit แสดงพิกเซลที่นับจริง เป็นสีเหลืองโปร่ง หรือสีแดงสำหรับสีต้องห้าม |
+
+รายละเอียดเครื่องมือทั้งหมดอยู่ใน [core_function.md](core_function.md)
+
 ### ความสามารถหลัก
 
 - **ตรวจจับแบบเรียลไทม์:** ใช้ Ultralytics YOLO บน GPU ของ Jetson (CUDA) กรองผลได้ตามค่าความมั่นใจ (Confidence) คลาส และจำนวนสูงสุดที่ตรวจจับ
@@ -211,7 +256,7 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 ```bash
 git clone https://github.com/natn2014/UniversalV1.git
 cd UniversalV1
-sudo apt install libzbar0                 # ไลบรารีสำหรับอ่านบาร์โค้ด
+sudo apt install libzbar0 tesseract-ocr   # ไลบรารีอ่านบาร์โค้ด และโปรแกรม OCR
 python3 -m venv .venv
 source .venv/bin/activate
 pip install torch torchvision --index-url https://pypi.org/simple   # ติดตั้ง torch (CUDA) ก่อน
