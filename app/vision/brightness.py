@@ -4,7 +4,7 @@ shading-uniformity check. All work on the gray ROI after the `pre` chain."""
 import cv2
 import numpy as np
 
-from .base import Tool, overlay_item, register
+from .base import Tool, overlay_item, region_item, register
 
 
 def binarize(gray: np.ndarray, method: str = "fixed", threshold: float = 128, polarity: str = "bright") -> np.ndarray:
@@ -27,8 +27,7 @@ class AreaTool(Tool):
         value = cv2.countNonZero(mask) * 100.0 / mask.size
         overlay = []
         if value > 0:
-            x, y, w, h = cv2.boundingRect(mask)
-            overlay.append(overlay_item("mask_box", [x, y, x + w, y + h], True, f"{value:.1f}%"))
+            overlay.append(region_item(mask, True, f"{value:.1f}%"))
         res = self.result(value, overlay)
         for item in res.overlay:
             item["ok"] = res.ok

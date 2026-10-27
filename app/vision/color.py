@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 
 from ..roi import roi_to_pixels
-from .base import Offset, Tool, overlay_item, register
+from .base import Offset, Tool, overlay_item, region_item, register
 from .preprocess import to_hsv
 
 
@@ -107,8 +107,7 @@ class ColorAreaTool(HsvTool):
         value = cv2.countNonZero(mask) * 100.0 / mask.size
         overlay = []
         if value > 0:
-            x, y, w, h = cv2.boundingRect(mask)
-            overlay.append(overlay_item("mask_box", [x, y, x + w, y + h], True, f"{value:.1f}%"))
+            overlay.append(region_item(mask, True, f"{value:.1f}%"))
         res = self.result(value, overlay)
         for item in res.overlay:
             item["ok"] = res.ok

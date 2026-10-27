@@ -32,9 +32,21 @@ class Area(unittest.TestCase):
         res = AreaTool(method="otsu").run(np.full((100, 100, 3), 90, np.uint8))
         self.assertIn(res.value, (0.0, 100.0))
 
-    def test_gray_input_and_mask_box(self):
+    def test_gray_input_and_counted_region(self):
         res = AreaTool().run(square_frame(0.3)[:, :, 0])
-        self.assertEqual(res.overlay[1]["pts"], [0, 0, 90, 200])
+        region = res.overlay[1]
+        self.assertEqual(region["type"], "region")
+        self.assertEqual(region["pts"], [0, 0])
+        ys, xs = np.nonzero(region["mask"])
+        self.assertEqual((xs.min(), ys.min(), xs.max(), ys.max()), (0, 0, 89, 199))
+
+    def test_region_follows_the_roi(self):
+        img = np.zeros((100, 100), np.uint8)
+        cv2.rectangle(img, (20, 20), (80, 80), 255, -1)
+        res = AreaTool(roi=(0.1, 0.1, 0.9, 0.9)).run(img)
+        region = res.overlay[1]
+        self.assertEqual(region["pts"], [10, 10])  # frame pixels of the mask's corner
+        self.assertEqual(int(region["mask"][10, 10]), 255)  # frame (20, 20)
 
 
 class BrightnessAverage(unittest.TestCase):

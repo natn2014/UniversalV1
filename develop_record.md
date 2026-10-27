@@ -363,3 +363,9 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 ### Touch delete for tools
 - What changed: Delete on the Tools tab opens `DeleteToolDialog` (the tool's picture, name and kind, a big Cancel on the left and a big red Delete on the right, 64 px tall) instead of the type-the-name dialog. Delete is never the default button, so Enter or a stray tap does nothing. The typed confirm stays for removing a whole job.
 - Tests: `test_delete_is_a_touch_confirm`, `test_delete_dialog_needs_no_typing_and_is_not_default`.
+
+### Counted area shown as a yellow region
+- What changed: Area (mono) and Color Area now show the pixels they count as a see-through yellow fill with a darker 2 px amber edge, instead of a dashed box around them. Holes stay clear.
+- How: new overlay type `region` (`region_item` in `app/vision/base.py`): `pts` is the mask's top-left in frame pixels and `item["mask"]` is the patch-sized mask itself. `draw_region` in `app/widgets/tool_overlay.py` turns it into one premultiplied ARGB image (threshold → erode → LUT, all in OpenCV) and draws it in a single call.
+- Why a mask, not outlines: outlines of a speckled mask need tens of thousands of Python points (about 60 ms per frame). The mask costs the same however speckled it is: the tool takes about 1 ms and the drawing about 5 ms for a 1024 × 576 area. Overlays are never saved, so a numpy array in the item is fine.
+- Tests: `test_gray_input_and_counted_region`, `test_region_follows_the_roi`, `test_region_is_see_through_yellow`, plus the region cases in `test_all_overlay_types_draw_without_error`.

@@ -3,8 +3,10 @@ app/vision/base.py) and formatting a result's value for the tool table."""
 
 from typing import List
 
+import cv2
+import numpy as np
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
+from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPolygonF
 
 from ..theme import NG_RED, OK_GREEN
 from ..vision.base import ToolResult
@@ -13,6 +15,12 @@ from ..vision.base import ToolResult
 OVERLAY_OK = QColor(OK_GREEN).lighter(170)
 OVERLAY_NG = QColor(NG_RED).lighter(130)
 MM_KINDS = {"width", "diameter"}
+# Counted pixels (Area, Color Area): see-through yellow with a darker edge.
+# Premultiplied BGRA (the byte order of QImage.Format_ARGB32_Premultiplied)
+# for pixel classes 0 = clear, 1 = counted, 2 = edge of the counted area.
+REGION_BGRA = [(0, 0, 0, 0), (0, 75, 90, 90), (0, 120, 176, 255)]  # fill = yellow at alpha 90
+REGION_LUTS = [np.array([c[i] for c in REGION_BGRA] + [0] * 253, np.uint8) for i in range(4)]
+EDGE_KERNEL = np.ones((5, 5), np.uint8)  # 2 px edge
 
 
 def draw_overlay(painter: QPainter, items: List[dict]) -> None:
@@ -42,10 +50,29 @@ def draw_overlay(painter: QPainter, items: List[dict]) -> None:
         elif kind == "poly" and len(pts) >= 2:
             painter.drawPolygon(QPolygonF([QPointF(x, y) for x, y in pts]))
             anchor = (int(min(p[0] for p in pts)), max(0, int(min(p[1] for p in pts)) - 6))
+        elif kind == "region" and len(pts) == 2 and item.get("mask") is not None:
+            draw_region(painter, int(round(pts[0])), int(round(pts[1])), item["mask"])
+            anchor = (int(round(pts[0])) + 4, int(round(pts[1])) + 16)
         elif kind == "text" and len(pts) == 2:
             anchor = (int(pts[0]), int(pts[1]))
         if label and anchor is not None:
             painter.drawText(anchor[0], anchor[1], label)
+
+
+def region_image(mask: np.ndarray) -> QImage:
+    """See-through yellow over the counted pixels, with a darker 2 px edge;
+    clear elsewhere (holes too)."""
+    _, on = cv2.threshold(mask, 0, 1, cv2.THRESH_BINARY)
+    inner = cv2.erode(on, EDGE_KERNEL, borderType=cv2.BORDER_CONSTANT, borderValue=0)
+    classes = cv2.subtract(cv2.add(on, on), inner)  # 0 clear, 1 inside, 2 edge
+    bgra = cv2.merge([cv2.LUT(classes, lut) for lut in REGION_LUTS])
+    h, w = mask.shape[:2]
+    return QImage(bgra.data, w, h, 4 * w, QImage.Format_ARGB32_Premultiplied).copy()
+
+
+def draw_region(painter: QPainter, x: int, y: int, mask: np.ndarray) -> None:
+    if mask.size:
+        painter.drawImage(x, y, region_image(mask))
 
 
 def tool_value_text(result: ToolResult, calibrated: bool) -> str:

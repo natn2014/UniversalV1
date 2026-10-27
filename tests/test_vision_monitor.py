@@ -4,12 +4,14 @@ redirected to a temp dir; no camera or tower light is touched."""
 import os
 import tempfile
 import unittest
+
+import numpy as np
 from pathlib import Path
 from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtGui import QColor, QImage  # noqa: E402
+from PySide6.QtGui import QColor, QImage, QPainter  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 import app.settings as settings_mod  # noqa: E402
@@ -116,6 +118,22 @@ class MonitorTools(unittest.TestCase):
         self.assertEqual(img.pixelColor(140, 60).name(), OVERLAY_NG.name())
         self.assertEqual(img.pixelColor(150, 20).name(), "#202020")
 
+    def test_region_is_see_through_yellow(self):
+        from app.widgets.tool_overlay import draw_region
+        img = QImage(60, 60, QImage.Format_RGB32)
+        img.fill(QColor("#202020"))
+        painter = QPainter(img)
+        mask = np.full((40, 40), 255, np.uint8)  # drawn at frame (10, 10)-(49, 49)
+        mask[15:25, 15:25] = 0  # hole
+        draw_region(painter, 10, 10, mask)
+        painter.end()
+        self.assertEqual(img.pixelColor(10, 30).name(), "#b07800")  # darker solid edge
+        inside = img.pixelColor(18, 18)
+        self.assertGreater(inside.red(), 0x60)  # tinted yellow ...
+        self.assertLess(inside.red(), 0xd0)     # ... but the image shows through
+        self.assertLess(inside.blue(), inside.red())
+        self.assertEqual(img.pixelColor(30, 30).name(), "#202020")  # hole stays clear
+
     def test_all_overlay_types_draw_without_error(self):
         items = [
             {"type": "rect", "pts": [1, 1, 20, 20], "ok": True, "label": "r"},
@@ -124,6 +142,9 @@ class MonitorTools(unittest.TestCase):
             {"type": "circle", "pts": [50, 50, 10], "ok": True, "label": "c"},
             {"type": "poly", "pts": [[0, 0], [30, 0], [30, 30]], "ok": False, "label": "p"},
             {"type": "text", "pts": [5, 90], "ok": True, "label": "t"},
+            {"type": "region", "pts": [2, 2], "mask": np.full((20, 20), 255, np.uint8), "ok": True, "label": "a"},
+            {"type": "region", "pts": [2, 2], "mask": np.zeros((0, 0), np.uint8), "ok": True, "label": ""},
+            {"type": "region", "pts": [2, 2], "ok": True, "label": "no mask"},
             {"type": "bogus", "pts": [], "ok": True, "label": "x"},
         ]
         self.tab._render_frame(self.image, [], [res("a", True, overlay=items)])

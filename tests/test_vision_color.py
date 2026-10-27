@@ -24,7 +24,7 @@ class ColorArea(unittest.TestCase):
         res = t.run(frame_with(RED, 0.25))
         self.assertAlmostEqual(res.value, 25.0, delta=0.5)
         self.assertEqual(res.overlay[0]["type"], "rect")
-        self.assertEqual(res.overlay[1]["type"], "mask_box")
+        self.assertEqual(res.overlay[1]["type"], "region")
 
     def test_limits_decide_ok(self):
         self.assertTrue(ColorAreaTool(low=20, high=30).run(frame_with(RED, 0.25)).ok)
@@ -78,7 +78,7 @@ class ColorArea(unittest.TestCase):
         self.assertGreater(ColorAreaTool().run(img).value, 0)
         self.assertEqual(ColorAreaTool(open_px=3).run(img).value, 0)
 
-    def test_no_match_has_no_mask_box(self):
+    def test_no_match_has_no_region(self):
         res = ColorAreaTool().run(frame_with(BLUE))
         self.assertEqual(res.value, 0)
         self.assertEqual([o["type"] for o in res.overlay], ["rect"])
