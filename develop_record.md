@@ -32,8 +32,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T19 | OCR read | done | f64a814 |
 | T20 | OCR verify | done | faedec9 |
 | T21 | Code tool (QR / 1D) | done | 23ffed7 |
-| T22 | Outline | done | |
-| T23 | Blob Count | todo | |
+| T22 | Outline | done | 8b8d1a4 |
+| T23 | Blob Count | done | |
 | T24 | Worker integration | todo | |
 | T25 | Monitor integration | todo | |
 | T26 | Tools tab UI | todo | |
@@ -257,4 +257,13 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - Shape mode: the TODO formula `100 - matchShapes x 100` cannot separate a circle from a square (Hu I1 distance is only about 0.03, so it scores 97). Used `100 * exp(-distance * 25)` instead: circle vs square 45, rotated rectangle 99, notched rectangle 83.
   - The largest contour comes from an Otsu mask whose minority class is taken as the part.
   - If the ROI size changes after teaching, the tool reports "ROI size changed: teach again".
+- Commit: 8b8d1a4
+
+### T23 Blob Count: done  (2026-10-27)
+- Files: app/vision/count.py, app/vision/color.py (`open_mask` split out of `hsv_mask`), app/vision/__init__.py, tests/test_vision_count.py
+- Tests added: 8  ·  Suite: 259/259 passing
+- Decisions / deviations from the TODO:
+  - Circularity is computed per kept blob from `findContours` on its own mask, with the contour smoothed by `approxPolyDP(1 px)` before taking the perimeter: the raw pixel staircase made a digital circle score only 0.77-0.87 and `circ_min=0.8` dropped real circles. Now circles score 0.87-0.98, a square 0.785, a bar 0.2. Circularity is only computed when `circ_min > 0`.
+  - `BlobCountTool` derives from `HsvTool`, so the color source can be taught like Color Area (`k` param added).
+  - The open (default `open_px=1`, which does nothing) uses the 0-border erosion shared with the color tools.
 - Commit: pending

@@ -376,7 +376,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - A different shape (circle vs square) scores < 60 in shape mode.
   - In shape mode, rotating the part by 30° still scores ≥ 90.
 
-### [ ] T23 `app/vision/count.py` `BlobCountTool` (kind `blob_count`)
+### [x] T23 `app/vision/count.py` `BlobCountTool` (kind `blob_count`)
 - **IV4:** Blob Count: the number of blobs after binarization.
 - **How it works:**
   - Make a binary mask: gray threshold like `AreaTool`, or an HSV mask like `ColorAreaTool`, selected by `source="gray"` or `"color"`.

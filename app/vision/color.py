@@ -18,9 +18,19 @@ from .preprocess import to_hsv
 def to_bgr(img: np.ndarray) -> np.ndarray:
     return cv2.cvtColor(img, cv2.COLOR_GRAY2BGR) if img.ndim == 2 else img
 
+
 HSV_PARAMS = {"h_lo": 170, "h_hi": 10, "s_lo": 80, "s_hi": 255, "v_lo": 50, "v_hi": 255}
 MIN_HALF_WIDTH = {"h": 8.0, "s": 40.0, "v": 40.0}
 POINT_BOX = 9  # px side of the box sampled around a tapped point
+
+
+def open_mask(mask: np.ndarray, open_px: int) -> np.ndarray:
+    """Morphological open that also removes specks on the ROI edge (an
+    erosion with a 0 border; OpenCV's default +inf border keeps them)."""
+    if not open_px or open_px <= 1:
+        return mask
+    se = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (int(open_px),) * 2)
+    return cv2.dilate(cv2.erode(mask, se, borderType=cv2.BORDER_CONSTANT, borderValue=0), se)
 
 
 def hsv_mask(hsv: np.ndarray, h_lo: int, h_hi: int, s_lo: int, s_hi: int, v_lo: int, v_hi: int,
@@ -31,11 +41,7 @@ def hsv_mask(hsv: np.ndarray, h_lo: int, h_hi: int, s_lo: int, s_hi: int, v_lo: 
         mask = cv2.inRange(hsv, (h_lo, *lo_sv), (h_hi, *hi_sv))
     else:
         mask = cv2.inRange(hsv, (h_lo, *lo_sv), (179, *hi_sv)) | cv2.inRange(hsv, (0, *lo_sv), (h_hi, *hi_sv))
-    if open_px and open_px > 1:
-        # Eroding with a 0 border so specks on the ROI edge are removed too.
-        se = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (int(open_px),) * 2)
-        mask = cv2.dilate(cv2.erode(mask, se, borderType=cv2.BORDER_CONSTANT, borderValue=0), se)
-    return mask
+    return open_mask(mask, open_px)
 
 
 def learn_hsv_range(hsv_pixels: np.ndarray, k: float = 2.5) -> dict:
