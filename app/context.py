@@ -120,6 +120,7 @@ class AppContext(QObject):
         """Sets the vision tools. Saved as a list of dicts (plus template PNGs
         under TOOLS_DIR), not through `_save_to_job`, which flattens lists."""
         self.tools = list(tools)
+        self.worker.set_tools(self.tools)
         self.tools_changed.emit(self.tools)
         if not save_to_job or not self.current_part_no:
             return
@@ -133,6 +134,7 @@ class AppContext(QObject):
 
     def set_mm_per_px(self, value: Optional[float], save_to_job: bool = False) -> None:
         self.mm_per_px = float(value) if value else None
+        self.worker.set_mm_per_px(self.mm_per_px)
         self.mm_per_px_changed.emit(self.mm_per_px)
         if save_to_job and self.current_part_no:
             config = jobs.load_part_config(self.current_part_no)
@@ -157,6 +159,7 @@ class AppContext(QObject):
         """None drops the part association (and the boot auto-load); the loaded
         model and filters stay active until another job is chosen."""
         self.current_part_no = part_no
+        self.worker.set_part_no(part_no)
         if part_no is None:
             jobs.clear_last_part()
         else:

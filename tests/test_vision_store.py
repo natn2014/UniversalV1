@@ -10,6 +10,7 @@ from PySide6.QtCore import QObject
 
 from app import context as context_mod
 from app import jobs
+from app.camera import VideoWorker
 from app.context import AppContext
 from app.vision.base import Tool, register
 from app.vision.position import PositionTool
@@ -80,6 +81,7 @@ class ContextSave(unittest.TestCase):
     def make_ctx(self):
         ctx = AppContext.__new__(AppContext)  # no camera / tower / settings
         QObject.__init__(ctx)
+        ctx.worker = VideoWorker()  # only stores the values here; never started
         ctx.tools, ctx.tools_gate, ctx.current_part_no, ctx.mm_per_px = [], "AND", "JOB1", None
         return ctx
 

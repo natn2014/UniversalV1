@@ -397,7 +397,7 @@ Progress is logged in [develop_record.md](develop_record.md).
 
 ## Phase 6: Integration and UI
 
-### [ ] T24 Worker integration (`app/camera.py`)
+### [x] T24 Worker integration (`app/camera.py`)
 - **How it works:**
   - `VideoWorker.set_tools(tools)` (thread-safe: replace the list reference, as `set_roi` does) and `set_mm_per_px`.
   - In `run()`, after the warp (the frame is BGR there), run `run_tools(frame, tools)` in `vision/runner.py`:

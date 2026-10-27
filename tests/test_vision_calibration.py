@@ -9,6 +9,7 @@ from PySide6.QtCore import QObject
 
 from app import context as context_mod
 from app import jobs
+from app.camera import VideoWorker
 from app.context import AppContext
 from app.vision.calibration import calibrate_from_width
 from app.vision.measure import WidthTool
@@ -50,6 +51,7 @@ class Persistence(unittest.TestCase):
     def make_ctx(self):
         ctx = AppContext.__new__(AppContext)
         QObject.__init__(ctx)
+        ctx.worker = VideoWorker()  # only stores the values here; never started
         ctx.tools, ctx.tools_gate, ctx.current_part_no, ctx.mm_per_px = [], "AND", "JOB1", None
         return ctx
 

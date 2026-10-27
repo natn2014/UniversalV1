@@ -16,6 +16,7 @@ from PySide6.QtGui import QImage
 from .optional_deps import YOLO
 from .perspective import PerspectiveWarp, Quad
 from .roi import Roi, offset_detections, roi_to_pixels
+from .vision.runner import run_tools
 
 
 ALLOWED_FPS = [24, 30, 60]
@@ -89,7 +90,7 @@ def nearest_allowed_fps(value: float) -> int:
 
 
 class VideoWorker(QThread):
-    frame_ready = Signal(QImage, list)
+    frame_ready = Signal(QImage, list, list)  # image, detections, vision tool results
     status = Signal(str)
     resolution_changed = Signal(int, int)  # what the camera actually delivers
     camera_connected = Signal(bool)  # False while lost / waiting, True once frames flow
@@ -104,6 +105,9 @@ class VideoWorker(QThread):
         self._target_fps: int = 30
         self._roi: Optional[Roi] = None
         self._warp: Optional[PerspectiveWarp] = None
+        self._tools: list = []
+        self._mm_per_px: Optional[float] = None
+        self._part_no: Optional[str] = None
         # Latest unwarped frame, for the Top View corner editor's snapshot.
         self.last_raw_frame = None
         self._camera_ok: Optional[bool] = None  # last camera_connected value sent
@@ -129,6 +133,17 @@ class VideoWorker(QThread):
         """Detection area; the model only sees this part of the frame.
         Read once per frame, so it takes effect on the next frame."""
         self._roi = roi
+
+    def set_tools(self, tools: list) -> None:
+        """Rule-based vision tools (app/vision). Replaces the list reference,
+        like set_roi; read once per frame."""
+        self._tools = list(tools)
+
+    def set_mm_per_px(self, value: Optional[float]) -> None:
+        self._mm_per_px = value
+
+    def set_part_no(self, part_no: Optional[str]) -> None:
+        self._part_no = part_no
 
     def start(self) -> None:
         # Set before the thread begins, not inside run(): a stop() arriving
@@ -296,6 +311,11 @@ class VideoWorker(QThread):
             if warp is not None:
                 frame = warp.apply(frame)
 
+            tool_results = []
+            tools = self._tools
+            if tools:
+                tool_results = run_tools(frame, tools, self._mm_per_px, self._part_no)
+
             detections = []
             if self._model is not None:
                 # Crop to the detection area: objects outside it are never
@@ -329,7 +349,7 @@ class VideoWorker(QThread):
             # .copy() forces a deep copy so the QImage doesn't reference a
             # numpy buffer that gets overwritten/freed on the next iteration.
             image = QImage(rgb.data, w, h, bytes_per_line, QImage.Format_RGB888).copy()
-            self.frame_ready.emit(image, detections)
+            self.frame_ready.emit(image, detections, tool_results)
 
         if cap is not None:
             cap.release()

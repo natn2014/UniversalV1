@@ -789,7 +789,7 @@ class MonitorTab(QWidget):
     # --- Per-frame processing -------------------------------------------
 
     @Slot(QImage, list)
-    def on_frame(self, image: QImage, detections: list) -> None:
+    def on_frame(self, image: QImage, detections: list, tool_results: Optional[list] = None) -> None:
         detections = self._ctx.filters.apply(detections)  # Use filtered for drawing and table
         self._current_frame_image = image
         self._current_frame_detections = detections

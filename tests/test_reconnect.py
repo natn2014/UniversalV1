@@ -174,7 +174,7 @@ class CameraReconnect(unittest.TestCase):
         events, frames = [], []
         w.camera_connected.connect(lambda ok: events.append(("connected", ok)))
         w.camera_index_changed.connect(lambda i: events.append(("index", i)))
-        w.frame_ready.connect(lambda img, d: frames.append(time.monotonic()))
+        w.frame_ready.connect(lambda img, d, tools: frames.append(time.monotonic()))
         for ms, action in script:
             QTimer.singleShot(ms, action)
         QTimer.singleShot(timeout_ms, w.stop)

@@ -33,8 +33,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T20 | OCR verify | done | faedec9 |
 | T21 | Code tool (QR / 1D) | done | 23ffed7 |
 | T22 | Outline | done | 8b8d1a4 |
-| T23 | Blob Count | done | |
-| T24 | Worker integration | todo | |
+| T23 | Blob Count | done | 0f710f6 |
+| T24 | Worker integration | done | |
 | T25 | Monitor integration | todo | |
 | T26 | Tools tab UI | todo | |
 | T27 | Performance + final check | todo | |
@@ -266,4 +266,15 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - Circularity is computed per kept blob from `findContours` on its own mask, with the contour smoothed by `approxPolyDP(1 px)` before taking the perimeter: the raw pixel staircase made a digital circle score only 0.77-0.87 and `circ_min=0.8` dropped real circles. Now circles score 0.87-0.98, a square 0.785, a bar 0.2. Circularity is only computed when `circ_min > 0`.
   - `BlobCountTool` derives from `HsvTool`, so the color source can be taught like Color Area (`k` param added).
   - The open (default `open_px=1`, which does nothing) uses the 0-border erosion shared with the color tools.
+- Commit: 0f710f6
+
+### T24 Worker integration: done  (2026-10-27)
+- Files: app/vision/runner.py, app/camera.py, app/context.py, app/tabs/monitor_tab.py, tests/test_reconnect.py, tests/test_vision_runner.py, tests/test_vision_store.py, tests/test_vision_calibration.py
+- Tests added: 10  ·  Suite: 269/269 passing
+- Decisions / deviations from the TODO:
+  - `frame_ready` is now `Signal(QImage, list, list)`. Connections found by grep: `app/tabs/monitor_tab.py` (`on_frame` now takes `tool_results=None`, ignored until T25), `tests/test_reconnect.py` (lambda takes 3 args). `app/widgets/barcode_scan.py` connects to its own `BarcodeWorker.frame_ready` (a different class and signal), so it needed no change. `tools/record_demo_gifs.py` uses `lambda *a` and is unaffected.
+  - `run_tools(frame, tools, mm_per_px, part_no)`: first position tool gives the offset; if it loses the part, only the position results are returned (other ROIs would be in the wrong place; the total is YELLOW anyway). Every result gets `extra["ms"]`; an exception becomes ok=False with the exception text. It calls `store.set_runtime`, so mm_per_px and part_no reach the tools.
+  - Also added `VideoWorker.set_part_no` (for the Code tool's `use_job_part_no`); `AppContext.set_current_part` pushes it. `set_tools` and `set_mm_per_px` push to the worker.
+  - With an empty tools list the worker does nothing extra (no `run_tools` call).
+  - Context tests build `AppContext` with `__new__` plus a real, never-started `VideoWorker`.
 - Commit: pending
