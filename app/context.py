@@ -8,10 +8,12 @@ from .autocapture import load_masters
 from .camera import VideoWorker, parse_resolution
 from .judgement import DetectionFilters
 from .optional_deps import YOLO
+from .paths import TOOLS_DIR
 from .perspective import normalize_quad
 from .roi import normalize_roi
 from .settings import AppSettings
 from .tower import TowerController
+from .vision.store import tools_from_config, tools_to_config
 
 
 class AppContext(QObject):
@@ -25,6 +27,7 @@ class AppContext(QObject):
     roi_changed = Signal(object)  # Optional[Roi]
     perspective_changed = Signal(object)  # Optional[Quad]
     masters_changed = Signal(list)  # [Master]
+    tools_changed = Signal(list)  # [vision.base.Tool]
     # Requests one tab makes of another, so a missing step can be done for
     # the user instead of telling them to go and do it.
     camera_scan_requested = Signal()  # rescan; handled synchronously
@@ -44,6 +47,8 @@ class AppContext(QObject):
         self.current_part_no: Optional[str] = None
         self.training_active: bool = False
         self.masters: list = load_masters(None)
+        self.tools: list = []  # rule-based vision tools (app/vision)
+        self.tools_gate: str = "AND"
 
     @property
     def model_path(self) -> Optional[Path]:
@@ -108,6 +113,29 @@ class AppContext(QObject):
         self.masters = load_masters(entries)
         self.masters_changed.emit(self.masters)
         self._save_to_job(save_to_job, autocapture_masters=self.master_entries())
+
+    def set_tools(self, tools, save_to_job: bool = False) -> None:
+        """Sets the vision tools. Saved as a list of dicts (plus template PNGs
+        under TOOLS_DIR), not through `_save_to_job`, which flattens lists."""
+        self.tools = list(tools)
+        self.tools_changed.emit(self.tools)
+        if not save_to_job or not self.current_part_no:
+            return
+        config = jobs.load_part_config(self.current_part_no)
+        if config is None:
+            return
+        config["tools"] = self.tool_entries()
+        config["tools_gate"] = self.tools_gate
+        jobs.save_part_config(self.current_part_no, config)
+
+    def tool_entries(self) -> list:
+        return tools_to_config(self.tools, self.current_part_no or "unknown_part", TOOLS_DIR)
+
+    def load_tools(self, config: dict) -> None:
+        """Applies a saved job's tools; a job without them has none."""
+        part_no = config.get("part_no") or self.current_part_no or "unknown_part"
+        self.tools_gate = config.get("tools_gate", "AND")
+        self.set_tools(tools_from_config(config.get("tools"), part_no, TOOLS_DIR))
 
     def master_entries(self) -> list:
         return [m.to_entry() for m in self.masters]

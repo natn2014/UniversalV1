@@ -114,7 +114,7 @@ Progress is logged in [develop_record.md](develop_record.md).
 - **Tests:** a truth table that covers AND/OR, YOLO YELLOW, position not found, and an empty list.
 - **Done when:** the truth table passes.
 
-### [ ] T05 Saving tools in a job (`app/vision/store.py`, plus `app/context.py`)
+### [x] T05 Saving tools in a job (`app/vision/store.py`, plus `app/context.py`)
 - **How it works:**
   - In `vision/store.py`:
     - `tools_to_config(tools, part_no) -> list[dict]`.

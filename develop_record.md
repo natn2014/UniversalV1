@@ -14,8 +14,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T01 | vision/base.py framework | done | b0a612c |
 | T02 | preprocess / shading correction | done | e6873c4 |
 | T03 | Position Adjustment | done | 51e92af |
-| T04 | Total judgement | done | |
-| T05 | Save tools in job | todo | |
+| T04 | Total judgement | done | d0cf1b0 |
+| T05 | Save tools in job | done | |
 | T06 | Color Area | todo | |
 | T07 | Color Average (ΔE2000) | todo | |
 | T08 | Color Prohibit | todo | |
@@ -96,4 +96,16 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - Decisions / deviations from the TODO:
   - "Ignores disabled tools" is met by the runner (T24) not returning results for disabled tools; `total_state` itself has no notion of enabled.
   - Results of kind `position` are left out of the AND/OR; they feed `position_found` instead (a lost part is YELLOW, not RED).
+- Commit: d0cf1b0
+
+### T05 Save tools in job: done  (2026-10-27)
+- Files: app/vision/store.py, app/context.py, app/paths.py (TOOLS_DIR), app/tabs/settings_tab.py, tests/test_vision_store.py
+- Tests added: 9  ·  Suite: 138/138 passing
+- Decisions / deviations from the TODO:
+  - `store` functions take `tools_dir` as an argument instead of importing `app.paths`, because `app.paths` imports QtCore and `app/vision` must stay Qt-free. `AppContext` passes `paths.TOOLS_DIR` (`part_configs/tools/`).
+  - Template PNG path is stored relative to `tools_dir` (`<part>/<tool>.png`) in `template_file`. PNGs no longer used by any tool are deleted on save.
+  - The job is loaded and saved in `settings_tab.collect_config` / `apply_config` (that is where `set_masters` is called from, not `job_change_tab`). Without the `collect_config` change a Settings-tab "save job" would have dropped the tools.
+  - `AppContext` gained `tools`, `tools_gate` (saved as `"tools_gate"`, default AND), `tools_changed`, `set_tools`, `tool_entries`, `load_tools(config)`. `set_tools` writes the dict list directly instead of going through `_save_to_job`.
+  - A missing template PNG keeps the tool (untaught, so it reports NG "not taught") instead of dropping it; unknown kinds and malformed entries are logged and skipped.
+  - `AppContext` is built in tests with `__new__` to avoid the camera, tower and settings file.
 - Commit: pending

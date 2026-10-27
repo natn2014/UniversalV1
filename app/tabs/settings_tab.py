@@ -391,6 +391,8 @@ class SettingsTab(QWidget):
             "perspective": filters.perspective,
             "roi": list(filters.roi) if filters.roi else None,
             "autocapture_masters": ctx.master_entries(),
+            "tools": ctx.tool_entries(),
+            "tools_gate": ctx.tools_gate,
         }
 
     def apply_config(self, config: dict) -> bool:
@@ -415,6 +417,7 @@ class SettingsTab(QWidget):
         self._ctx.set_perspective(config.get("perspective"))
         self._ctx.set_roi(config.get("roi"))
         self._ctx.set_masters(config.get("autocapture_masters"))
+        self._ctx.load_tools(config)  # older jobs have no "tools": none
         self.confidence_slider.setValue(int(round(config.get("confidence_threshold", 0.0) * 100)))
         self.max_detections_spinbox.setValue(int(config.get("max_detections", 0)))
 
