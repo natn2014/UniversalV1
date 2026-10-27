@@ -17,8 +17,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T04 | Total judgement | done | d0cf1b0 |
 | T05 | Save tools in job | done | 05392cb |
 | T06 | Color Area | done | cccfc85 |
-| T07 | Color Average (ΔE2000) | done | |
-| T08 | Color Prohibit | todo | |
+| T07 | Color Average (ΔE2000) | done | 93041a9 |
+| T08 | Color Prohibit | done | |
 | T09 | Area (mono) | todo | |
 | T10 | Brightness Average | todo | |
 | T11 | Edge Pixels | todo | |
@@ -127,4 +127,13 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - Decisions / deviations from the TODO:
   - `delta_e_2000` is pure Python `math` on one pair (not vectorised): it is called once per frame on the mean color. Checked against 5 Sharma 2005 pairs (2 more than asked), in both argument orders, within 0.01.
   - `result.text` shows the measured L*a*b*; `extra["lab"]` holds the floats.
+- Commit: 93041a9
+
+### T08 Color Prohibit: done  (2026-10-27)
+- Files: app/vision/color.py, tests/test_vision_color.py
+- Tests added: 5  ·  Suite: 159/159 passing
+- Decisions / deviations from the TODO:
+  - The opening in `hsv_mask` erodes with a constant 0 border. OpenCV's default (+inf) border let single pixels on the ROI edge survive `MORPH_OPEN`. This also applies to Color Area when `open_px` is set.
+  - Default `high = min_blob_px - 1` is set in `__init__` unless `high` is passed (None still means no bound).
+  - `extra["blobs"]` counts the blobs at or above `min_blob_px`.
 - Commit: pending

@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 from app.vision.base import Offset
-from app.vision.color import ColorAreaTool, ColorAverageTool, delta_e_2000
+from app.vision.color import ColorAreaTool, ColorAverageTool, ColorProhibitTool, delta_e_2000
 
 RED = (0, 0, 220)
 BLUE = (200, 40, 20)
@@ -130,6 +130,42 @@ class ColorAverage(unittest.TestCase):
         t = ColorAverageTool()
         t.teach(frame_with(RED))
         self.assertEqual(len(json.loads(json.dumps(t.to_dict()))["ref_lab"]), 3)
+
+
+class ColorProhibit(unittest.TestCase):
+    def test_clean_roi_ok(self):
+        res = ColorProhibitTool().run(frame_with(GRAY))
+        self.assertEqual(res.value, 0)
+        self.assertTrue(res.ok)
+
+    def test_spot_is_ng(self):
+        img = frame_with(GRAY)
+        img[50:60, 100:110] = RED
+        res = ColorProhibitTool().run(img)
+        self.assertAlmostEqual(res.value, 100, delta=10)
+        self.assertFalse(res.ok)
+        self.assertEqual(len(res.overlay), 2)
+        self.assertFalse(res.overlay[1]["ok"])
+
+    def test_scattered_noise_removed(self):
+        img = frame_with(GRAY)
+        img[::5, ::5] = RED
+        res = ColorProhibitTool().run(img)
+        self.assertEqual(res.value, 0)
+        self.assertTrue(res.ok)
+
+    def test_small_blob_below_min_is_ok(self):
+        img = frame_with(GRAY)
+        img[50:55, 100:105] = RED  # 25 px
+        res = ColorProhibitTool().run(img)
+        self.assertGreater(res.value, 0)
+        self.assertTrue(res.ok)
+        self.assertEqual(len(res.overlay), 1)
+
+    def test_default_high_follows_min_blob(self):
+        self.assertEqual(ColorProhibitTool().high, 29)
+        self.assertEqual(ColorProhibitTool(min_blob_px=50).high, 49)
+        self.assertEqual(ColorProhibitTool(high=None).high, None)
 
 
 if __name__ == "__main__":

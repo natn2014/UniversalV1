@@ -166,7 +166,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - Teach on a color, then run on the same patch → ΔE < 0.5.
   - A noticeably different color → ΔE > 10.
 
-### [ ] T08 `ColorProhibitTool` (kind `color_prohibit`)
+### [x] T08 `ColorProhibitTool` (kind `color_prohibit`)
 - **IV4:** Color Prohibit: NG if a forbidden color shows up anywhere in the ROI.
 - **How it works:**
   - Make the same HSV mask as T06, then apply a morphological open with `open_px=2` to remove noise.

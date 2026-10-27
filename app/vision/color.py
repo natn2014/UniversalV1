@@ -32,7 +32,9 @@ def hsv_mask(hsv: np.ndarray, h_lo: int, h_hi: int, s_lo: int, s_hi: int, v_lo: 
     else:
         mask = cv2.inRange(hsv, (h_lo, *lo_sv), (179, *hi_sv)) | cv2.inRange(hsv, (0, *lo_sv), (h_hi, *hi_sv))
     if open_px and open_px > 1:
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (int(open_px),) * 2))
+        # Eroding with a 0 border so specks on the ROI edge are removed too.
+        se = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (int(open_px),) * 2)
+        mask = cv2.dilate(cv2.erode(mask, se, borderType=cv2.BORDER_CONSTANT, borderValue=0), se)
     return mask
 
 
@@ -168,3 +170,26 @@ class ColorAverageTool(Tool):
         res = self.result(de, extra={"lab": lab})
         res.text = "L*a*b* " + " ".join(f"{v:.1f}" for v in lab)
         return res
+
+
+@register("color_prohibit")
+class ColorProhibitTool(HsvTool):
+    """NG when a blob of the forbidden color at least `min_blob_px` large
+    appears anywhere in the ROI. The value is the largest blob's area (px)."""
+
+    PARAMS = {**HSV_PARAMS, "k": 2.5, "open_px": 2, "min_blob_px": 30}
+
+    def __init__(self, *args, **kw) -> None:
+        if len(args) < 4 and "high" not in kw:
+            kw["high"] = kw.get("min_blob_px", self.PARAMS["min_blob_px"]) - 1
+        super().__init__(*args, **kw)
+
+    def process(self, patch, origin):
+        n, _, stats, _ = cv2.connectedComponentsWithStats(self.mask(patch), connectivity=8)
+        areas = stats[1:, cv2.CC_STAT_AREA]
+        value = float(areas.max()) if len(areas) else 0.0
+        overlay = []
+        for i in np.flatnonzero(areas >= self.min_blob_px):
+            x, y, w, h, area = stats[i + 1]
+            overlay.append(overlay_item("rect", [int(x), int(y), int(x + w), int(y + h)], False, f"{int(area)}px"))
+        return self.result(value, overlay, extra={"blobs": int(len(overlay))})
