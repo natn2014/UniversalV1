@@ -8,3 +8,4 @@ from .base import TOOL_KINDS, Offset, Tool, ToolResult, create, register  # noqa
 from . import position  # noqa: F401  (registers its kinds)
 from .total import total_state  # noqa: F401
 from . import color  # noqa: F401
+from . import brightness  # noqa: F401

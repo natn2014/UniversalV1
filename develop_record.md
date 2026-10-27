@@ -18,8 +18,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T05 | Save tools in job | done | 05392cb |
 | T06 | Color Area | done | cccfc85 |
 | T07 | Color Average (ΔE2000) | done | 93041a9 |
-| T08 | Color Prohibit | done | |
-| T09 | Area (mono) | todo | |
+| T08 | Color Prohibit | done | 18b1d32 |
+| T09 | Area (mono) | done | |
 | T10 | Brightness Average | todo | |
 | T11 | Edge Pixels | todo | |
 | T12 | Shading Uniformity | todo | |
@@ -136,4 +136,11 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - The opening in `hsv_mask` erodes with a constant 0 border. OpenCV's default (+inf) border let single pixels on the ROI edge survive `MORPH_OPEN`. This also applies to Color Area when `open_px` is set.
   - Default `high = min_blob_px - 1` is set in `__init__` unless `high` is passed (None still means no bound).
   - `extra["blobs"]` counts the blobs at or above `min_blob_px`.
+- Commit: 18b1d32
+
+### T09 Area (mono): done  (2026-10-27)
+- Files: app/vision/brightness.py, app/vision/__init__.py, tests/test_vision_brightness.py
+- Tests added: 5  ·  Suite: 164/164 passing
+- Decisions / deviations from the TODO:
+  - `binarize(gray, method, threshold, polarity)` is a module function so Blob Count (T23) can reuse it. For Otsu the dark side includes the threshold itself (`<=`), the bright side excludes it (`>`), so the two always add up to 100%.
 - Commit: pending

@@ -179,7 +179,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - A 10×10 forbidden spot gives about 100 → NG.
   - Scattered single-pixel noise is removed by the open → OK.
 
-### [ ] T09 `app/vision/brightness.py` `AreaTool` (kind `area`)
+### [x] T09 `app/vision/brightness.py` `AreaTool` (kind `area`)
 - **IV4:** Area (mono): the area of pixels above or below a gray threshold.
 - **How it works:**
   - Convert the crop to gray and apply `pre`.
