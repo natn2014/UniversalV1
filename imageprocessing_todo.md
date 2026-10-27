@@ -74,7 +74,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - `apply_chain` with 2 steps gives the same result as calling the two functions by hand.
 - **Done when:** all ops are tested and `apply_chain` runs on gray and BGR input.
 
-### [ ] T03 `app/vision/position.py`: Position Adjustment
+### [x] T03 `app/vision/position.py`: Position Adjustment
 - **IV4:** Finds the part and moves all other tool ROIs with it. "Hi-Speed" works along 1 axis or 2 axes.
 - **How it works:**
   - `PositionTool(kind="position")`. Its ROI is the **search area**.

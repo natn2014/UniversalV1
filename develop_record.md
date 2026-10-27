@@ -12,8 +12,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T | Function | Status | Commit |
 |---|---|---|---|
 | T01 | vision/base.py framework | done | b0a612c |
-| T02 | preprocess / shading correction | done | |
-| T03 | Position Adjustment | todo | |
+| T02 | preprocess / shading correction | done | e6873c4 |
+| T03 | Position Adjustment | done | |
 | T04 | Total judgement | todo | |
 | T05 | Save tools in job | todo | |
 | T06 | Color Area | todo | |
@@ -75,4 +75,17 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - Extra ops "gray", "hsv", "lab" are available inside `apply_chain`.
   - `Tool` now has a `pre` param on every tool (`DEFAULT_PRE`, overridable per class, e.g. OCR) plus `Tool.prepared()` / `Tool.gray()` helpers.
   - Test geometry: flat_field divides by a blur, so a feature close to the kernel size is partly absorbed into the background (a 40 px square with kernel 51 keeps only ~5 levels). The test uses a 20 px square; keep the kernel at least 2.5x the feature. Background std is measured away from the left/right 60 px border, where the ramp starts at 0.
+- Commit: e6873c4
+
+### T03 Position Adjustment: done  (2026-10-27)
+- Files: app/vision/position.py, app/vision/__init__.py, tests/test_vision_position.py
+- Tests added: 13  ·  Suite: 122/122 passing
+- Timing: 2-D match, 1280x720 frame, ~400x300 px search area, angle_range=0: about 3 ms (best of 20, Orin Nano); target < 5 ms.
+- Decisions / deviations from the TODO:
+  - The result carries the offset in `extra` (dx, dy, angle, score, found); `offset_from_result(result)` rebuilds an `Offset`, and `tool.offset()` returns the last one. The T24 runner uses `offset_from_result`.
+  - `teach(frame, template_roi=...)`: `template_roi` is in frame fractions; when omitted the central half of the search area is used.
+  - The 1-axis modes use a private `_strongest_edge` (Gaussian-smoothed profile gradient, parabola sub-pixel) because T13's `find_edges` does not exist yet. Revisit at T13. The 1-axis score is edge strength / taught strength, capped at 1.
+  - The half-scale pyramid is used only when the template is at least 32 px per side; smaller templates are matched at full scale.
+  - Angle convention: positive = counter-clockwise on screen, the same as `cv2.getRotationMatrix2D` and `rotate_points`.
+  - The speed test allows 15 ms so a busy box does not make it flaky.
 - Commit: pending
