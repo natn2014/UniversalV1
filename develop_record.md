@@ -1,7 +1,7 @@
 # Develop Record: image processing tools (branch `imageprocessing`)
 
 The build log for [imageprocessing_todo.md](imageprocessing_todo.md).
-Add one entry each time a TODO item (T01–T27) is finished or blocked. Newest
+Add one entry each time a TODO item (T01–T28) is finished or blocked. Newest
 entries go at the bottom. Do not edit old entries; add a correction entry instead.
 
 **Test command:** `.venv/bin/python -m unittest discover -s tests`
@@ -38,6 +38,7 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T25 | Monitor integration | done | e09d2f0 |
 | T26 | Tools tab UI | done | 7d9832d |
 | T27 | Performance + final check | done | afe7ab9 |
+| T28 | Slow-tool thread (OCR / code at 2 Hz) | done | |
 
 Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason in the entry).
 
@@ -340,3 +341,16 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - `core_function.md` section 4 now has a Status column with what is built and what is still unmeasured on real parts (the 100-frame repeatability and 200-frame OCR criteria need real samples).
   - Not built from the IV4 list: AI Differentiate, AI Identify, AI Count, AI Trigger, Sorting and AI Through Count modes.
 - Commit: afe7ab9
+
+### T28 Slow-tool thread (OCR / code at 2 Hz): done  (2026-10-27)
+- Files: app/vision/base.py, ocr.py, code.py (`SLOW` flag), app/vision/runner.py (`run_tools_with_offset`, fast/slow split), app/vision/slow_runner.py (new), app/vision/total.py (pending gives STANDBY), app/camera.py (`_run_vision`, part epoch, `set_slow_hz`), app/settings.py + app/context.py + app/tabs/settings_tab.py (`slow_tool_hz` = 2.0, spin box), app/widgets/tool_overlay.py + app/tabs/monitor_tab.py ("…" pending pill, result age), app/tabs/tools_tab.py (hint to add a Position tool), tools/bench_vision.py (worker-loop case), tests/test_vision_slow_runner.py, tests/test_vision_total.py
+- Tests added: 11  ·  Suite: 315/315 passing
+- Timing (`tools/bench_vision.py`, worker loop, every tool, 5 s at 24 fps): loop fps **24.0**, slow reads **2.0 /s**, OCR no longer adds anything to the camera thread.
+  - The fast tools take about 22 ms per frame in this paced loop and 11 ms when run back to back, with or without the slow thread (checked: continuous OCR or Code alongside changes them by less than 0.5 ms). The difference is the `schedutil` CPU governor clocking down between frames. On the station, `sudo jetson_clocks` (or the performance governor) should bring it back to about 11 ms. This was not changed here; it is a device setting.
+- How it works:
+  - The camera loop runs Position and the fast tools on every frame. When the part is found and the slow thread is idle and due (1 / `slow_tool_hz`), it hands a copy of the frame and the offset to `SlowToolRunner`.
+  - The mailbox holds one frame (a newer request replaces one not yet started), so the slow thread never falls behind.
+  - Each frame joins in the latest slow results, tagged `slow` and `age_ms`.
+  - `part_epoch` goes up when Position goes from lost to found and when the tools change. A slow result only counts within its own epoch and while younger than 3 / hz + 2 × the last run time. Otherwise the tool reports `pending`, and the total judgement is STANDBY. The previous part's OCR can never pass a new part. Without a Position tool only the age limit applies; the Tools tab hints at this.
+- Decisions / deviations from the plan: none worth noting. `Tool.SLOW` is a class attribute, so tool kinds are not hard-coded in the runner. The Tools tab still runs every tool on its frozen snapshot synchronously (one frame, on a button press).
+- Commit: pending

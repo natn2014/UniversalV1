@@ -937,10 +937,15 @@ class MonitorTab(QWidget):
         mm = bool(self._ctx.mm_per_px)
         self.tool_table.setRowCount(len(tool_results))
         for row, result in enumerate(tool_results):
-            verdict = QTableWidgetItem("OK" if result.ok else "NG")
+            if result.extra.get("pending"):
+                verdict = QTableWidgetItem("…")
+                verdict.setBackground(QBrush(QColor(STANDBY_YELLOW)))
+                verdict.setForeground(QBrush(QColor("#1a1a1a")))
+            else:
+                verdict = QTableWidgetItem("OK" if result.ok else "NG")
+                verdict.setBackground(QBrush(QColor(OK_GREEN if result.ok else NG_RED)))
+                verdict.setForeground(QBrush(QColor("#ffffff")))
             verdict.setTextAlignment(Qt.AlignCenter)
-            verdict.setBackground(QBrush(QColor(OK_GREEN if result.ok else NG_RED)))
-            verdict.setForeground(QBrush(QColor("#ffffff")))
             font = verdict.font()
             font.setBold(True)
             verdict.setFont(font)

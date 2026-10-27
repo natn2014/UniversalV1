@@ -50,10 +50,16 @@ def draw_overlay(painter: QPainter, items: List[dict]) -> None:
 
 def tool_value_text(result: ToolResult, calibrated: bool) -> str:
     """Value with 2 decimals, plus the mm unit for measurements once the job
-    is calibrated. Code / OCR tools show their text when they have one."""
+    is calibrated. Code / OCR tools show their text when they have one, and
+    a slow tool's result shows how old it is ("…" while still waiting)."""
+    if result.extra.get("pending"):
+        return "…"
     if result.kind in ("ocr", "code") and result.text:
-        return result.text.splitlines()[0][:24]
-    text = f"{result.value:.2f}"
-    if calibrated and result.kind in MM_KINDS:
-        text += " mm"
+        text = result.text.splitlines()[0][:24]
+    else:
+        text = f"{result.value:.2f}"
+        if calibrated and result.kind in MM_KINDS:
+            text += " mm"
+    if "age_ms" in result.extra:
+        text += f" · {result.extra['age_ms'] / 1000.0:.1f} s"
     return text

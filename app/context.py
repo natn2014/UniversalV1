@@ -41,6 +41,7 @@ class AppContext(QObject):
         self.settings = AppSettings()
         self.worker = VideoWorker()
         self.worker.set_resolution(parse_resolution(self.settings["camera_resolution"]))
+        self.worker.set_slow_hz(self.settings["slow_tool_hz"])
         self.tower = TowerController(self.settings, self)
         self.filters = DetectionFilters()
         self.model_classes: list = []

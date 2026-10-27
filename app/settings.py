@@ -25,6 +25,9 @@ DEFAULT_APP_SETTINGS = {
     # After a save, wait until no master matches (part removed) before the
     # next one, so one part held in view is saved once, not every interval.
     "autocapture_wait_clear": True,
+    # OCR / code tools run at most this often, in their own thread, so the
+    # live view stays smooth.
+    "slow_tool_hz": 2.0,
 }
 
 

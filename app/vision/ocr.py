@@ -143,6 +143,7 @@ class OcrTool(Tool):
               "char_count": 0, "check_orientation": False, "date_format": "%d/%m/%y"}
     DEFAULT_PRE = DEFAULT_OCR_PRE
     DEFAULT_LOW = 60.0
+    SLOW = True
     engine: Optional[OcrEngine] = None  # set to override (tests, another engine)
 
     def prepare(self, patch: np.ndarray) -> np.ndarray:

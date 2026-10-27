@@ -91,6 +91,9 @@ class Tool:
     DEFAULT_LOW: Optional[float] = None
     DEFAULT_HIGH: Optional[float] = None
     DEFAULT_PRE: List[dict] = []  # pre-filter chain every tool accepts as `pre`
+    # Too slow for every frame (OCR, code reading): the camera worker runs
+    # these in their own thread at a few Hz (vision.slow_runner).
+    SLOW = False
 
     # Set by the runner for each frame; never saved.
     mm_per_px: Optional[float] = None

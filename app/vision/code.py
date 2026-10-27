@@ -58,6 +58,7 @@ class CodeTool(Tool):
 
     PARAMS = {"symbology": "any", "expected": "", "pattern": "", "use_job_part_no": False}
     DEFAULT_LOW = 1.0
+    SLOW = True
 
     def process(self, patch, origin):
         found = read_code(np.ascontiguousarray(self.gray(patch)), self.symbology)

@@ -472,9 +472,12 @@ class ToolsTab(QWidget):
         self.info_label.setText(f"Part: {part}   ·   Tools: {len(self.tools)}   ·   Scale: {calibration}")
         self.gate_button.setText(f"Gate: {self._ctx.tools_gate}")
         if self._mode is None:
-            self.hint_label.setText("Snapshot freezes the camera frame  ·  Add Tool, then drag its area"
-                                    if self._frame is None else
-                                    "Select a tool to teach it, set its limits or edit its parameters")
+            hint = ("Snapshot freezes the camera frame  ·  Add Tool, then drag its area"
+                    if self._frame is None else
+                    "Select a tool to teach it, set its limits or edit its parameters")
+            if any(t.SLOW for t in self.tools) and not any(t.kind == "position" for t in self.tools):
+                hint += "  ·  Add a Position tool so OCR / code results are matched to each part"
+            self.hint_label.setText(hint)
 
     def _render(self) -> None:
         if self._frame is None:

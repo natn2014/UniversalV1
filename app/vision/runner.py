@@ -2,7 +2,7 @@
 other enabled tool with the offset it found."""
 
 import time
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -32,19 +32,31 @@ def run_tools(frame: np.ndarray, tools: List[Tool], mm_per_px: Optional[float] =
     position results are returned: the other ROIs would be in the wrong
     place, and the total judgement is "no part" anyway.
     """
+    return run_tools_with_offset(frame, tools, mm_per_px, part_no)[0]
+
+
+def run_tools_with_offset(frame: np.ndarray, tools: List[Tool], mm_per_px: Optional[float] = None,
+                          part_no: Optional[str] = None, slow: Optional[bool] = None,
+                          offset: Optional[Offset] = None) -> Tuple[List[ToolResult], Offset]:
+    """`run_tools` plus the offset it used. `slow` picks the tools: None =
+    all, False = the fast ones (the camera loop), True = the slow ones (the
+    slow-tool thread). A given `offset` skips Position Adjustment, so the
+    slow thread reuses the one found on the frame it was handed."""
     active = [t for t in tools if t.enabled]
     set_runtime(active, mm_per_px, part_no)
     results: List[ToolResult] = []
-    offset = Offset()
-    positions = [t for t in active if isinstance(t, PositionTool)]
-    for i, tool in enumerate(positions):
-        res = _timed_run(tool, frame, Offset())
-        results.append(res)
-        if i == 0:
-            offset = offset_from_result(res)
-    if positions and not offset.found:
-        return results
+    if offset is None:
+        offset = Offset()
+        positions = [t for t in active if isinstance(t, PositionTool)]
+        for i, tool in enumerate(positions):
+            res = _timed_run(tool, frame, Offset())
+            results.append(res)
+            if i == 0:
+                offset = offset_from_result(res)
+        if positions and not offset.found:
+            return results, offset
     for tool in active:
-        if not isinstance(tool, PositionTool):
-            results.append(_timed_run(tool, frame, offset if tool.follow_position else Offset()))
-    return results
+        if isinstance(tool, PositionTool) or (slow is not None and tool.SLOW != slow):
+            continue
+        results.append(_timed_run(tool, frame, offset if tool.follow_position else Offset()))
+    return results, offset

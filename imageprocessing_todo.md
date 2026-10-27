@@ -459,3 +459,11 @@ Progress is logged in [develop_record.md](develop_record.md).
 - `tools/bench_vision.py`: on a 1280×720 synthetic frame, run each tool 200 times (with a typical ROI of 300×200), then print a table of mean and p95 ms per tool and the total for one tool of each kind.
 - **Target:** all non-OCR tools together < 10 ms/frame on the Orin Nano. Record the table in `develop_record.md`. If a tool is slower, note it and suggest a fix (pyramid, smaller ROI); do not over-optimize.
 - Final: run the full test suite, update `core_function.md` §4 with the real status, and tick every box.
+
+### [x] T28 Slow-tool thread (OCR / code)
+- **Why:** OCR (about 185 ms) and code reading (about 17 ms on a miss) on every frame dropped the live view to about 5 fps.
+- **How it works:**
+  - Tools with `SLOW = True` (OCR, Code) run in `vision.slow_runner.SlowToolRunner`, a daemon thread with a one-frame mailbox, at most `slow_tool_hz` (Settings tab, default 2 Hz).
+  - They run on a copy of the frame and use the offset that Position found on it.
+  - The camera loop joins in their latest result for the current part (`part_epoch`), or `pending` until there is one. Pending gives STANDBY in `total_state`.
+- **Done when:** the worker loop keeps 24 fps with OCR in the job, OCR reads at about 2/s, and a new part never shows the previous part's OCR verdict (tests in `tests/test_vision_slow_runner.py`).

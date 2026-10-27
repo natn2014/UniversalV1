@@ -40,6 +40,12 @@ class Total(unittest.TestCase):
         self.assertEqual(total_state([], None), "YELLOW")
         self.assertEqual(total_state([], None, "OR"), "YELLOW")
 
+    def test_pending_slow_tool_is_standby(self):
+        pending = ToolResult("ocr", "ocr", 0.0, False, extra={"pending": True})
+        for gate in ("AND", "OR"):
+            self.assertEqual(total_state([res(True), pending], None, gate), "YELLOW")
+            self.assertEqual(total_state([res(True), pending], "GREEN", gate), "YELLOW")
+
 
 if __name__ == "__main__":
     unittest.main()

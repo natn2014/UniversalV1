@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -102,6 +103,14 @@ class SettingsTab(QWidget):
         self.state_hold_spinbox.valueChanged.connect(
             lambda value: settings.set(state_hold_ms=value))
 
+        self.slow_tool_spinbox = QDoubleSpinBox()
+        self.slow_tool_spinbox.setRange(0.5, 10.0)
+        self.slow_tool_spinbox.setSingleStep(0.5)
+        self.slow_tool_spinbox.setDecimals(1)
+        self.slow_tool_spinbox.setSuffix(" Hz")
+        self.slow_tool_spinbox.setValue(settings["slow_tool_hz"])
+        self.slow_tool_spinbox.valueChanged.connect(self._on_slow_tool_hz_changed)
+
         self.autocapture_max_spinbox = self._make_setting_spinbox(
             "autocapture_max_images", 1, 100000, 50, " images")
         self.autocapture_threshold_spinbox = self._make_setting_spinbox(
@@ -178,6 +187,11 @@ class SettingsTab(QWidget):
         hold_hint.setObjectName("hint")
         hold_hint.setWordWrap(True)
         tower_body.addWidget(hold_hint)
+        tower_body.addLayout(row(QLabel("OCR / code rate:"), None, self.slow_tool_spinbox))
+        slow_hint = QLabel("OCR and code tools run this often in the background; the live view keeps its full frame rate")
+        slow_hint.setObjectName("hint")
+        slow_hint.setWordWrap(True)
+        tower_body.addWidget(slow_hint)
 
         autocapture_card, autocapture_body = make_card("Auto Capture")
         autocapture_body.addLayout(row(QLabel("Max images per job:"), None, self.autocapture_max_spinbox))
@@ -266,6 +280,11 @@ class SettingsTab(QWidget):
             return
         for idx in cameras:
             self.camera_combo.addItem(f"Camera {idx}", idx)
+
+    @Slot(float)
+    def _on_slow_tool_hz_changed(self, hz: float) -> None:
+        self._ctx.settings.set(slow_tool_hz=hz)
+        self._ctx.worker.set_slow_hz(hz)
 
     @Slot(int)
     def _on_camera_changed(self, index: int) -> None:

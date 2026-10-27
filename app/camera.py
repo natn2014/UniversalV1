@@ -16,7 +16,8 @@ from PySide6.QtGui import QImage
 from .optional_deps import YOLO
 from .perspective import PerspectiveWarp, Quad
 from .roi import Roi, offset_detections, roi_to_pixels
-from .vision.runner import run_tools
+from .vision.runner import run_tools_with_offset
+from .vision.slow_runner import SlowToolRunner
 
 
 ALLOWED_FPS = [24, 30, 60]
@@ -108,6 +109,12 @@ class VideoWorker(QThread):
         self._tools: list = []
         self._mm_per_px: Optional[float] = None
         self._part_no: Optional[str] = None
+        self._slow = SlowToolRunner()
+        self._slow_hz = 2.0
+        # Goes up each time a part arrives (Position Adjustment lost -> found)
+        # or the tools change; a slow result only counts within its epoch.
+        self._part_epoch = 0
+        self._part_was_found = False
         # Latest unwarped frame, for the Top View corner editor's snapshot.
         self.last_raw_frame = None
         self._camera_ok: Optional[bool] = None  # last camera_connected value sent
@@ -138,6 +145,12 @@ class VideoWorker(QThread):
         """Rule-based vision tools (app/vision). Replaces the list reference,
         like set_roi; read once per frame."""
         self._tools = list(tools)
+        self._slow.clear()
+        self._part_epoch += 1
+
+    def set_slow_hz(self, hz: float) -> None:
+        """How often the slow tools (OCR, codes) may run, in their own thread."""
+        self._slow_hz = max(0.1, float(hz))
 
     def set_mm_per_px(self, value: Optional[float]) -> None:
         self._mm_per_px = value
@@ -166,6 +179,26 @@ class VideoWorker(QThread):
         except Exception as exc:
             self.status.emit(f"Model load failed: {exc}")
             self._model = None
+
+    def _run_vision(self, frame, tools: list) -> list:
+        """Fast tools on this frame. Slow tools (OCR, codes) get a copy in
+        their own thread at most slow_hz times a second; their latest result
+        for this part is joined in, or "pending" until there is one."""
+        results, offset = run_tools_with_offset(frame, tools, self._mm_per_px, self._part_no, slow=False)
+        if offset.found and not self._part_was_found:
+            self._part_epoch += 1
+        self._part_was_found = offset.found
+        slow_tools = [t for t in tools if t.enabled and t.SLOW]
+        if not slow_tools or not offset.found:
+            return results
+        now = time.monotonic()
+        hz = self._slow_hz
+        if self._slow.due(now, hz):
+            self._slow.submit(frame.copy(), offset, tools, self._part_epoch, now,
+                              self._mm_per_px, self._part_no)
+        # Room for a few missed slots, and for a run slower than the interval.
+        max_age = 3.0 / hz + 2.0 * self._slow.last_run_s
+        return results + self._slow.results_for(slow_tools, self._part_epoch, now, max_age)
 
     def _extract_detections(self, results) -> List[dict]:
         detections: List[dict] = []
@@ -199,6 +232,7 @@ class VideoWorker(QThread):
     def run(self) -> None:
         previous_threads = cv2.getNumThreads()
         cv2.setNumThreads(STREAM_CV_THREADS)
+        self._part_was_found = False
         try:
             self._run_stream()
         finally:
@@ -314,7 +348,7 @@ class VideoWorker(QThread):
             tool_results = []
             tools = self._tools
             if tools:
-                tool_results = run_tools(frame, tools, self._mm_per_px, self._part_no)
+                tool_results = self._run_vision(frame, tools)
 
             detections = []
             if self._model is not None:
@@ -353,4 +387,5 @@ class VideoWorker(QThread):
 
         if cap is not None:
             cap.release()
+        self._slow.stop()
         self.status.emit("Stopped.")

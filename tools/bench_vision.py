@@ -2,7 +2,9 @@
 
 Runs each tool RUNS times on a 300x200 px ROI (the position tool gets the
 same ROI as its search area), prints mean / p95 ms per tool and the total for
-one tool of each kind, with and without OCR.
+one tool of each kind, with and without OCR. Then simulates the camera loop
+(VideoWorker._run_vision) at 24 fps with every tool, OCR and code running in
+the slow-tool thread, and reports the loop's frame rate and the slow read rate.
 
     .venv/bin/python tools/bench_vision.py
 """
@@ -82,6 +84,35 @@ def main() -> None:
     print(f"\n{'total, no OCR':<16}{sum(r[1] for r in non_ocr):>10.2f}{sum(r[2] for r in non_ocr):>10.2f}")
     if len(non_ocr) != len(rows):
         print(f"{'total, with OCR':<16}{sum(r[1] for r in rows):>10.2f}{sum(r[2] for r in rows):>10.2f}")
+
+    worker_loop(frame)
+
+
+def worker_loop(frame: np.ndarray, fps: float = 24.0, seconds: float = 5.0) -> None:
+    from app.camera import VideoWorker
+
+    worker = VideoWorker()
+    worker.set_slow_hz(2.0)
+    worker.set_tools(make_tools(frame))
+    period = 1.0 / fps
+    frames = reads = 0
+    last_age = None
+    loop_ms = []
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        t0 = time.perf_counter()
+        results = worker._run_vision(frame, worker._tools)
+        loop_ms.append((time.perf_counter() - t0) * 1000.0)
+        age = next((r.extra.get("age_ms") for r in results if r.extra.get("slow")), None)
+        if age is not None and (last_age is None or age < last_age):
+            reads += 1
+        last_age = age
+        frames += 1
+        time.sleep(max(0.0, period - (time.perf_counter() - t0)))
+    worker._slow.stop()
+    print(f"\nworker loop, every tool, slow tools at 2 Hz in their own thread, {seconds:.0f} s at {fps:.0f} fps target:")
+    print(f"  loop fps {frames / seconds:.1f}   tools per frame mean {np.mean(loop_ms):.2f} ms"
+          f" / p95 {np.percentile(loop_ms, 95):.2f} ms   slow reads {reads / seconds:.1f} /s")
 
 
 if __name__ == "__main__":
