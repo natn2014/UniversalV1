@@ -30,8 +30,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T17 | Diameter | done | 61cd556 |
 | T18 | mm calibration | done | 0957bc5 |
 | T19 | OCR read | done | f64a814 |
-| T20 | OCR verify | done | |
-| T21 | Code tool (QR / 1D) | todo | |
+| T20 | OCR verify | done | faedec9 |
+| T21 | Code tool (QR / 1D) | done | |
 | T22 | Outline | todo | |
 | T23 | Blob Count | todo | |
 | T24 | Worker integration | todo | |
@@ -235,4 +235,15 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - `verify(text, conf, expected, pattern, char_count, low, date_format, now) -> (ok, reason)` is a plain function. `{date}` is today's date in `date_format`; inside `pattern` it is regex-escaped. `expected` is an exact match after stripping the ends of the read text.
   - Orientation check runs only when `expected` or `pattern` is set (without one there is nothing to "match"). It flags NG "upside down" when the 180-degree read passes the checks with higher confidence and the normal read does not.
   - A failed check keeps the read text in `text` and puts the reason in `extra["reason"]`; only the orientation case replaces `text` with "upside down", as the spec says.
+- Commit: faedec9
+
+### T21 Code tool (QR / 1D): done  (2026-10-27)
+- Files: app/vision/code.py, app/vision/__init__.py, tests/test_vision_code.py
+- Tests added: 7  ·  Suite: 241/241 passing
+- Decisions / deviations from the TODO:
+  - Order: pyzbar, then the cv2 QR detector (only when the symbology allows QR), then both again on a 2x upscale. Polygon points are scaled back to patch pixels.
+  - `symbology` filters by a case-insensitive substring of the pyzbar type (`qrcode`, `code39`, `code128`, `ean13`, ...); `any` accepts all.
+  - Value is 1 when read; default `low=1` so an unread code is NG. A read code with the wrong text keeps value 1 but ok=False, with the reason in `extra["reason"]`.
+  - `use_job_part_no` compares with `tool.part_no` (set by `store.set_runtime`); if there is none, the tool is NG with reason "no job part number".
+  - `optional_deps.zbar_decode` is looked up at call time so a test (or a machine without pyzbar) can patch it.
 - Commit: pending

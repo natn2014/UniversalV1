@@ -11,3 +11,4 @@ from . import color  # noqa: F401
 from . import brightness  # noqa: F401
 from . import measure  # noqa: F401
 from . import ocr  # noqa: F401
+from . import code  # noqa: F401

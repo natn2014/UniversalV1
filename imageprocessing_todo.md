@@ -337,7 +337,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - The string checks work without tesseract: test a `verify(text, conf)` function directly, covering regex, `{date}` substitution and char count.
   - The orientation test is `skipUnless(TESSERACT)`.
 
-### [ ] T21 `app/vision/code.py`: code tool (QR / 1D)
+### [x] T21 `app/vision/code.py`: code tool (QR / 1D)
 - **IV4:** none (Keyence sells separate code readers). UniversalV1 already uses `pyzbar`.
 - **How it works:**
   - Convert the crop to gray, apply `pre`, and decode with `zbar_decode` from `app/optional_deps.py` (the pyzbar guard is already there).
