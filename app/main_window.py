@@ -55,6 +55,8 @@ class MainWindow(QWidget):
         self.tabs.addTab(self.job_change_tab, "Job Change")
         self.tabs.addTab(self.train_tab, "Train")
         self.log_tab_index = self.tabs.addTab(self.log_tab, "Log")
+        self.tabs.currentChanged.connect(self._on_tab_changed)
+        self._tools_started_camera = False
         self.image_overlay = ImageOverlay(self)
 
         root_layout = QVBoxLayout()
@@ -111,6 +113,19 @@ class MainWindow(QWidget):
     # --- Barcode scanning -----------------------------------------------
 
     @Slot(str)
+    @Slot(int)
+    def _on_tab_changed(self, index: int) -> None:
+        """The Tools tab streams live: start the camera (as a setup preview,
+        no counting or tower) when it opens, stop it again on leaving if the
+        Tools tab is what started it."""
+        if self.tabs.widget(index) is self.tools_tab:
+            if not self.tools_tab.frozen and not self.ctx.worker.isRunning():
+                self._tools_started_camera = self.monitor_tab.ensure_live(
+                    lambda: None, "Starting camera for Tools...")
+        elif self._tools_started_camera:
+            self._tools_started_camera = False
+            self.monitor_tab.end_preview()
+
     def _show_tab(self, title: str) -> None:
         for i in range(self.tabs.count()):
             if self.tabs.tabText(i) == title:

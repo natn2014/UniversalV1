@@ -258,5 +258,66 @@ class UiRules(ToolsTabTest):
             pixmap.save(out)
 
 
+def qimage(bgr):
+    from PySide6.QtGui import QImage
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    h, w = rgb.shape[:2]
+    return QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888).copy()
+
+
+class LiveStream(ToolsTabTest):
+    """Live until Snapshot; the same button resumes the stream."""
+
+    def setUp(self):
+        super().setUp()
+        self.tab.set_frame(None)
+        self.tab.show()
+
+    def send(self, results):
+        self.tab._on_worker_frame(qimage(frame()), [], results)
+
+    def test_live_frame_shows_worker_results_without_rerunning(self):
+        from app.vision.base import ToolResult
+        tool = self.tab.add_tool("brightness", (0.1, 0.1, 0.4, 0.4))
+        with mock.patch.object(tools_tab_mod, "run_tools", side_effect=AssertionError("ran twice")):
+            self.send([ToolResult(tool.name, "brightness", 123.0, True)])
+        self.assertFalse(self.tab.frozen)
+        self.assertEqual(self.tab.table.item(0, 2).text(), "123.00")
+        self.assertFalse(self.tab.view.pixmap().isNull())
+        self.assertEqual(self.tab.snapshot_button.text(), "Snapshot")
+
+    def test_pending_slow_result_shows_waiting(self):
+        from app.vision.base import ToolResult
+        tool = self.tab.add_tool("ocr", (0.1, 0.1, 0.4, 0.4))
+        self.send([ToolResult(tool.name, "ocr", 0.0, False, extra={"pending": True})])
+        self.assertEqual(self.tab.table.item(0, 3).text(), "…")
+
+    def test_snapshot_toggles_freeze_and_resume(self):
+        self.send([])
+        self.tab.toggle_snapshot()
+        self.assertTrue(self.tab.frozen)
+        self.assertEqual(self.tab.snapshot_button.text(), "Resume Live")
+        self.tab._on_worker_frame(qimage(np.zeros((480, 640, 3), np.uint8)), [], [])
+        self.assertEqual(int(self.tab._frame.max()), 255)  # a new live frame does not replace the frozen one
+        self.tab.toggle_snapshot()
+        self.assertFalse(self.tab.frozen)
+        self.assertEqual(self.tab.snapshot_button.text(), "Snapshot")
+
+    def test_drawing_while_live_freezes_first(self):
+        self.send([])
+        self.tab.begin_add("width")
+        self.assertTrue(self.tab.frozen)
+        self.assertEqual(self.tab._mode, "add")
+        self.tab.view.roi_drawn.emit((0.25, 0.6, 0.5, 0.85))
+        self.assertAlmostEqual(self.tab._results[self.tab.tools[0].name].value, 40, delta=1)
+
+    def test_resume_cancels_a_drawing_mode(self):
+        self.send([])
+        self.tab.begin_add("width")
+        self.tab.resume_live()
+        self.assertIsNone(self.tab._mode)
+        self.assertEqual(self.saved_tools(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,9 @@
 """Tools tab: build a job's rule-based vision tools on a frozen camera frame.
 
-Tap Snapshot to freeze the latest Monitor frame, Add Tool to pick a kind and
-draw its area, then Teach / set the limits against the live value. Every
+The camera streams live here, with every tool's area and result drawn on it.
+Tap Snapshot to freeze the frame (tap it again, now "Resume Live", to go back
+to the stream), Add Tool to pick a kind and draw its area, then Teach / set
+the limits against the value. Every
 change is written to the job through `ctx.set_tools(..., save_to_job=True)`.
 """
 
@@ -60,8 +62,9 @@ class ToolsTab(QWidget):
     def __init__(self, ctx: AppContext, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._ctx = ctx
-        self._frame: Optional[np.ndarray] = None  # frozen BGR frame
+        self._frame: Optional[np.ndarray] = None  # frozen BGR frame; None = live stream
         self._last_image: Optional[QImage] = None  # newest frame the worker delivered
+        self._live_results: List[ToolResult] = []  # the worker's tool results for that frame
         self._results: Dict[str, ToolResult] = {}
         self._mode: Optional[str] = None  # add / set_roi / teach_box / calibrate / pick_color
         self._pending_kind: Optional[str] = None
@@ -142,7 +145,7 @@ class ToolsTab(QWidget):
         self.form = ToolParamsForm()
         self.form.changed.connect(self._on_params_changed)
 
-        self.snapshot_button = self._button("Snapshot", self.snapshot, height=44)
+        self.snapshot_button = self._button("Snapshot", self.toggle_snapshot, height=44)
         self.snapshot_button.setMinimumWidth(150)
         self.add_button = self._button("Add Tool", self._on_add_clicked, height=44)
         self.add_button.setMinimumWidth(170)
@@ -246,12 +249,38 @@ class ToolsTab(QWidget):
 
     @Slot(QImage, list, list)
     def _on_worker_frame(self, image: QImage, detections: list, tool_results: list) -> None:
-        self._last_image = image  # cheap: converted only when Snapshot is tapped
+        first = self._last_image is None
+        self._last_image = image
+        self._live_results = tool_results
+        if first:
+            self._refresh_info()  # hint: "Waiting for the camera" -> "Live"
+        # Live: show the worker's own results; the tools are not run twice.
+        if self._frame is None and self.isVisible():
+            self._show_results(tool_results)
+            self._render()
+
+    @property
+    def frozen(self) -> bool:
+        return self._frame is not None
 
     def set_frame(self, frame: Optional[np.ndarray]) -> None:
-        """Freezes a BGR frame (the Monitor's, after the top-view warp)."""
+        """Freezes a BGR frame (the Monitor's, after the top-view warp);
+        None goes back to the live stream."""
         self._frame = frame
+        self.snapshot_button.setText("Resume Live" if frame is not None else "Snapshot")
+        self.snapshot_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["start"]) if frame is not None else "")
         self._refresh_all()
+
+    @Slot()
+    def toggle_snapshot(self) -> None:
+        if self.frozen:
+            self.resume_live()
+        else:
+            self.snapshot()
+
+    def resume_live(self) -> None:
+        self._exit_mode()
+        self.set_frame(None)
 
     @Slot()
     def snapshot(self) -> None:
@@ -304,8 +333,10 @@ class ToolsTab(QWidget):
 
     def teach_selected(self, **kw) -> bool:
         tool = self.selected_tool()
+        if tool is not None and self._frame is None and self._last_image is not None:
+            self.snapshot()  # teach on a still frame, then show it frozen
         if tool is None or self._frame is None:
-            self._ctx.status.emit("Take a snapshot and select a tool first.")
+            self._ctx.status.emit("Select a tool, with the camera running, first.")
             return False
         try:
             tool.teach(self._frame, **kw)
@@ -430,19 +461,30 @@ class ToolsTab(QWidget):
         self._render()
 
     def _run(self) -> None:
-        self._results = {}
+        """Frozen: runs the tools on the frame. Live: shows the worker's
+        latest results (it already runs the tools on every frame)."""
+        if self._frame is None:
+            self._show_results(self._live_results if self._last_image is not None else [])
+            return
         results: List[ToolResult] = []
-        if self._frame is not None and self.tools:
+        if self.tools:
             results = run_tools(self._frame, self.tools, self._ctx.mm_per_px, self._ctx.current_part_no)
-            self._results = {r.name: r for r in results}
+        self._show_results(results)
+
+    def _show_results(self, results: List[ToolResult]) -> None:
+        self._results = {r.name: r for r in results}
         mm = bool(self._ctx.mm_per_px)
         for row, tool in enumerate(self.tools):
             res = self._results.get(tool.name)
             value = QTableWidgetItem(tool_value_text(res, mm) if res else "—")
             value.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            verdict = QTableWidgetItem("—" if res is None else ("OK" if res.ok else "NG"))
+            pending = res is not None and res.extra.get("pending")
+            verdict = QTableWidgetItem("—" if res is None else "…" if pending else ("OK" if res.ok else "NG"))
             verdict.setTextAlignment(Qt.AlignCenter)
-            if res is not None:
+            if pending:
+                verdict.setBackground(QBrush(QColor(STANDBY_YELLOW)))
+                verdict.setForeground(QBrush(QColor("#1a1a1a")))
+            elif res is not None:
                 verdict.setBackground(QBrush(QColor(OK_GREEN if res.ok else NG_RED)))
                 verdict.setForeground(QBrush(QColor("#ffffff")))
             self.table.setItem(row, 2, value)
@@ -472,20 +514,27 @@ class ToolsTab(QWidget):
         self.info_label.setText(f"Part: {part}   ·   Tools: {len(self.tools)}   ·   Scale: {calibration}")
         self.gate_button.setText(f"Gate: {self._ctx.tools_gate}")
         if self._mode is None:
-            hint = ("Snapshot freezes the camera frame  ·  Add Tool, then drag its area"
-                    if self._frame is None else
-                    "Select a tool to teach it, set its limits or edit its parameters")
+            if self._frame is not None:
+                hint = "Frozen frame  ·  Select a tool to teach it, set its limits or edit its parameters"
+            elif self._last_image is None:
+                hint = "Waiting for the camera  ·  Add Tool, then drag its area"
+            else:
+                hint = "Live  ·  Snapshot freezes the frame  ·  Add Tool, then drag its area"
             if any(t.SLOW for t in self.tools) and not any(t.kind == "position" for t in self.tools):
                 hint += "  ·  Add a Position tool so OCR / code results are matched to each part"
             self.hint_label.setText(hint)
 
     def _render(self) -> None:
-        if self._frame is None:
+        if self._frame is not None:
+            h, w = self._frame.shape[:2]
+            rgb = cv2.cvtColor(self._frame, cv2.COLOR_BGR2RGB)
+            pixmap = QPixmap.fromImage(QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888).copy())
+        elif self._last_image is not None:
+            pixmap = QPixmap.fromImage(self._last_image)
+            w, h = pixmap.width(), pixmap.height()
+        else:
             self.view.setPixmap(QPixmap())
             return
-        h, w = self._frame.shape[:2]
-        rgb = cv2.cvtColor(self._frame, cv2.COLOR_BGR2RGB)
-        pixmap = QPixmap.fromImage(QImage(rgb.data, w, h, 3 * w, QImage.Format_RGB888).copy())
         painter = QPainter(pixmap)
         for res in self._results.values():
             draw_overlay(painter, res.overlay)
@@ -536,7 +585,7 @@ class ToolsTab(QWidget):
         tool = self.selected_tool()
         res = self._results.get(tool.name) if tool else None
         if res is None:
-            self._ctx.status.emit("No live value yet: take a snapshot first.")
+            self._ctx.status.emit("No value yet: start the camera or take a snapshot first.")
             return
         a, b = res.value * (1 - LIMIT_PERCENT / 100), res.value * (1 + LIMIT_PERCENT / 100)
         self.set_limits(min(a, b), max(a, b))
@@ -544,8 +593,10 @@ class ToolsTab(QWidget):
     # --- Modes: drawing on the image ----------------------------------
 
     def _enter_mode(self, mode: str, hint: str, point: bool = False) -> bool:
+        if self._frame is None and self._last_image is not None:
+            self.snapshot()  # drawing and teaching need a still frame: freeze the live one
         if self._frame is None:
-            self._ctx.status.emit("Take a snapshot first: tools are set up on a frozen frame.")
+            self._ctx.status.emit("No camera frame yet: start the camera on the Monitor tab first.")
             self.roi_button.setChecked(False)
             self.pick_color_button.setChecked(False)
             return False
