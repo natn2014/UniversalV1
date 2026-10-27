@@ -358,7 +358,7 @@ Progress is logged in [develop_record.md](develop_record.md).
 
 ## Phase 5: Pattern and count
 
-### [ ] T22 `app/vision/pattern.py` `OutlineTool` (kind `outline`)
+### [x] T22 `app/vision/pattern.py` `OutlineTool` (kind `outline`)
 - **IV4:** Outline: the % match with the master, based on the part's outline.
 - **How it works:**
   - `teach` stores the Canny edges of the master crop, dilated by 1 px; this is the edge template.

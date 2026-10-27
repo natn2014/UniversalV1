@@ -31,8 +31,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T18 | mm calibration | done | 0957bc5 |
 | T19 | OCR read | done | f64a814 |
 | T20 | OCR verify | done | faedec9 |
-| T21 | Code tool (QR / 1D) | done | |
-| T22 | Outline | todo | |
+| T21 | Code tool (QR / 1D) | done | 23ffed7 |
+| T22 | Outline | done | |
 | T23 | Blob Count | todo | |
 | T24 | Worker integration | todo | |
 | T25 | Monitor integration | todo | |
@@ -246,4 +246,15 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - Value is 1 when read; default `low=1` so an unread code is NG. A read code with the wrong text keeps value 1 but ok=False, with the reason in `extra["reason"]`.
   - `use_job_part_no` compares with `tool.part_no` (set by `store.set_runtime`); if there is none, the tool is NG with reason "no job part number".
   - `optional_deps.zbar_decode` is looked up at call time so a test (or a machine without pyzbar) can patch it.
+- Commit: 23ffed7
+
+### T22 Outline: done  (2026-10-27)
+- Files: app/vision/pattern.py, app/vision/__init__.py, tests/test_vision_pattern.py
+- Tests added: 10  ·  Suite: 251/251 passing
+- Decisions / deviations from the TODO:
+  - The taught master is the gray ROI crop (after `pre`), saved as a viewable PNG; the edge template and contour are derived from it and cached.
+  - Template mode: the template is the master's edges inset by `margin_px` (new param, default 8), so the ROI is slightly larger than the template and a small shift is tolerated. Edges of the master and of the live ROI are both dilated 3x3. With only the template dilated, `TM_CCORR_NORMED` tops out near 0.58 for an identical part.
+  - Shape mode: the TODO formula `100 - matchShapes x 100` cannot separate a circle from a square (Hu I1 distance is only about 0.03, so it scores 97). Used `100 * exp(-distance * 25)` instead: circle vs square 45, rotated rectangle 99, notched rectangle 83.
+  - The largest contour comes from an Otsu mask whose minority class is taken as the part.
+  - If the ROI size changes after teaching, the tool reports "ROI size changed: teach again".
 - Commit: pending
