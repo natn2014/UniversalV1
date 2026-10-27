@@ -308,7 +308,7 @@ Progress is logged in [develop_record.md](develop_record.md).
 
 ## Phase 4: Text and codes
 
-### [ ] T19 `app/vision/ocr.py`: OCR read
+### [x] T19 `app/vision/ocr.py`: OCR read
 - **IV4:** AI OCR reads printed text, including angled or shaded print.
 - **How it works:**
   - Add `pytesseract` as an optional dependency with a guard in `app/optional_deps.py` (`TESSERACT = None` if the import or the `tesseract` binary is missing). **Do not install system packages.** If tesseract is missing, the tool returns `ok=False, text="OCR engine not installed"`.

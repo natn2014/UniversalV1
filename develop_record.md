@@ -28,8 +28,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T15 | Edge Presence | done | 78c14b9 |
 | T16 | Pitch | done | c5d9ccb |
 | T17 | Diameter | done | 61cd556 |
-| T18 | mm calibration | done | |
-| T19 | OCR read | todo | |
+| T18 | mm calibration | done | 0957bc5 |
+| T19 | OCR read | done | |
 | T20 | OCR verify | todo | |
 | T21 | Code tool (QR / 1D) | todo | |
 | T22 | Outline | todo | |
@@ -213,4 +213,17 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - `AppContext.mm_per_px` (+ `mm_per_px_changed`, `set_mm_per_px(value, save_to_job)`) is saved as `"mm_per_px"` next to `"tools"`; `collect_config`, `set_tools` and `load_tools` all carry it.
   - `store.set_runtime(tools, mm_per_px, part_no)` hands the job-level values to the tools before each run (T24 calls it); they are never in a tool's dict.
   - `calibrate_from_width` returns None when no width is found or `known_mm <= 0`.
+- Commit: 0957bc5
+
+### T19 OCR read: done  (2026-10-27)
+- Files: app/vision/ocr.py, app/vision/__init__.py, app/optional_deps.py (`TESSERACT` guard), requirements.txt (`pytesseract` + system `tesseract-ocr` note), tests/test_vision_ocr.py
+- Tests added: 14 (3 need tesseract)  ·  Suite: 224/224 passing, tesseract tests run (not skipped)
+- Environment: the coordinator lifted the no-install rule; tesseract 5.3.4 (system) and `pytesseract` (in .venv) were installed by them. Nothing was installed by this item.
+- Decisions / deviations from the TODO:
+  - Deskew uses the principal axis (PCA) of the dark pixels instead of `minAreaRect`: the `minAreaRect` angle convention differs between OpenCV versions (this venv has 5.0). It is applied only when the pixels are elongated (eigenvalue ratio at least 2) and the angle is under 15 degrees, so a tall multi-line block is left alone.
+  - Auto character height = median height of the dark blobs; the upscale is capped at 4x and never shrinks.
+  - `OcrTool.engine` (class attribute) can be set to a fake or another `OcrEngine`; `get_engine()` wraps `TESSERACT` otherwise. Missing engine gives ok=False "OCR engine not installed".
+  - Confidence = mean of Tesseract word confidences; multi-line text is joined with newlines.
+  - Importing `app.optional_deps` from `vision.ocr` is lazy (inside `get_engine`) so the module stays light.
+  - Tesseract costs roughly 50-200 ms per read, far over the 10 ms budget; the runner (T24) should not OCR every frame. See the T27 notes.
 - Commit: pending

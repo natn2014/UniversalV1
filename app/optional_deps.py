@@ -26,3 +26,11 @@ try:
     from pyzbar.pyzbar import decode as zbar_decode
 except Exception:
     zbar_decode = None
+
+try:
+    import pytesseract
+
+    pytesseract.get_tesseract_version()  # raises when the `tesseract` binary is missing
+    TESSERACT = pytesseract
+except Exception:
+    TESSERACT = None
