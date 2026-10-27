@@ -430,7 +430,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - An offscreen Qt smoke test: build `MonitorTab` with a fake context, call `on_frame` with fake results, and check the banner state.
   - A job with no tools gives the same states as before for the same detections.
 
-### [ ] T26 Tools tab (`app/tabs/tools_tab.py`)
+### [x] T26 Tools tab (`app/tabs/tools_tab.py`)
 - **Style:** read the `industrial-hmi-ui` skill (`.claude/skills/industrial-hmi-ui/`) and `app/theme.py`. Big touch targets (≥ 48 px) and the same card and button styles as the Settings tab.
 - **Layout:**
   - On the left, the frozen camera frame (a `VideoView`-style widget) showing all tool ROIs. The selected tool is highlighted.

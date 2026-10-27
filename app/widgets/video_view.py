@@ -12,6 +12,7 @@ class VideoView(QWidget):
     new detection area, emitted as fractions of the frame (x1, y1, x2, y2)."""
 
     roi_drawn = Signal(tuple)
+    point_picked = Signal(tuple)  # (x, y) as fractions of the frame, in point mode
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -21,6 +22,8 @@ class VideoView(QWidget):
         self._drag_start: Optional[QPointF] = None  # fractions of the frame
         self._drag_end: Optional[QPointF] = None
         self._overlay_text: Optional[str] = None
+        self._roi_hint = "Drag on the image to set the detection area"
+        self._point_mode = False
 
     def setPixmap(self, pixmap: QPixmap) -> None:
         self._pixmap = pixmap
@@ -34,11 +37,17 @@ class VideoView(QWidget):
         self._overlay_text = text
         self.update()
 
-    def set_roi_mode(self, enabled: bool) -> None:
+    def set_roi_mode(self, enabled: bool, hint: Optional[str] = None) -> None:
         self._roi_mode = enabled
+        self._roi_hint = hint or "Drag on the image to set the detection area"
         self._drag_start = self._drag_end = None
-        self.setCursor(Qt.CrossCursor if enabled else Qt.ArrowCursor)
+        self.setCursor(Qt.CrossCursor if enabled or self._point_mode else Qt.ArrowCursor)
         self.update()
+
+    def set_point_mode(self, enabled: bool) -> None:
+        """A tap on the image is emitted as `point_picked` instead of drawing a box."""
+        self._point_mode = enabled
+        self.setCursor(Qt.CrossCursor if enabled or self._roi_mode else Qt.ArrowCursor)
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -56,7 +65,7 @@ class VideoView(QWidget):
         if self._roi_mode:
             painter.setPen(QColor("#ffd54f"))
             painter.drawText(self._image_rect.adjusted(8, 6, -8, -6), Qt.AlignTop | Qt.AlignLeft,
-                             "Drag on the image to set the detection area")
+                             self._roi_hint)
         if self._drag_start is not None and self._drag_end is not None:
             r = self._image_rect
             pen = QPen(QColor("#ffd54f"), 2, Qt.DashLine)
@@ -85,6 +94,10 @@ class VideoView(QWidget):
                        min(max((pos.y() - r.y()) / r.height(), 0.0), 1.0))
 
     def mousePressEvent(self, event) -> None:
+        if self._point_mode and not self._image_rect.isEmpty() and self._image_rect.contains(event.position()):
+            p = self._to_fraction(event.position())
+            self.point_picked.emit((p.x(), p.y()))
+            return
         if not self._roi_mode or self._image_rect.isEmpty():
             return
         if self._image_rect.contains(event.position()):

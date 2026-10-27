@@ -9,13 +9,12 @@ has to implement `OcrEngine.read`.
 import math
 import re
 from datetime import datetime
-from typing import List, Optional, Protocol, Tuple
+from typing import Optional, Protocol, Tuple
 
 import cv2
 import numpy as np
 
 from .base import Tool, overlay_item, register
-from .preprocess import to_gray
 
 TARGET_CHAR_PX = 32
 MAX_SCALE = 4.0

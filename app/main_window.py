@@ -10,6 +10,7 @@ from .tabs.job_change_tab import JobChangeTab
 from .tabs.log_tab import LogTab
 from .tabs.monitor_tab import MonitorTab
 from .tabs.settings_tab import SettingsTab
+from .tabs.tools_tab import ToolsTab
 from .tabs.train_tab import TrainTab
 from .theme import DARK_INDUSTRIAL_QSS
 from .widgets.barcode_scan import BarcodeScanDialog
@@ -33,6 +34,7 @@ class MainWindow(QWidget):
 
         self.monitor_tab = MonitorTab(self.ctx)
         self.settings_tab = SettingsTab(self.ctx)
+        self.tools_tab = ToolsTab(self.ctx)
         self.job_change_tab = JobChangeTab(self.ctx)
         self.train_tab = TrainTab(self.ctx)
         self.log_tab = LogTab()
@@ -49,6 +51,7 @@ class MainWindow(QWidget):
         self.tabs = QTabWidget()
         self.tabs.addTab(self.monitor_tab, "Monitor")
         self.tabs.addTab(self.settings_tab, "Settings")
+        self.tabs.addTab(self.tools_tab, "Tools")
         self.tabs.addTab(self.job_change_tab, "Job Change")
         self.tabs.addTab(self.train_tab, "Train")
         self.log_tab_index = self.tabs.addTab(self.log_tab, "Log")

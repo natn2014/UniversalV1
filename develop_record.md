@@ -35,8 +35,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T22 | Outline | done | 8b8d1a4 |
 | T23 | Blob Count | done | 0f710f6 |
 | T24 | Worker integration | done | 2b76039 |
-| T25 | Monitor integration | done | |
-| T26 | Tools tab UI | todo | |
+| T25 | Monitor integration | done | e09d2f0 |
+| T26 | Tools tab UI | done | |
 | T27 | Performance + final check | todo | |
 
 Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason in the entry).
@@ -288,4 +288,19 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - Overlay drawing lives in `app/widgets/tool_overlay.py` (`draw_overlay`, `tool_value_text`). `_render_frame` has a third optional argument, so the NG log image also carries the overlays.
   - The tool table (Tool / Value / OK-NG cell with verdict background) sits under the detection table, hidden when the job has no tools. The "pill" is a colored, bold table cell rather than a separate widget (cheaper at 30 fps). The mm unit is added only for `width` and `diameter`; OCR and Code rows show their text.
   - `tests/test_reconnect.py` now creates a `QApplication` (offscreen) instead of `QCoreApplication`, because the Monitor smoke test needs widgets in the same process. The monitor test uses a real `AppContext` with the settings file and `save_ng_image` patched to a temp dir; the tower and camera are never opened.
+- Commit: e09d2f0
+
+### T26 Tools tab UI: done  (2026-10-27)
+- Files: app/tabs/tools_tab.py, app/widgets/tool_params.py (Add Tool tiles, parameter form), app/widgets/video_view.py (hint text, point mode), app/widgets/remove_job_dialog.py (title / item label / warning options), app/theme.py (QDoubleSpinBox styled like QSpinBox), app/main_window.py (tab between Settings and Job Change), tests/test_vision_tools_tab.py; unused imports cleaned in app/vision/ocr.py
+- Tests added: 23  ·  Suite: 303/303 passing
+- Checked visually: rendered offscreen at 1024x700 with `DARK_INDUSTRIAL_QSS` and looked at the screenshot (tool list, buttons, limits, Add Tool tiles). Only `QT_QPA_PLATFORM=offscreen` was used; the kiosk, camera and tower were not touched. Tests write only to a temp `PART_CONFIGS_DIR` / `TOOLS_DIR` / settings file.
+- Decisions / deviations from the TODO:
+  - The frozen frame comes from a Snapshot button (the newest `frame_ready` image; falls back to `worker.last_raw_frame` through the top-view warp). The tab shows all tool ROIs (selected one orange, thick), the live result overlays, and a total OK / NG / STANDBY pill on the frozen frame.
+  - Outline does not ask for a second rectangle: its master is the ROI crop (with the margin inset), so the ROI itself is the template box. Position (2-D mode) does ask for the template box. Color Area, Color Average, Outline and Position learn from their ROI right after it is drawn when a frame is frozen; Color Prohibit and Blob Count do not (their ROI is not the color to learn).
+  - Pick Color (shown for Color Area / Color Prohibit / Blob Count) uses a new point mode in `VideoView` (`point_picked`, fractions).
+  - Delete reuses `RemoveJobDialog` (type the tool name), now parameterised with `title`, `item_label` and `warning`; the Job Change use is unchanged.
+  - Structural changes (add, delete, teach, ROI, gate, limit button) save at once; spin box / combo / check box edits re-run the tools at once and save after 300 ms (debounce) so typing does not write the job file on every keystroke. The `Tools` tab also has Enabled / Follow position toggles.
+  - Calibrate mm uses `QInputDialog.getDouble` for the known size (no numeric keypad widget exists in the app yet), then a drag across the feature; the direction follows the ROI's aspect.
+  - Parameter form: bool -> check box, int -> spin box, float -> double spin box, known choices -> combo box, other str -> line edit; `pre` and taught values (template_roi, taught_center, ref_*) are hidden.
+  - `QDoubleSpinBox` was not covered by the theme QSS; it now shares the `QSpinBox` rules.
 - Commit: pending

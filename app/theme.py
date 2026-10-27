@@ -142,7 +142,7 @@ QFrame#sidePanel {{
     background-color: #d5d9de;
     border: 1px solid #0b0d10;
 }}
-QLineEdit, QComboBox, QSpinBox {{
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{
     background-color: #0f1114;
     color: #e8eaed;
     border: 1px solid #3a4048;
@@ -150,35 +150,35 @@ QLineEdit, QComboBox, QSpinBox {{
     padding: 4px 8px;
     min-height: 28px;
 }}
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{
     border-color: #e0a526;
 }}
-QSpinBox {{
+QSpinBox, QDoubleSpinBox {{
     padding-right: 40px;
 }}
-QSpinBox::up-button, QSpinBox::down-button {{
+QSpinBox::up-button, QDoubleSpinBox::up-button, QSpinBox::down-button, QDoubleSpinBox::down-button {{
     subcontrol-origin: border;
     width: 36px;
     background: {GLOSS_GRAY};
     border: 1px solid #0e1013;
 }}
-QSpinBox::up-button {{
+QSpinBox::up-button, QDoubleSpinBox::up-button {{
     subcontrol-position: top right;
     border-top-right-radius: 3px;
 }}
-QSpinBox::down-button {{
+QSpinBox::down-button, QDoubleSpinBox::down-button {{
     subcontrol-position: bottom right;
     border-bottom-right-radius: 3px;
 }}
-QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {{
+QSpinBox::up-button:pressed, QDoubleSpinBox::up-button:pressed, QSpinBox::down-button:pressed, QDoubleSpinBox::down-button:pressed {{
     background: {GLOSS_GRAY_PRESSED};
 }}
-QSpinBox::up-arrow {{
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {{
     image: url({ARROW_UP_SVG});
     width: 14px;
     height: 13px;
 }}
-QSpinBox::down-arrow {{
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {{
     image: url({ARROW_DOWN_SVG});
     width: 14px;
     height: 13px;

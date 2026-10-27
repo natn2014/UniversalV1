@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Callable, Optional
 
 from PySide6.QtWidgets import QComboBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout
 
@@ -9,9 +9,14 @@ class RemoveJobDialog(QDialog):
     """Type-to-confirm removal: the Remove button only enables once the exact
     part number is typed, so a stray tap can't delete a job."""
 
-    def __init__(self, part_numbers: list, current_part: Optional[str], parent=None) -> None:
+    def __init__(self, part_numbers: list, current_part: Optional[str], parent=None,
+                 title: str = "Remove Job", item_label: str = "Job",
+                 warning: Optional[Callable[[str], str]] = None) -> None:
+        """`title`, `item_label` and `warning(name)` let other lists of named
+        things (the vision tools) reuse the same type-to-confirm flow."""
         super().__init__(parent)
-        self.setWindowTitle("Remove Job")
+        self._warning = warning
+        self.setWindowTitle(title)
         self.setModal(True)
         self.resize(560, 360)
 
@@ -19,9 +24,9 @@ class RemoveJobDialog(QDialog):
         top_bar.setObjectName("monitorTopBar")
         top_layout = QHBoxLayout(top_bar)
         top_layout.setContentsMargins(10, 6, 10, 6)
-        title = QLabel("Remove Job")
-        title.setObjectName("dangerTitle")
-        top_layout.addWidget(title)
+        title_label = QLabel(title)
+        title_label.setObjectName("dangerTitle")
+        top_layout.addWidget(title_label)
         top_layout.addStretch(1)
 
         self.part_combo = QComboBox()
@@ -44,7 +49,7 @@ class RemoveJobDialog(QDialog):
         card_layout.setContentsMargins(12, 10, 12, 12)
         card_layout.setSpacing(8)
         job_row = QHBoxLayout()
-        job_row.addWidget(QLabel("Job:"))
+        job_row.addWidget(QLabel(f"{item_label}:"))
         job_row.addWidget(self.part_combo, 1)
         card_layout.addLayout(job_row)
         card_layout.addWidget(self.warning_label)
@@ -83,9 +88,12 @@ class RemoveJobDialog(QDialog):
         return self.part_combo.currentText()
 
     def _on_part_changed(self, part_no: str) -> None:
-        self.warning_label.setText(
-            f"This permanently deletes the saved job \"{part_no}\" (model, filters and "
-            "target classes). NG images in the Log are kept. This cannot be undone.")
+        if self._warning is not None:
+            self.warning_label.setText(self._warning(part_no))
+        else:
+            self.warning_label.setText(
+                f"This permanently deletes the saved job \"{part_no}\" (model, filters and "
+                "target classes). NG images in the Log are kept. This cannot be undone.")
         self.prompt_label.setText(f"To confirm, type  <b>{part_no}</b>  below:")
         self.confirm_field.clear()
         self._update_remove_enabled()
