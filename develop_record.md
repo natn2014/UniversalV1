@@ -11,8 +11,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 
 | T | Function | Status | Commit |
 |---|---|---|---|
-| T01 | vision/base.py framework | done | |
-| T02 | preprocess / shading correction | todo | |
+| T01 | vision/base.py framework | done | b0a612c |
+| T02 | preprocess / shading correction | done | |
 | T03 | Position Adjustment | todo | |
 | T04 | Total judgement | todo | |
 | T05 | Save tools in job | todo | |
@@ -64,4 +64,15 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - A taught image lives in `tool.template` (ndarray) with `template_file` (path) in the dict; `vision.store` (T05) reads and writes the PNG.
   - Runtime-only attributes `mm_per_px` and `part_no` are set by the runner and never saved.
   - Overlay `pts` layout is documented in the `base.py` docstring.
+- Commit: b0a612c
+
+### T02 preprocess / shading correction: done  (2026-10-27)
+- Files: app/vision/preprocess.py, app/vision/base.py (adds the `pre` param), tests/test_vision_preprocess.py
+- Tests added: 9  ·  Suite: 109/109 passing
+- Decisions / deviations from the TODO:
+  - Gray-only filters (flat_field, top_hat, black_hat, clahe) accept BGR by filtering each channel, so `apply_chain` works on both.
+  - `to_hsv` / `to_lab` cannot detect "already in that space" for a 3-channel array; they assume BGR and promote a 2-D gray input.
+  - Extra ops "gray", "hsv", "lab" are available inside `apply_chain`.
+  - `Tool` now has a `pre` param on every tool (`DEFAULT_PRE`, overridable per class, e.g. OCR) plus `Tool.prepared()` / `Tool.gray()` helpers.
+  - Test geometry: flat_field divides by a blur, so a feature close to the kernel size is partly absorbed into the background (a 40 px square with kernel 51 keeps only ~5 levels). The test uses a 20 px square; keep the kernel at least 2.5x the feature. Background std is measured away from the left/right 60 px border, where the ramp starts at 0.
 - Commit: pending

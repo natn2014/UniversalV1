@@ -54,7 +54,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - An unknown kind raises `KeyError`.
 - **Done when:** the base class and registry are tested, nothing in `vision` imports Qt, and other tools can subclass `Tool`.
 
-### [ ] T02 `app/vision/preprocess.py`: pre-filters and shading correction
+### [x] T02 `app/vision/preprocess.py`: pre-filters and shading correction
 - **IV4:** Built-in image filters. AI OCR copes with shaded text; we provide explicit shading correction.
 - **How it works:** pure functions; every one takes and returns a uint8 image.
   - `to_gray(img)`, `to_hsv(img)`, `to_lab(img)`. Each passes the image through unchanged if it is already in that space.

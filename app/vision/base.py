@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Type
 import numpy as np
 
 from ..roi import Roi, roi_to_pixels
+from .preprocess import apply_chain, to_gray
 
 FULL_FRAME: Roi = (0.0, 0.0, 1.0, 1.0)
 _DEFAULT = object()  # "use the class's default limit" (None means no bound)
@@ -89,6 +90,7 @@ class Tool:
     PARAMS: Dict[str, Any] = {}
     DEFAULT_LOW: Optional[float] = None
     DEFAULT_HIGH: Optional[float] = None
+    DEFAULT_PRE: List[dict] = []  # pre-filter chain every tool accepts as `pre`
 
     # Set by the runner for each frame; never saved.
     mm_per_px: Optional[float] = None
@@ -104,8 +106,8 @@ class Tool:
         self.follow_position = follow_position
         self.template: Optional[np.ndarray] = None
         self.template_file = ""
-        for key, default in self.PARAMS.items():
-            setattr(self, key, list(default) if isinstance(default, list) else default)
+        for key, default in self._all_params().items():
+            setattr(self, key, [dict(s) if isinstance(s, dict) else s for s in default] if isinstance(default, list) else default)
         self.set_params(params)
 
     def judge(self, value: float) -> bool:
@@ -127,6 +129,13 @@ class Tool:
         x1 = max(0, min(x1, w - bw))
         y1 = max(0, min(y1, h - bh))
         return frame[y1:y1 + bh, x1:x1 + bw], (x1, y1)
+
+    def prepared(self, patch: np.ndarray) -> np.ndarray:
+        """The patch after the `pre` chain (still BGR if it was)."""
+        return apply_chain(patch, self.pre)
+
+    def gray(self, patch: np.ndarray) -> np.ndarray:
+        return apply_chain(to_gray(patch), self.pre)
 
     def teach(self, frame: np.ndarray, offset: Optional[Offset] = None, **kw: Any) -> None:
         """Registers the master from a frame. Default: nothing to learn."""
@@ -157,12 +166,16 @@ class Tool:
     def fail(self, text: str) -> ToolResult:
         return ToolResult(self.name, self.kind, 0.0, False, [], text, {})
 
+    def _all_params(self) -> Dict[str, Any]:
+        return {"pre": self.DEFAULT_PRE, **self.PARAMS}
+
     def params(self) -> Dict[str, Any]:
-        return {key: getattr(self, key) for key in self.PARAMS}
+        return {key: getattr(self, key) for key in self._all_params()}
 
     def set_params(self, params: Dict[str, Any]) -> None:
+        known = self._all_params()
         for key, value in params.items():
-            if key in self.PARAMS:
+            if key in known:
                 setattr(self, key, value)
 
     def to_dict(self) -> Dict[str, Any]:
