@@ -7,6 +7,8 @@ has to implement `OcrEngine.read`.
 """
 
 import math
+import re
+from datetime import datetime
 from typing import List, Optional, Protocol, Tuple
 
 import cv2
@@ -107,11 +109,39 @@ def prepare_for_ocr(gray: np.ndarray, char_height_px: float = 0) -> np.ndarray:
     return deskew(binary)
 
 
+def _with_date(template: str, date_format: str, now: Optional[datetime], escape: bool) -> str:
+    today = (now or datetime.now()).strftime(date_format)
+    return template.replace("{date}", re.escape(today) if escape else today)
+
+
+def verify(text: str, conf: float, expected: str = "", pattern: str = "", char_count: int = 0,
+           low: Optional[float] = None, date_format: str = "%d/%m/%y",
+           now: Optional[datetime] = None) -> Tuple[bool, str]:
+    """(ok, reason) of a read against the enabled checks. `{date}` in
+    `expected` / `pattern` stands for today's date in `date_format`."""
+    text = text.strip()
+    if low is not None and conf < low:
+        return False, "low confidence"
+    if expected and text != _with_date(expected, date_format, now, escape=False):
+        return False, "text differs from expected"
+    if pattern:
+        try:
+            matched = re.fullmatch(_with_date(pattern, date_format, now, escape=True), text) is not None
+        except re.error:
+            return False, "bad pattern"
+        if not matched:
+            return False, "text does not match pattern"
+    if char_count and len(re.sub(r"\s", "", text)) != char_count:
+        return False, "wrong character count"
+    return True, ""
+
+
 @register("ocr")
 class OcrTool(Tool):
     """Reads the text in the ROI; the value is the mean confidence (0..100)."""
 
-    PARAMS = {"psm": 7, "whitelist": "", "char_height_px": 0}
+    PARAMS = {"psm": 7, "whitelist": "", "char_height_px": 0, "expected": "", "pattern": "",
+              "char_count": 0, "check_orientation": False, "date_format": "%d/%m/%y"}
     DEFAULT_PRE = DEFAULT_OCR_PRE
     DEFAULT_LOW = 60.0
     engine: Optional[OcrEngine] = None  # set to override (tests, another engine)
@@ -125,11 +155,21 @@ class OcrTool(Tool):
             raise RuntimeError("OCR engine not installed")
         return engine.read(self.prepare(patch), self.psm, self.whitelist)
 
+    def check(self, text: str, conf: float, now: Optional[datetime] = None) -> Tuple[bool, str]:
+        return verify(text, conf, self.expected, self.pattern, self.char_count, self.low,
+                      self.date_format, now)
+
     def process(self, patch, origin):
         try:
             text, conf = self.read(patch)
+            ok, reason = self.check(text, conf)
+            if self.check_orientation and (self.expected or self.pattern):
+                flipped, flipped_conf = self.read(cv2.rotate(patch, cv2.ROTATE_180))
+                flipped_ok, _ = self.check(flipped, flipped_conf)
+                if flipped_ok and flipped_conf > conf and not ok:
+                    text, ok, reason = "upside down", False, "upside down"
         except RuntimeError as exc:
             return self.fail(str(exc))
-        res = self.result(conf, text=text, extra={"conf": conf})
+        res = self.result(conf, text=text, extra={"conf": conf, "reason": reason}, ok=ok)
         res.overlay = [overlay_item("text", [2, 14], res.ok, text)]
         return res

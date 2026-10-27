@@ -1,11 +1,12 @@
 import unittest
+from datetime import datetime
 
 import cv2
 import numpy as np
 
 from app.optional_deps import TESSERACT
 from app.vision import ocr
-from app.vision.ocr import OcrTool, estimate_skew, prepare_for_ocr
+from app.vision.ocr import OcrTool, estimate_skew, prepare_for_ocr, verify
 from app.vision.preprocess import apply_chain, to_gray
 
 
@@ -104,6 +105,65 @@ class ToolWithFakeEngine(unittest.TestCase):
         self.assertEqual(res.text, "OCR engine not installed")
 
 
+NOW = datetime(2026, 10, 27)
+
+
+class Verify(unittest.TestCase):
+    def test_expected(self):
+        self.assertTrue(verify("LOT 2026", 90, expected="LOT 2026")[0])
+        self.assertTrue(verify("  LOT 2026\n", 90, expected="LOT 2026")[0])
+        self.assertFalse(verify("LOT 2025", 90, expected="LOT 2026")[0])
+
+    def test_pattern_fullmatch(self):
+        self.assertTrue(verify("LOT 2026", 90, pattern=r"LOT \d{4}")[0])
+        self.assertFalse(verify("LOT 2026 X", 90, pattern=r"LOT \d{4}")[0])
+        self.assertFalse(verify("LOT 20", 90, pattern=r"LOT \d{4}")[0])
+        self.assertFalse(verify("x", 90, pattern="(")[0])
+
+    def test_date_placeholder(self):
+        self.assertTrue(verify("EXP 27/10/26", 90, pattern=r"EXP {date}", now=NOW)[0])
+        self.assertFalse(verify("EXP 28/10/26", 90, pattern=r"EXP {date}", now=NOW)[0])
+        self.assertTrue(verify("27-10-2026", 90, expected="{date}", date_format="%d-%m-%Y", now=NOW)[0])
+
+    def test_char_count_ignores_spaces(self):
+        self.assertTrue(verify("AB CD", 90, char_count=4)[0])
+        self.assertFalse(verify("AB CDE", 90, char_count=4)[0])
+        self.assertTrue(verify("anything", 90, char_count=0)[0])
+
+    def test_low_confidence(self):
+        ok, reason = verify("LOT 2026", 40, expected="LOT 2026", low=60)
+        self.assertFalse(ok)
+        self.assertEqual(reason, "low confidence")
+
+    def test_all_checks_must_pass(self):
+        self.assertFalse(verify("LOT 2026", 90, expected="LOT 2026", char_count=9)[0])
+
+    def test_tool_applies_checks_with_fake_engine(self):
+        t = OcrTool(expected="ABC", char_count=3)
+        t.engine = FakeEngine("ABC", 90)
+        self.assertTrue(t.run(label()).ok)
+        t.engine = FakeEngine("ABD", 90)
+        res = t.run(label())
+        self.assertFalse(res.ok)
+        self.assertEqual(res.extra["reason"], "text differs from expected")
+
+    def test_orientation_with_fake_engine(self):
+        class Flipper:
+            """Reads garbage for the original patch and the right text for the flipped one."""
+            def __init__(self):
+                self.n = 0
+
+            def read(self, binary, psm=7, whitelist=""):
+                self.n += 1
+                return ("XYZ", 55.0) if self.n == 1 else ("LOT 2026", 85.0)
+
+        t = OcrTool(expected="LOT 2026", check_orientation=True, low=50)
+        t.engine = Flipper()
+        res = t.run(label())
+        self.assertFalse(res.ok)
+        self.assertEqual(res.text, "upside down")
+
+
 @unittest.skipUnless(TESSERACT, "tesseract not installed")
 class WithTesseract(unittest.TestCase):
     def test_reads_lot_2026(self):
@@ -114,6 +174,17 @@ class WithTesseract(unittest.TestCase):
 
     def test_reads_tilted_label(self):
         self.assertEqual(OcrTool(psm=7).run(label(angle=4.0)).text.strip(), "LOT 2026")
+
+    def test_upside_down_label_is_flagged(self):
+        flipped = cv2.rotate(label(), cv2.ROTATE_180)
+        res = OcrTool(psm=7, expected="LOT 2026", check_orientation=True).run(flipped)
+        self.assertFalse(res.ok)
+        self.assertEqual(res.text, "upside down")
+
+    def test_upright_label_passes_orientation_check(self):
+        res = OcrTool(psm=7, expected="LOT 2026", check_orientation=True).run(label())
+        self.assertTrue(res.ok)
+        self.assertEqual(res.text.strip(), "LOT 2026")
 
     def test_whitelist(self):
         res = OcrTool(psm=7, whitelist="0123456789").run(label("2026"))

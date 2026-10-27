@@ -326,7 +326,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - The pre-processing is testable without tesseract: `putText("LOT 2026")` on a ramp background, tilted by 5° → the deskew output's tilt is under 1°, and the binarized text is dark on light.
   - The read test is `skipUnless(TESSERACT)`: it reads "LOT 2026" exactly.
 
-### [ ] T20 OCR verify
+### [x] T20 OCR verify
 - **IV4:** OCR checks: does the text match the master, is the label the right way up, is the character count right?
 - **How it works:** extend `OcrTool` with these checks:
   - `expected` (exact match) or `pattern` (regex `fullmatch`), with `{date}` placeholders → today's date in `date_format` (default `%d/%m/%y`).

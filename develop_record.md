@@ -29,8 +29,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T16 | Pitch | done | c5d9ccb |
 | T17 | Diameter | done | 61cd556 |
 | T18 | mm calibration | done | 0957bc5 |
-| T19 | OCR read | done | |
-| T20 | OCR verify | todo | |
+| T19 | OCR read | done | f64a814 |
+| T20 | OCR verify | done | |
 | T21 | Code tool (QR / 1D) | todo | |
 | T22 | Outline | todo | |
 | T23 | Blob Count | todo | |
@@ -226,4 +226,13 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - Confidence = mean of Tesseract word confidences; multi-line text is joined with newlines.
   - Importing `app.optional_deps` from `vision.ocr` is lazy (inside `get_engine`) so the module stays light.
   - Tesseract costs roughly 50-200 ms per read, far over the 10 ms budget; the runner (T24) should not OCR every frame. See the T27 notes.
+- Commit: f64a814
+
+### T20 OCR verify: done  (2026-10-27)
+- Files: app/vision/ocr.py, tests/test_vision_ocr.py
+- Tests added: 10 (2 need tesseract)  ·  Suite: 234/234 passing, tesseract tests run
+- Decisions / deviations from the TODO:
+  - `verify(text, conf, expected, pattern, char_count, low, date_format, now) -> (ok, reason)` is a plain function. `{date}` is today's date in `date_format`; inside `pattern` it is regex-escaped. `expected` is an exact match after stripping the ends of the read text.
+  - Orientation check runs only when `expected` or `pattern` is set (without one there is nothing to "match"). It flags NG "upside down" when the 180-degree read passes the checks with higher confidence and the normal read does not.
+  - A failed check keeps the read text in `text` and puts the reason in `extra["reason"]`; only the orientation case replaces `text` with "upside down", as the spec says.
 - Commit: pending
