@@ -210,7 +210,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - The outline of a 50×50 square gives about 200 ± 20 edge pixels.
   - Adding a scratch line raises the count by about the line's length.
 
-### [ ] T12 `ShadingUniformityTool` (kind `shading`)
+### [x] T12 `ShadingUniformityTool` (kind `shading`)
 - **IV4:** none (our own addition). It finds uneven coating, discoloration, or a weak lamp.
 - **How it works:**
   - Convert the crop to gray and split it into a `grid_x × grid_y` grid of cells. Use `cv2.resize(INTER_AREA)` down to grid size; that gives the cell means directly.

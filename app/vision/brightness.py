@@ -58,3 +58,30 @@ class EdgePixelsTool(Tool):
         edges = cv2.Canny(gray, self.canny_lo, self.canny_hi)
         count = cv2.countNonZero(edges)
         return self.result(count, extra={"density": count * 100.0 / edges.size})
+
+
+@register("shading")
+class ShadingUniformityTool(Tool):
+    """Spread (max - min) of the mean gray level over a grid of cells: uneven
+    coating, discoloration, a weak lamp. Not an IV4 tool."""
+
+    PARAMS = {"grid_x": 4, "grid_y": 4}
+    DEFAULT_HIGH = 20.0
+
+    def process(self, patch, origin):
+        gray = self.gray(patch)
+        gx, gy = int(self.grid_x), int(self.grid_y)
+        cells = cv2.resize(gray, (gx, gy), interpolation=cv2.INTER_AREA).astype(np.float64)
+        lo = np.unravel_index(int(np.argmin(cells)), cells.shape)
+        hi = np.unravel_index(int(np.argmax(cells)), cells.shape)
+        value = float(cells.max() - cells.min())
+        h, w = gray.shape[:2]
+        cw, ch = w / gx, h / gy
+
+        def box(rc, label):
+            r, c = rc
+            return overlay_item("mask_box", [c * cw, r * ch, (c + 1) * cw, (r + 1) * ch], self.judge(value), label)
+
+        overlay = [box(lo, f"min {cells[lo]:.0f}"), box(hi, f"max {cells[hi]:.0f}")]
+        return self.result(value, overlay, extra={
+            "cells": cells.round(2).tolist(), "argmin": [int(lo[0]), int(lo[1])], "argmax": [int(hi[0]), int(hi[1])]})

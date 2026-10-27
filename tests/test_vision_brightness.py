@@ -3,7 +3,7 @@ import unittest
 import cv2
 import numpy as np
 
-from app.vision.brightness import AreaTool, BrightnessAverageTool, EdgePixelsTool
+from app.vision.brightness import AreaTool, BrightnessAverageTool, EdgePixelsTool, ShadingUniformityTool
 
 
 def square_frame(frac=0.3, fg=230, bg=10, size=(200, 300)):
@@ -79,6 +79,33 @@ class EdgePixels(unittest.TestCase):
         extra = EdgePixelsTool().run(img).value - base
         self.assertGreater(extra, 100)
         self.assertLess(extra, 320)  # a thin line has an edge on each side
+
+
+class Shading(unittest.TestCase):
+    def ramp(self, lo=50, hi=150, size=(200, 400)):
+        return np.tile(np.linspace(lo, hi, size[1]), (size[0], 1)).astype(np.uint8)
+
+    def test_uniform(self):
+        res = ShadingUniformityTool().run(np.full((200, 400, 3), 120, np.uint8))
+        self.assertLess(res.value, 1)
+        self.assertTrue(res.ok)
+
+    def test_ramp_over_four_columns(self):
+        res = ShadingUniformityTool().run(self.ramp())
+        self.assertAlmostEqual(res.value, 75, delta=5)
+        self.assertFalse(res.ok)
+        self.assertEqual(res.extra["argmin"][1], 0)
+        self.assertEqual(res.extra["argmax"][1], 3)
+        self.assertEqual(len(res.extra["cells"]), 4)
+
+    def test_flat_field_pre_flattens_the_ramp(self):
+        tool = ShadingUniformityTool(pre=[{"op": "flat_field", "kernel": 51}])
+        self.assertLess(tool.run(self.ramp()).value, 10)
+
+    def test_overlay_marks_min_and_max_cells(self):
+        res = ShadingUniformityTool(grid_x=2, grid_y=1).run(self.ramp())
+        self.assertEqual([o["label"][:3] for o in res.overlay[1:]], ["min", "max"])
+        self.assertEqual(res.overlay[1]["pts"], [0, 0, 200, 200])
 
 
 if __name__ == "__main__":

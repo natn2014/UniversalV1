@@ -20,9 +20,9 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T07 | Color Average (ΔE2000) | done | 93041a9 |
 | T08 | Color Prohibit | done | 18b1d32 |
 | T09 | Area (mono) | done | c74942d |
-| T10 | Brightness Average | done | |
-| T11 | Edge Pixels | done | |
-| T12 | Shading Uniformity | todo | |
+| T10 | Brightness Average | done | 738afe1 |
+| T11 | Edge Pixels | done | 738afe1 |
+| T12 | Shading Uniformity | done | |
 | T13 | Edge-profile core | todo | |
 | T14 | Width | todo | |
 | T15 | Edge Presence | todo | |
@@ -149,7 +149,7 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - Files: app/vision/brightness.py, tests/test_vision_brightness.py
 - Tests added: 3  ·  Suite: 170/170 passing (shared with T11, see below)
 - Decisions / deviations from the TODO: none. `extra` holds both `mean` and `std`.
-- Commit: pending (same commit as T11)
+- Commit: 738afe1 (same commit as T11)
 
 ### T11 Edge Pixels: done  (2026-10-27)
 - Files: app/vision/brightness.py, tests/test_vision_brightness.py
@@ -157,4 +157,10 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - Decisions / deviations from the TODO:
   - T10 and T11 were written together and went into one commit (the process rule is one commit per item; this is the one exception, caught too late to split cleanly).
   - The scratch test accepts +100..+320 edge pixels for a 140 px line, because a 1 px line has an edge on each side.
+- Commit: 738afe1
+
+### T12 Shading Uniformity: done  (2026-10-27)
+- Files: app/vision/brightness.py, tests/test_vision_brightness.py
+- Tests added: 4  ·  Suite: 174/174 passing
+- Decisions / deviations from the TODO: none. The darkest and brightest cells are `mask_box` overlays labelled `min N` / `max N`; `extra` has `cells`, `argmin`, `argmax` as [row, col]. The ramp with `flat_field` (kernel 51) drops below 10.
 - Commit: pending
