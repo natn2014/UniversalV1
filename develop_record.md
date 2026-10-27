@@ -37,7 +37,7 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T24 | Worker integration | done | 2b76039 |
 | T25 | Monitor integration | done | e09d2f0 |
 | T26 | Tools tab UI | done | 7d9832d |
-| T27 | Performance + final check | done | |
+| T27 | Performance + final check | done | afe7ab9 |
 
 Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason in the entry).
 
@@ -339,4 +339,4 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - Decisions / deviations from the TODO:
   - `core_function.md` section 4 now has a Status column with what is built and what is still unmeasured on real parts (the 100-frame repeatability and 200-frame OCR criteria need real samples).
   - Not built from the IV4 list: AI Differentiate, AI Identify, AI Count, AI Trigger, Sorting and AI Through Count modes.
-- Commit: pending
+- Commit: afe7ab9
