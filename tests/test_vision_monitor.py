@@ -134,6 +134,20 @@ class MonitorTools(unittest.TestCase):
         self.assertLess(inside.blue(), inside.red())
         self.assertEqual(img.pixelColor(30, 30).name(), "#202020")  # hole stays clear
 
+    def test_region_palettes(self):
+        from app.widgets.tool_overlay import draw_region
+        mask = np.full((30, 30), 255, np.uint8)
+        colors = {}
+        for name in ("red", "lines"):
+            img = QImage(40, 40, QImage.Format_RGB32)
+            img.fill(QColor("#202020"))
+            painter = QPainter(img)
+            draw_region(painter, 5, 5, mask, name)
+            painter.end()
+            colors[name] = img.pixelColor(20, 20)
+        self.assertGreater(colors["red"].red(), colors["red"].green() + 30)  # see-through red inside
+        self.assertEqual(colors["lines"].name(), "#ffd600")  # solid bright yellow
+
     def test_all_overlay_types_draw_without_error(self):
         items = [
             {"type": "rect", "pts": [1, 1, 20, 20], "ok": True, "label": "r"},
@@ -145,6 +159,10 @@ class MonitorTools(unittest.TestCase):
             {"type": "region", "pts": [2, 2], "mask": np.full((20, 20), 255, np.uint8), "ok": True, "label": "a"},
             {"type": "region", "pts": [2, 2], "mask": np.zeros((0, 0), np.uint8), "ok": True, "label": ""},
             {"type": "region", "pts": [2, 2], "ok": True, "label": "no mask"},
+            {"type": "region", "pts": [2, 2], "mask": np.full((5, 5), 255, np.uint8), "color": "red", "ok": False,
+             "label": ""},
+            {"type": "region", "pts": [2, 2], "mask": np.full((5, 5), 255, np.uint8), "color": "bogus", "ok": True,
+             "label": ""},
             {"type": "bogus", "pts": [], "ok": True, "label": "x"},
         ]
         self.tab._render_frame(self.image, [], [res("a", True, overlay=items)])

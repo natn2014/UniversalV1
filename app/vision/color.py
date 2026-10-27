@@ -190,11 +190,17 @@ class ColorProhibitTool(HsvTool):
         super().__init__(*args, **kw)
 
     def process(self, patch, origin):
-        n, _, stats, _ = cv2.connectedComponentsWithStats(self.mask(patch), connectivity=8)
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(self.mask(patch), connectivity=8)
         areas = stats[1:, cv2.CC_STAT_AREA]
         value = float(areas.max()) if len(areas) else 0.0
+        found = np.flatnonzero(areas >= self.min_blob_px)
         overlay = []
-        for i in np.flatnonzero(areas >= self.min_blob_px):
+        if len(found):
+            # The forbidden pixels in red; the boxes keep a tiny spot easy to find.
+            keep = np.zeros(n, np.uint8)
+            keep[found + 1] = 255
+            overlay.append(region_item(keep[labels], False, color="red"))
+        for i in found:
             x, y, w, h, area = stats[i + 1]
             overlay.append(overlay_item("rect", [int(x), int(y), int(x + w), int(y + h)], False, f"{int(area)}px"))
-        return self.result(value, overlay, extra={"blobs": int(len(overlay))})
+        return self.result(value, overlay, extra={"blobs": int(len(found))})

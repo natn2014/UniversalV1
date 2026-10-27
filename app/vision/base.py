@@ -8,8 +8,9 @@ Qt: {"type", "pts", "ok", "label"} in frame pixels, where `pts` is
   text                    [x, y]
   poly                    [[x, y], ...]
   region                  [x, y] top-left of item["mask"], a uint8 image
-                          of the counted pixels (nonzero), drawn as a
-                          see-through fill with a darker edge
+                          of the counted pixels (nonzero); item["color"] is
+                          "yellow" / "red" (see-through fill, darker edge) or
+                          "lines" (solid yellow, for one-pixel edge maps)
 """
 
 import math
@@ -51,11 +52,14 @@ def overlay_item(kind: str, pts: Sequence, ok: bool = True, label: str = "") -> 
     return {"type": kind, "pts": list(pts), "ok": ok, "label": label}
 
 
-def region_item(mask: np.ndarray, ok: bool = True, label: str = "") -> dict:
+REGION_COLORS = ("yellow", "red", "lines")
+
+
+def region_item(mask: np.ndarray, ok: bool = True, label: str = "", color: str = "yellow") -> dict:
     """Overlay of the counted (nonzero) pixels of a patch-sized mask. The mask
     is kept as an image, not outlines, so a speckled one costs no more to draw
     than a solid one."""
-    return {**overlay_item("region", [0, 0], ok, label), "mask": mask}
+    return {**overlay_item("region", [0, 0], ok, label), "mask": mask, "color": color}
 
 
 def rotate_points(pts: Sequence[Sequence[float]], center: Tuple[float, float], angle_deg: float) -> List[Tuple[float, float]]:

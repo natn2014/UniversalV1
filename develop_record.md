@@ -369,3 +369,11 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - How: new overlay type `region` (`region_item` in `app/vision/base.py`): `pts` is the mask's top-left in frame pixels and `item["mask"]` is the patch-sized mask itself. `draw_region` in `app/widgets/tool_overlay.py` turns it into one premultiplied ARGB image (threshold → erode → LUT, all in OpenCV) and draws it in a single call.
 - Why a mask, not outlines: outlines of a speckled mask need tens of thousands of Python points (about 60 ms per frame). The mask costs the same however speckled it is: the tool takes about 1 ms and the drawing about 5 ms for a 1024 × 576 area. Overlays are never saved, so a numpy array in the item is fine.
 - Tests: `test_gray_input_and_counted_region`, `test_region_follows_the_roi`, `test_region_is_see_through_yellow`, plus the region cases in `test_all_overlay_types_draw_without_error`.
+
+### Region fill for Edge Pixels, Blob Count, Color Prohibit
+- Edge Pixels: the counted Canny edge pixels are drawn as solid bright yellow lines (`color="lines"`: a one-pixel edge map has no inside to fill).
+- Blob Count: only the blobs that pass the area / aspect / circularity filters are filled yellow, so a merged or split blob is visible; each has its number (a `text` item) in place of a box. Rejected blobs stay unfilled.
+- Color Prohibit: the forbidden-color blobs at least `min_blob_px` large are filled see-through red (`color="red"`); the red boxes and `Npx` labels stay so a tiny spot is still easy to find.
+- `region_item(..., color=)` with palettes yellow / red / lines in `tool_overlay.REGION_PALETTES`. Text overlay labels get a dark one-pixel shadow so they read on a fill.
+- Bench (ms, unchanged): blob_count 0.73, color_prohibit 1.09, edge_pixels 0.39.
+- Tests: `EdgePixelsOverlay` (2), `test_only_counted_blobs_are_filled`, `test_nothing_counted_has_no_region`, the red region in `test_spot_is_ng`, `test_region_palettes`.

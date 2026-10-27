@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 
 from .brightness import binarize
-from .base import overlay_item, register
+from .base import overlay_item, region_item, register
 from .color import HSV_PARAMS, HsvTool, open_mask
 
 
@@ -42,7 +42,8 @@ class BlobCountTool(HsvTool):
     def process(self, patch, origin):
         mask = self.blob_mask(patch)
         n, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
-        blobs, overlay = [], []
+        blobs, labels_overlay = [], []
+        keep = np.zeros(n, np.uint8)
         for i in range(1, n):
             x, y, w, h, area = (int(v) for v in stats[i])
             if not self.area_min <= area <= self.area_max:
@@ -55,7 +56,12 @@ class BlobCountTool(HsvTool):
                 if circ < self.circ_min:
                     continue
             blobs.append({"x": x, "y": y, "w": w, "h": h, "area": area, "circularity": circ})
-            overlay.append(overlay_item("rect", [x, y, x + w, y + h], True, str(len(blobs))))
+            keep[i] = 255
+            label = str(len(blobs))
+            labels_overlay.append(overlay_item("text", [x + w // 2 - 4 * len(label), y + h // 2 + 5], True, label))
+        # Only the blobs that passed the filters are filled, so a merged or
+        # split blob shows up; the number sits on each one.
+        overlay = ([region_item(keep[labels])] if blobs else []) + labels_overlay
         res = self.result(len(blobs), overlay, extra={"blobs": blobs})
         for item in res.overlay:
             item["ok"] = res.ok

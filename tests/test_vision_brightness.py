@@ -49,6 +49,20 @@ class Area(unittest.TestCase):
         self.assertEqual(int(region["mask"][10, 10]), 255)  # frame (20, 20)
 
 
+class EdgePixelsOverlay(unittest.TestCase):
+    def test_counted_edges_are_drawn_as_lines(self):
+        img = np.zeros((100, 100), np.uint8)
+        cv2.rectangle(img, (30, 30), (70, 70), 255, -1)
+        res = EdgePixelsTool().run(img)
+        region = res.overlay[1]
+        self.assertEqual((region["type"], region["color"]), ("region", "lines"))
+        self.assertEqual(cv2.countNonZero(region["mask"]), res.value)
+
+    def test_flat_roi_has_no_lines(self):
+        res = EdgePixelsTool().run(np.full((100, 100), 90, np.uint8))
+        self.assertEqual([o["type"] for o in res.overlay], ["rect"])
+
+
 class BrightnessAverage(unittest.TestCase):
     def test_uniform(self):
         res = BrightnessAverageTool().run(np.full((100, 100, 3), 100, np.uint8))

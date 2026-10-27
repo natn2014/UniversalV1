@@ -56,7 +56,8 @@ class EdgePixelsTool(Tool):
         gray = cv2.GaussianBlur(self.gray(patch), (3, 3), 0)
         edges = cv2.Canny(gray, self.canny_lo, self.canny_hi)
         count = cv2.countNonZero(edges)
-        return self.result(count, extra={"density": count * 100.0 / edges.size})
+        overlay = [region_item(edges, color="lines")] if count else []
+        return self.result(count, overlay, extra={"density": count * 100.0 / edges.size})
 
 
 @register("shading")

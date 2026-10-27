@@ -144,8 +144,12 @@ class ColorProhibit(unittest.TestCase):
         res = ColorProhibitTool().run(img)
         self.assertAlmostEqual(res.value, 100, delta=10)
         self.assertFalse(res.ok)
-        self.assertEqual(len(res.overlay), 2)
-        self.assertFalse(res.overlay[1]["ok"])
+        self.assertEqual([o["type"] for o in res.overlay], ["rect", "region", "rect"])
+        self.assertFalse(res.overlay[2]["ok"])
+        region = res.overlay[1]
+        self.assertEqual(region["color"], "red")
+        self.assertEqual(int(region["mask"].max()), 255)
+        self.assertEqual(cv2.countNonZero(region["mask"]), res.value)  # just the spot
 
     def test_scattered_noise_removed(self):
         img = frame_with(GRAY)

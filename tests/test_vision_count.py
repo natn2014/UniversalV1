@@ -18,7 +18,22 @@ class BlobCount(unittest.TestCase):
         res = BlobCountTool().run(dots())
         self.assertEqual(res.value, 7)
         self.assertEqual(len(res.extra["blobs"]), 7)
-        self.assertEqual([o["label"] for o in res.overlay[1:]], [str(i) for i in range(1, 8)])
+        self.assertEqual([o["label"] for o in res.overlay if o["type"] == "text"], [str(i) for i in range(1, 8)])
+
+    def test_only_counted_blobs_are_filled(self):
+        img = dots()
+        cv2.circle(img, (30 + 3 * 50, 50), 8, 0, -1)  # one dot too small for area_min
+        cv2.circle(img, (30 + 3 * 50, 50), 3, 255, -1)
+        res = BlobCountTool(area_min=100).run(img)
+        region = res.overlay[1]
+        self.assertEqual((region["type"], region["color"]), ("region", "yellow"))
+        self.assertEqual(int(region["mask"][50, 30]), 255)       # counted dot
+        self.assertEqual(int(region["mask"][50, 30 + 150]), 0)   # dropped dot
+        self.assertEqual(sum(o["type"] == "text" for o in res.overlay), 6)
+
+    def test_nothing_counted_has_no_region(self):
+        res = BlobCountTool().run(np.zeros((100, 400), np.uint8))
+        self.assertEqual([o["type"] for o in res.overlay], ["rect"])
 
     def test_area_min_drops_small_dots(self):
         img = dots()
