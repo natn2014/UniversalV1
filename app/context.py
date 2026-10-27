@@ -28,6 +28,7 @@ class AppContext(QObject):
     perspective_changed = Signal(object)  # Optional[Quad]
     masters_changed = Signal(list)  # [Master]
     tools_changed = Signal(list)  # [vision.base.Tool]
+    mm_per_px_changed = Signal(object)  # Optional[float]
     # Requests one tab makes of another, so a missing step can be done for
     # the user instead of telling them to go and do it.
     camera_scan_requested = Signal()  # rescan; handled synchronously
@@ -49,6 +50,7 @@ class AppContext(QObject):
         self.masters: list = load_masters(None)
         self.tools: list = []  # rule-based vision tools (app/vision)
         self.tools_gate: str = "AND"
+        self.mm_per_px: Optional[float] = None  # job-level calibration
 
     @property
     def model_path(self) -> Optional[Path]:
@@ -126,7 +128,17 @@ class AppContext(QObject):
             return
         config["tools"] = self.tool_entries()
         config["tools_gate"] = self.tools_gate
+        config["mm_per_px"] = self.mm_per_px
         jobs.save_part_config(self.current_part_no, config)
+
+    def set_mm_per_px(self, value: Optional[float], save_to_job: bool = False) -> None:
+        self.mm_per_px = float(value) if value else None
+        self.mm_per_px_changed.emit(self.mm_per_px)
+        if save_to_job and self.current_part_no:
+            config = jobs.load_part_config(self.current_part_no)
+            if config is not None:
+                config["mm_per_px"] = self.mm_per_px
+                jobs.save_part_config(self.current_part_no, config)
 
     def tool_entries(self) -> list:
         return tools_to_config(self.tools, self.current_part_no or "unknown_part", TOOLS_DIR)
@@ -135,6 +147,7 @@ class AppContext(QObject):
         """Applies a saved job's tools; a job without them has none."""
         part_no = config.get("part_no") or self.current_part_no or "unknown_part"
         self.tools_gate = config.get("tools_gate", "AND")
+        self.set_mm_per_px(config.get("mm_per_px"))
         self.set_tools(tools_from_config(config.get("tools"), part_no, TOOLS_DIR))
 
     def master_entries(self) -> list:

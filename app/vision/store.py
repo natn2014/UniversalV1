@@ -74,3 +74,11 @@ def tools_from_config(entries: Optional[list], part_no: str, tools_dir: Path) ->
             tool.template = image
         tools.append(tool)
     return tools
+
+
+def set_runtime(tools: List[Tool], mm_per_px: Optional[float] = None, part_no: Optional[str] = None) -> None:
+    """Hands the job-level values to every tool before a run; they are not
+    copied into each tool's saved dict."""
+    for tool in tools:
+        tool.mm_per_px = mm_per_px
+        tool.part_no = part_no

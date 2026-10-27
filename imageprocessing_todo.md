@@ -292,7 +292,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - Add 10% outlier pixels → still 60 ± 1.5.
   - A blank ROI gives not found.
 
-### [ ] T18 mm calibration (`app/vision/calibration.py`)
+### [x] T18 mm calibration (`app/vision/calibration.py`)
 - **How it works:**
   - The job-level `mm_per_px: Optional[float]` is saved in the part config next to `"tools"` (extend T05).
   - `calibrate_from_width(frame, roi, known_mm, direction)`:

@@ -27,8 +27,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T14 | Width | done | b903d42 |
 | T15 | Edge Presence | done | 78c14b9 |
 | T16 | Pitch | done | c5d9ccb |
-| T17 | Diameter | done | |
-| T18 | mm calibration | todo | |
+| T17 | Diameter | done | 61cd556 |
+| T18 | mm calibration | done | |
 | T19 | OCR read | todo | |
 | T20 | OCR verify | todo | |
 | T21 | Code tool (QR / 1D) | todo | |
@@ -204,4 +204,13 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - The refinement step drops points more than 2 px from the *median* distance to the first fit's center, not from the first fit's radius: a Kasa fit pulled off by outliers has a bad radius, the median is stable. Still one refinement pass.
   - "10% outliers" is tested as isolated bright specks that add stray edge points (about 10% of the circle's edge points), not 10% salt-and-pepper pixels, which would destroy any edge-based circle fit.
   - Edge image is Gaussian-blurred (3x3) before Canny, as in Edge Pixels.
+- Commit: 61cd556
+
+### T18 mm calibration: done  (2026-10-27)
+- Files: app/vision/calibration.py, app/vision/store.py (`set_runtime`), app/context.py, app/tabs/settings_tab.py, tests/test_vision_calibration.py, tests/test_vision_store.py
+- Tests added: 6  ·  Suite: 210/210 passing
+- Decisions / deviations from the TODO:
+  - `AppContext.mm_per_px` (+ `mm_per_px_changed`, `set_mm_per_px(value, save_to_job)`) is saved as `"mm_per_px"` next to `"tools"`; `collect_config`, `set_tools` and `load_tools` all carry it.
+  - `store.set_runtime(tools, mm_per_px, part_no)` hands the job-level values to the tools before each run (T24 calls it); they are never in a tool's dict.
+  - `calibrate_from_width` returns None when no width is found or `known_mm <= 0`.
 - Commit: pending

@@ -80,7 +80,7 @@ class ContextSave(unittest.TestCase):
     def make_ctx(self):
         ctx = AppContext.__new__(AppContext)  # no camera / tower / settings
         QObject.__init__(ctx)
-        ctx.tools, ctx.tools_gate, ctx.current_part_no = [], "AND", "JOB1"
+        ctx.tools, ctx.tools_gate, ctx.current_part_no, ctx.mm_per_px = [], "AND", "JOB1", None
         return ctx
 
     def test_job_json_and_png_round_trip(self):

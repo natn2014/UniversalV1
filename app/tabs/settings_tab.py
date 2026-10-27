@@ -393,6 +393,7 @@ class SettingsTab(QWidget):
             "autocapture_masters": ctx.master_entries(),
             "tools": ctx.tool_entries(),
             "tools_gate": ctx.tools_gate,
+            "mm_per_px": ctx.mm_per_px,
         }
 
     def apply_config(self, config: dict) -> bool:
