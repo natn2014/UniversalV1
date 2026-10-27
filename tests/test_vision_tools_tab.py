@@ -12,7 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
-from PySide6.QtWidgets import QApplication, QDialog  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog, QLineEdit  # noqa: E402
 
 import app.context as context_mod  # noqa: E402
 import app.jobs as jobs  # noqa: E402
@@ -117,15 +117,25 @@ class AddTeachDelete(ToolsTabTest):
         self.assertIsNone(self.tab._mode)
         self.assertTrue(tool.h_lo > tool.h_hi or tool.h_lo <= 5)  # red hue range
 
-    def test_delete_asks_to_type_the_name(self):
-        tool = self.tab.add_tool("area", (0.1, 0.1, 0.3, 0.3))
-        with mock.patch.object(tools_tab_mod.RemoveJobDialog, "exec", return_value=QDialog.Rejected):
+    def test_delete_is_a_touch_confirm(self):
+        self.tab.add_tool("area", (0.1, 0.1, 0.3, 0.3))
+        keep = self.tab.add_tool("width", (0.5, 0.5, 0.7, 0.7))
+        self.tab.table.selectRow(0)
+        with mock.patch.object(tools_tab_mod.DeleteToolDialog, "exec", return_value=QDialog.Rejected):
             self.tab._on_delete_clicked()
-        self.assertEqual(len(self.saved_tools()), 1)
-        with mock.patch.object(tools_tab_mod.RemoveJobDialog, "exec", return_value=QDialog.Accepted), \
-                mock.patch.object(tools_tab_mod.RemoveJobDialog, "selected_part", return_value=tool.name):
+        self.assertEqual(len(self.saved_tools()), 2)
+        with mock.patch.object(tools_tab_mod.DeleteToolDialog, "exec", return_value=QDialog.Accepted):
             self.tab._on_delete_clicked()
-        self.assertEqual(self.saved_tools(), [])
+        self.assertEqual([t["name"] for t in self.saved_tools()], [keep.name])
+
+    def test_delete_dialog_needs_no_typing_and_is_not_default(self):
+        tool = self.tab.add_tool("pitch", (0.1, 0.1, 0.3, 0.3))
+        dialog = tools_tab_mod.DeleteToolDialog(tool)
+        self.assertEqual(dialog.findChildren(QLineEdit), [])
+        self.assertFalse(dialog.delete_button.isDefault() or dialog.delete_button.autoDefault())
+        self.assertGreaterEqual(dialog.delete_button.height(), 64)
+        dialog.delete_button.click()
+        self.assertEqual(dialog.result(), QDialog.Accepted)
 
     def test_set_roi_for_selected_tool(self):
         tool = self.tab.add_tool("area", (0.1, 0.1, 0.3, 0.3))

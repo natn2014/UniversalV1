@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..paths import ROOT_DIR
+from ..theme import RUN_BUTTON_STYLES, action_button_qss
 from ..vision.base import Tool
 from .layout import bottom_bar, make_card, top_bar
 
@@ -184,6 +185,74 @@ class AddToolDialog(QDialog):
     def _pick(self, kind: str) -> None:
         self.selected_kind = kind
         self.accept()
+
+
+class DeleteToolDialog(QDialog):
+    """Touch confirm for removing one tool: its picture and name, and two big
+    buttons far apart. No typing, so it is quick with a finger, and Delete is
+    never the default button, so a stray tap or Enter cannot remove it."""
+
+    BUTTON_HEIGHT = 64
+
+    def __init__(self, tool: Tool, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Delete Tool")
+        self.setModal(True)
+        self.resize(560, 380)
+
+        top, top_layout = top_bar()
+        title = QLabel("Delete this tool?")
+        title.setObjectName("dangerTitle")
+        top_layout.addWidget(title)
+        top_layout.addStretch(1)
+
+        picture = QLabel()
+        picture.setFixedSize(THUMB_WIDTH, THUMB_HEIGHT)
+        pixmap = kind_thumbnail(tool.kind)
+        if pixmap.isNull():
+            picture.hide()
+        else:
+            picture.setPixmap(pixmap)
+        name = QLabel(tool.name)
+        name.setObjectName("toolTileTitle")
+        name.setWordWrap(True)
+        kind = QLabel(kind_title(tool.kind))
+        kind.setObjectName("toolTileUse")
+        note = QLabel("Its area and taught data are removed from the job.")
+        note.setObjectName("dangerText")
+        note.setWordWrap(True)
+        text = QVBoxLayout()
+        text.addWidget(name)
+        text.addWidget(kind)
+        text.addStretch(1)
+        text.addWidget(note)
+        card = QFrame()
+        card.setObjectName("card")
+        card_layout = QHBoxLayout(card)
+        card_layout.setContentsMargins(12, 12, 12, 12)
+        card_layout.setSpacing(14)
+        card_layout.addWidget(picture, 0, Qt.AlignTop)
+        card_layout.addLayout(text, 1)
+
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        self.delete_button = QPushButton("Delete")
+        self.delete_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["stop"]))
+        self.delete_button.setAutoDefault(False)
+        self.delete_button.clicked.connect(self.accept)
+        bottom, bottom_layout = bottom_bar()
+        for button in (self.cancel_button, self.delete_button):
+            button.setFixedHeight(self.BUTTON_HEIGHT)
+            button.setMinimumWidth(180)
+        bottom_layout.addWidget(self.cancel_button)
+        bottom_layout.addStretch(1)
+        bottom_layout.addWidget(self.delete_button)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(top)
+        layout.addWidget(card, 1)
+        layout.addWidget(bottom)
+        self.cancel_button.setFocus()
 
 
 # Values that are taught or internal, not for hand editing.

@@ -41,9 +41,15 @@ from ..vision.calibration import calibrate_from_width
 from ..vision.runner import run_tools
 from ..vision.total import total_state
 from ..widgets.layout import bottom_bar, make_card, top_bar
-from ..widgets.remove_job_dialog import RemoveJobDialog
 from ..widgets.tool_overlay import draw_overlay, tool_value_text
-from ..widgets.tool_params import HSV_KINDS, TOUCH_HEIGHT, AddToolDialog, ToolParamsForm, kind_title
+from ..widgets.tool_params import (
+    HSV_KINDS,
+    TOUCH_HEIGHT,
+    AddToolDialog,
+    DeleteToolDialog,
+    ToolParamsForm,
+    kind_title,
+)
 from ..widgets.video_view import VideoView
 
 DEFAULT_ROI = (0.3, 0.3, 0.7, 0.7)
@@ -690,12 +696,5 @@ class ToolsTab(QWidget):
         tool = self.selected_tool()
         if tool is None:
             return
-        dialog = RemoveJobDialog(
-            [t.name for t in self.tools], tool.name, parent=self, title="Delete Tool", item_label="Tool",
-            warning=lambda name: f"This removes the tool \"{name}\" and its taught data from the job. "
-                                 "This cannot be undone.")
-        if dialog.exec() != QDialog.Accepted:
-            return
-        name = dialog.selected_part()
-        self.table.selectRow(next((i for i, t in enumerate(self.tools) if t.name == name), self.selected_index()))
-        self.delete_selected()
+        if DeleteToolDialog(tool, self).exec() == QDialog.Accepted:
+            self.delete_selected()

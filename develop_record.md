@@ -359,3 +359,7 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - What changed: each Add Tool tile shows an example picture of the case the tool suits (wire-harness scenes with the area in green and an OK / NG tag, as in the IV4 catalogue), the tool name, and a one-line "use for" text (`KIND_USES`). Drag scrolls the dialog on the touch screen (QScroller).
 - Pictures: drawn by `tools/make_tool_thumbs.py` into `app/assets/tool_thumbs/<kind>.png` (240 × 150). They are not photographs, so rerun the script after changing a scene.
 - Test: `test_every_tile_shows_an_example_and_its_use`.
+
+### Touch delete for tools
+- What changed: Delete on the Tools tab opens `DeleteToolDialog` (the tool's picture, name and kind, a big Cancel on the left and a big red Delete on the right, 64 px tall) instead of the type-the-name dialog. Delete is never the default button, so Enter or a stray tap does nothing. The typed confirm stays for removing a whole job.
+- Tests: `test_delete_is_a_touch_confirm`, `test_delete_dialog_needs_no_typing_and_is_not_default`.
