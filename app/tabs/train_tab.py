@@ -153,7 +153,7 @@ class TrainTab(QWidget):
         classes_hint = QLabel("Classes are saved with this dataset (classes.txt).")
         classes_hint.setObjectName("panelText")
         classes_hint.setWordWrap(True)
-        classes_hint.setStyleSheet("font-size: 9pt; color: #4a525c;")
+        classes_hint.setStyleSheet("font-size: 10pt; color: #2f353c;")
         correction_layout.addWidget(classes_hint)
         correction_layout.addWidget(self.train_confirm_button)
         edit_row = QHBoxLayout()

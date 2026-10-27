@@ -121,7 +121,7 @@ QPushButton:checked {{
 }}
 QPushButton:disabled {{
     background: #2a2f36;
-    color: #7a838d;
+    color: #949da7;
 }}
 QFrame#monitorTopBar, QFrame#monitorBottomBar {{
     background: {DARK_STRIP};
@@ -246,7 +246,7 @@ QLabel#cardHeader {{
     border-top-right-radius: 4px;
 }}
 QLabel#hint {{
-    color: #9aa5b1;
+    color: #c4ccd5;
     font-size: 11pt;
 }}
 QLabel#currentPart {{
@@ -259,9 +259,85 @@ QPushButton#jobButton {{
     font-weight: 700;
     min-height: 72px;
 }}
-QPushButton#toolTile {{
-    text-align: left;
+/* Tool Catalog (CV-X style): light catalog panel with light gloss tiles,
+   orange when selected; gray Application Navigator with white text. */
+QLabel#catalogTitle {{
+    color: #ffffff;
+    font-size: 15pt;
+    font-weight: 800;
+}}
+QFrame#catalogPanel {{
+    background-color: #dfe2e6;
+    border: 1px solid #0e1013;
+    border-radius: 3px;
+}}
+QLabel#catalogHeading {{
+    color: #1a1d22;
+    font-size: 12pt;
+    font-weight: 800;
+}}
+QLabel#catalogQuestion {{
+    color: #1a1d22;
+    background-color: #c9ced4;
+    border: 1px solid #9aa1aa;
+    border-radius: 3px;
+    font-size: 12pt;
+    font-weight: 700;
+    padding: 6px 10px;
+}}
+QPushButton#catalogTile {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:0.48 #eceef1,
+                                stop:0.52 #dde1e6, stop:1 #c6ccd3);
+    border: 1px solid #7d848d;
+    border-radius: 4px;
     padding: 0;
+}}
+QPushButton#catalogTile:hover {{
+    border: 1px solid #2b6fc9;
+}}
+QPushButton#catalogTile:checked {{
+    background: {GLOSS_ORANGE};
+    border: 2px solid #8a5200;
+}}
+QLabel#catalogTileText {{
+    color: #111418;
+    font-size: 11pt;
+    font-weight: 700;
+}}
+QFrame#navigator {{
+    background-color: #555b63;
+    border: 1px solid #0e1013;
+    border-radius: 3px;
+}}
+QLabel#navTitle {{
+    color: #ffffff;
+    font-size: 16pt;
+    font-weight: 800;
+}}
+QLabel#navText {{
+    color: #f4f6f8;
+    font-size: 12pt;
+}}
+QLabel#navHeading {{
+    color: #ffd27a;
+    font-size: 11pt;
+    font-weight: 800;
+}}
+QLabel#navPicture {{
+    background-color: #111418;
+    border: 2px solid #2a2e34;
+}}
+QLabel#infoIcon {{
+    background-color: #2b6fc9;
+    color: #ffffff;
+    border: 2px solid #e8eaed;
+    border-radius: 14px;
+    font-size: 13pt;
+    font-weight: 900;
+}}
+QLabel#catalogTip {{
+    color: #e8eaed;
+    font-size: 11pt;
 }}
 QLabel#toolTileTitle {{
     font-size: 14pt;
@@ -532,5 +608,5 @@ def action_button_qss(top: str, mid: str, bottom: str) -> str:
         f" font-size: 14pt; padding: 6px 16px; }}"
         f"QPushButton:hover {{ background: {hover}; }}"
         f"QPushButton:pressed {{ background: {gloss_gradient(bottom, mid, top)}; }}"
-        f"QPushButton:disabled {{ background: #2a2f36; color: #7a838d; }}"
+        f"QPushButton:disabled {{ background: #2a2f36; color: #949da7; }}"
     )

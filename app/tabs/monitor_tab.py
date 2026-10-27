@@ -46,7 +46,7 @@ from ..widgets.layout import bottom_bar, top_bar
 from ..widgets.master_dialog import MasterDialog
 from ..widgets.master_strip import MasterStrip
 from ..widgets.perspective_dialog import PerspectiveDialog
-from ..widgets.tool_overlay import draw_overlay, tool_value_text
+from ..widgets.tool_overlay import draw_label, draw_overlay, overlay_scale, tool_value_text, use_label_font
 from ..widgets.video_view import VideoView
 from ..yolo_labels import pixel_box_to_yolo, write_yolo_label_file
 
@@ -490,11 +490,12 @@ class MonitorTab(QWidget):
                      QRect(0, y1, x1, y2 - y1), QRect(x2, y1, w - x2, y2 - y1)):
             painter.fillRect(rect, shade)
         pen = QPen(QColor("#ffd54f"))
-        pen.setWidth(2)
+        pen.setWidth(max(2, round(2 * overlay_scale(painter))))
         pen.setStyle(Qt.DashLine)
         painter.setPen(pen)
         painter.drawRect(x1, y1, x2 - x1, y2 - y1)
-        painter.drawText(x1 + 4, y1 + 14, "ROI")
+        use_label_font(painter)
+        draw_label(painter, x1 + 4, y1 + painter.fontMetrics().ascent() + 4, "ROI", "#ffd54f")
 
     # --- Stream control -------------------------------------------------
 
@@ -879,14 +880,15 @@ class MonitorTab(QWidget):
                 det["color"] = self._class_colors[class_name]
 
             pen = QPen()
-            pen.setWidth(2)
+            pen.setWidth(max(2, round(2 * overlay_scale(painter))))
+            use_label_font(painter)
             for det in detections:
                 color = det.get("color", Qt.green)
                 pen.setColor(color)
                 painter.setPen(pen)
                 x1, y1, x2, y2 = det["x1"], det["y1"], det["x2"], det["y2"]
                 painter.drawRect(x1, y1, x2 - x1, y2 - y1)
-                painter.drawText(x1, max(0, y1 - 6), det["label"])
+                draw_label(painter, x1, y1 - 6, det["label"], color)
         painter.end()
         return pixmap
 

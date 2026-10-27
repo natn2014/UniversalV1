@@ -12,7 +12,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import cv2  # noqa: E402
 import numpy as np  # noqa: E402
-from PySide6.QtWidgets import QApplication, QDialog, QLineEdit  # noqa: E402
+from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QWidget  # noqa: E402
 
 import app.context as context_mod  # noqa: E402
 import app.jobs as jobs  # noqa: E402
@@ -310,9 +310,43 @@ class UiRules(ToolsTabTest):
         self.assertEqual(len(kinds), 17)
         self.assertEqual(set(dialog.tiles), set(kinds))
         self.assertTrue(all(t.minimumHeight() >= 72 for t in dialog.tiles.values()))
-        dialog.tiles["pitch"].click()
+        dialog.show_category("Measure")
+        dialog.tiles["pitch"].click()  # a tap selects and explains ...
+        self.assertEqual(dialog.selected_kind, "pitch")
+        self.assertNotEqual(dialog.result(), QDialog.Accepted)
+        self.assertEqual(dialog.nav_title.text(), "Pitch")
+        self.assertIn("spacing", dialog.nav_text.text())
+        self.assertFalse(dialog.nav_picture.pixmap().isNull())
+        dialog.add_button.click()  # ... Add confirms
         self.assertEqual(dialog.selected_kind, "pitch")
         self.assertEqual(dialog.result(), QDialog.Accepted)
+
+    def test_catalog_categories_switch_the_tools(self):
+        dialog = AddToolDialog()
+        dialog.category_tiles["Color"].click()
+        self.assertEqual(dialog.selected_kind, "color_area")  # first tool of the category
+        self.assertTrue(dialog.category_tiles["Color"].isChecked())
+        self.assertIn("color", dialog.question.text())
+        self.assertTrue(dialog.tiles["color_prohibit"].isVisibleTo(dialog))
+        self.assertFalse(dialog.tiles["pitch"].isVisibleTo(dialog))
+        self.assertEqual(AddToolDialog().selected_kind, "color_area")  # reopens where it was left
+
+    def test_double_tap_adds(self):
+        dialog = AddToolDialog()
+        dialog.show_category("Pattern & Count")
+        dialog.tiles["pattern_search"].double_clicked.emit()
+        self.assertEqual((dialog.selected_kind, dialog.result()), ("pattern_search", QDialog.Accepted))
+
+    def test_catalog_fits_a_small_window(self):
+        host = QWidget()
+        host.resize(1024, 768)
+        dialog = AddToolDialog(host)
+        self.assertLessEqual(dialog.width(), 1024)
+        self.assertLessEqual(dialog.height(), 768)
+        dialog.show()
+        APP.processEvents()
+        self.assertLessEqual(dialog.sizeHint().height(), 768)
+        dialog.close()
 
     def test_every_tile_shows_an_example_and_its_use(self):
         dialog = AddToolDialog()

@@ -178,15 +178,22 @@ class PatternSearchTool(Tool):
         d = self._derived()
         feat = d["feat"]
         size = feat.shape[0]
-        search = edge_strength(self.gray(patch), self.edge_min)
+        # Blank (zero-edge) margins: the turned pattern's square is wider than
+        # the pattern, so a copy in a tight search area would not fit otherwise.
+        pad = (size - min(self.template.shape[:2])) // 2 + 1
+        search = cv2.copyMakeBorder(edge_strength(self.gray(patch), self.edge_min), pad, pad, pad, pad,
+                                    cv2.BORDER_CONSTANT, value=0)
         if search.shape[0] < size or search.shape[1] < size:
-            return self.fail("search area smaller than the turned pattern")
+            return self.fail("search area smaller than the pattern")
         if float(feat.max()) <= 0:
             return self.fail("pattern has no edges: teach again")
         if float(search.max()) <= 0:
             return self.result(0.0, extra={"matches": []})
         candidates = self._coarse(search, d)
         matches = self._refine(search, feat, candidates, d)
+        for m in matches:
+            m["x"] -= pad
+            m["y"] -= pad
         overlay = []
         for i, m in enumerate(matches, 1):
             x, y = int(round(m["x"] - size / 2)), int(round(m["y"] - size / 2))

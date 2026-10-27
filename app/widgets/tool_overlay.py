@@ -6,7 +6,7 @@ from typing import List
 import cv2
 import numpy as np
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPolygonF
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPen, QPolygonF
 
 from ..theme import NG_RED, OK_GREEN
 from ..vision.base import ToolResult
@@ -16,7 +16,7 @@ OVERLAY_OK = QColor(OK_GREEN).lighter(170)
 OVERLAY_NG = QColor(NG_RED).lighter(130)
 MM_KINDS = {"width", "diameter"}
 # Counted pixels (Area, Color Area): see-through yellow with a darker edge.
-TEXT_SHADOW = QColor(10, 10, 10)
+LABEL_CHIP = QColor(0, 0, 0, 185)  # dark chip behind every label: readable on any image
 # Premultiplied BGRA (the byte order of QImage.Format_ARGB32_Premultiplied)
 # for pixel classes 0 = clear, 1 = counted, 2 = edge of the counted area.
 # Fills are at alpha 90, so the image shows through.
@@ -31,11 +31,45 @@ REGION_LUTS = {name: [np.array([c[i] for c in bgra] + [0] * 253, np.uint8) for i
 EDGE_KERNEL = np.ones((5, 5), np.uint8)  # 2 px edge
 
 
+def overlay_scale(painter: QPainter) -> float:
+    """Overlays are drawn in frame pixels and the frame is then shrunk to fit
+    the view, so lines and text grow with the frame: 1.0 for a 640 px frame."""
+    return max(1.0, painter.device().width() / 640.0)
+
+
+def use_label_font(painter: QPainter) -> None:
+    """Bold label font, about 1.6 % of the frame width (min 13 px): about
+    20 px on screen for a 1280 px frame on the 1920 x 1080 panel."""
+    font = QFont(painter.font())
+    font.setPixelSize(max(13, round(10 * overlay_scale(painter))))
+    font.setBold(True)
+    painter.setFont(font)
+
+
+def draw_label(painter: QPainter, x: float, y: float, text: str, color) -> None:
+    """`text` with its baseline at (x, y) on a dark chip, kept inside the
+    image; colored like the box it belongs to."""
+    if not text:
+        return
+    fm = painter.fontMetrics()
+    pad = max(2, fm.height() // 8)
+    w, h = fm.horizontalAdvance(text) + 2 * pad, fm.height() + pad
+    dev_w, dev_h = painter.device().width(), painter.device().height()
+    left = int(min(max(0, x - pad), max(0, dev_w - w)))
+    top = int(min(max(0, y - fm.ascent() - pad // 2), max(0, dev_h - h)))
+    painter.save()
+    painter.fillRect(left, top, w, h, LABEL_CHIP)
+    painter.setPen(QColor(color))
+    painter.drawText(left + pad, top + pad // 2 + fm.ascent(), text)
+    painter.restore()
+
+
 def draw_overlay(painter: QPainter, items: List[dict]) -> None:
     """Draws overlay items in frame pixels; green when ok, red when not.
     Labels are placed like the YOLO box labels (above the box corner)."""
+    use_label_font(painter)
     pen = QPen()
-    pen.setWidth(2)
+    pen.setWidth(max(2, round(2 * overlay_scale(painter))))
     for item in items:
         color = OVERLAY_OK if item.get("ok", True) else OVERLAY_NG
         pen.setColor(color)
@@ -60,16 +94,11 @@ def draw_overlay(painter: QPainter, items: List[dict]) -> None:
             anchor = (int(min(p[0] for p in pts)), max(0, int(min(p[1] for p in pts)) - 6))
         elif kind == "region" and len(pts) == 2 and item.get("mask") is not None:
             draw_region(painter, int(round(pts[0])), int(round(pts[1])), item["mask"], item.get("color", "yellow"))
-            anchor = (int(round(pts[0])) + 4, int(round(pts[1])) + 16)
+            anchor = (int(round(pts[0])) + 4, int(round(pts[1])) + painter.fontMetrics().ascent() + 6)
         elif kind == "text" and len(pts) == 2:
             anchor = (int(pts[0]), int(pts[1]))
         if label and anchor is not None:
-            if kind == "text":  # often sits on a filled region: dark shadow keeps it readable
-                painter.setPen(TEXT_SHADOW)
-                for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-                    painter.drawText(anchor[0] + dx, anchor[1] + dy, label)
-                painter.setPen(pen)
-            painter.drawText(anchor[0], anchor[1], label)
+            draw_label(painter, anchor[0], anchor[1], label, color)
 
 
 def region_image(mask: np.ndarray, color: str = "yellow") -> QImage:

@@ -409,3 +409,21 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - 1280 × 720 frame with a 640 × 432 search area and a ~100 px pattern: 94 ms at ±180°, 30 ms at ±30°, 15 ms at 0°.
 - Tools tab: after the search area is drawn, it asks straight away for a box around one copy of the pattern; Teach does the same later. Thumbnail `pattern_search.png`: three turned "E" marks found, OK 3.
 - Tests: `tests/test_vision_search.py` (12) on drawn marks, plus a Tools tab test for the area → pattern box flow.
+
+### CV-X style Tool Catalog, fit and contrast pass
+- Reference: Keyence CV-X "Tool Catalog" plus "Application Navigator". The Add Tool dialog is now that catalog:
+  - a dark title strip;
+  - a light catalog panel with category icon tiles in 2 rows of 3 (light gloss, orange when selected);
+  - a question bar for the category ("▼ What do you want to measure?") and that category's tool tiles;
+  - a gray Application Navigator on the right: the tool's name, what it does (`KIND_HELP`), its use and a large example picture;
+  - an info bar with an "i" tip ("add Position Adjust first …"), and Cancel / Add <tool>.
+- Behaviour: a tap selects a tool and explains it; Add (or a double tap) confirms. The catalog reopens on the category used last. It sizes itself to the window (at most 1180 × 720, the window minus 24 px), so it fits 1024 × 768 without scrolling. It was 820 px tall before.
+- Fit:
+  - Tools tab live value: wraps, and its horizontal size policy is Ignored. A long reason ("search area smaller than …") used to widen the side panel and push the table, Draw ROI, Delete and "Set from current" off screen (seen on the station).
+  - Pattern Search pads its search area with blank margins, so a tight search area no longer fails with "search area smaller than the turned pattern".
+- Contrast:
+  - Image overlays: labels are bold, about 1.6 % of the frame width (min 13 px), on a dark chip and kept inside the image. Line widths scale with the frame. They used to be about 9 pt in frame pixels, about 5 px on a 1024 screen, and green straight on the image.
+  - The same helpers draw the YOLO box labels and the Monitor "ROI" label. The selected tool in the Tools tab is no longer named twice.
+  - Hint text #9aa5b1 → #c4ccd5; disabled button text #7a838d → #949da7 (about 5:1); the Train classes note is 10 pt #2f353c.
+- Checked by rendering every tab and the catalog offscreen at 1920 × 1080 (the station's panel, `xrandr`) and 1024 × 768.
+- Tests: the catalog (a tap selects and fills the navigator, Add confirms, categories switch, double tap adds, fits 1024 × 768). 357 pass.

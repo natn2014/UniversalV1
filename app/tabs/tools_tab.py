@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -41,7 +42,7 @@ from ..vision.calibration import calibrate_from_width
 from ..vision.runner import run_tools
 from ..vision.total import total_state
 from ..widgets.layout import bottom_bar, make_card, top_bar
-from ..widgets.tool_overlay import draw_overlay, tool_value_text
+from ..widgets.tool_overlay import draw_overlay, overlay_scale, tool_value_text
 from ..widgets.tool_params import (
     TOUCH_HEIGHT,
     AddToolDialog,
@@ -164,6 +165,8 @@ class ToolsTab(QWidget):
 
         self.live_label = QLabel("—")
         self.live_label.setObjectName("currentPart")
+        self.live_label.setWordWrap(True)  # a long reason ("search area ...") must not widen the panel
+        self.live_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.low_check, self.low_spin = self._limit_widgets("Low", self._on_limit_changed)
         self.high_check, self.high_spin = self._limit_widgets("High", self._on_limit_changed)
         self.percent_button = self._button(f"Set from current ±{LIMIT_PERCENT:.0f}%", self._on_percent_clicked)
@@ -576,15 +579,15 @@ class ToolsTab(QWidget):
         for res in self._results.values():
             draw_overlay(painter, res.overlay)
         selected = self.selected_tool()
+        scale = overlay_scale(painter)
         for tool in self.tools:
             x1, y1, x2, y2 = roi_to_pixels(tool.roi, w, h)
             is_sel = tool is selected
             pen = QPen(SELECTED_COLOR if is_sel else IDLE_COLOR)
-            pen.setWidth(3 if is_sel else 1)
+            pen.setWidth(round((3 if is_sel else 1.5) * scale))
             pen.setStyle(Qt.SolidLine if is_sel else Qt.DashLine)
             painter.setPen(pen)
-            painter.drawRect(x1, y1, x2 - x1, y2 - y1)
-            painter.drawText(x1 + 4, y2 - 5, tool.name)
+            painter.drawRect(x1, y1, x2 - x1, y2 - y1)  # the result overlay names each tool
         painter.end()
         self.view.setPixmap(pixmap)
 
