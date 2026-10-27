@@ -243,17 +243,26 @@ all OK → GREEN, no part → YELLOW.
 
 ## 4. Plan by phase
 
-| Phase | Scope | Done when |
-|---|---|---|
-| **1. Core** | `app/vision/base.py`, Position Adjustment, Total, JSON save and load, Monitor overlay | One job runs YOLO + 1 rule-based tool with a combined result |
-| **2. Color + brightness** | Color Area, Color Average, Color Prohibit, Area, Brightness Average, Edge Pixels, shading correction | Wire color check works under lamp changes of ±20% |
-| **3. Measurement** | Width, Edge Presence, Pitch, Diameter, mm calibration | Repeatability ≤ ±1 px on a fixed part (100 frames) |
-| **4. Text + codes** | OCR read/verify, code tool (QR / 1D) inside a job | Reads the date or lot label at ≥ 99% over 200 frames |
-| **5. Pattern + count** | Outline, Blob Count | — |
-| **6. UI** | "Tools" tab: add a tool, draw the ROI, teach, set the low/high slider with a live value (industrial-hmi-ui style) | An operator can build a job without editing JSON |
+Status on branch `imageprocessing` (all 27 items of [imageprocessing_todo.md](imageprocessing_todo.md)
+are built and tested; per-item log in [develop_record.md](develop_record.md)):
+
+| Phase | Scope | Done when | Status |
+|---|---|---|---|
+| **1. Core** | `app/vision/base.py`, Position Adjustment, Total, JSON save and load, Monitor overlay | One job runs YOLO + 1 rule-based tool with a combined result | **Built.** Framework, preprocess, position (2-D and 1-axis), total, job save/load with template PNGs, worker integration, Monitor overlay and tool table. Not yet tried on the real camera. |
+| **2. Color + brightness** | Color Area, Color Average, Color Prohibit, Area, Brightness Average, Edge Pixels, shading correction | Wire color check works under lamp changes of +-20% | **Built.** The +-20% brightness case is a unit test (Color Area keeps at least 90% of its value); real wire samples are not tested. |
+| **3. Measurement** | Width, Edge Presence, Pitch, Diameter, mm calibration | Repeatability <= +-1 px on a fixed part (100 frames) | **Built.** Width stays within 1 px under sigma-5 noise in unit tests; the 100-frame repeatability run on a real part is still to do. |
+| **4. Text + codes** | OCR read/verify, code tool (QR / 1D) inside a job | Reads the date or lot label at >= 99% over 200 frames | **Built** with Tesseract 5.3.4 (`pytesseract`) and pyzbar. Reads a synthetic "LOT 2026" exactly; the 99% / 200 real frames test is still to do. OCR costs about 190 ms per read, so it needs a trigger, not every frame. |
+| **5. Pattern + count** | Outline, Blob Count | n/a | **Built.** |
+| **6. UI** | "Tools" tab: add a tool, draw the ROI, teach, set the low/high slider with a live value (industrial-hmi-ui style) | An operator can build a job without editing JSON | **Built** (Tools tab between Settings and Job Change). Checked with offscreen screenshots; not yet used on the kiosk panel. |
+
+Not built (IV4 tools we skipped): AI Differentiate, AI Identify, AI Count, AI Trigger, Sorting
+mode and AI Through Count mode.
 
 Performance target: all rule-based tools together **< 10 ms per frame**
 at 1280×720 on the Orin Nano (CPU OpenCV), so YOLO stays the bottleneck.
+Measured (`tools/bench_vision.py`, 300x200 ROI): the 14 tools other than Code and OCR add up
+to about 10 ms; Code about 17 ms and OCR about 190 ms, so those two should run on a trigger
+or every Nth frame. Details in the develop record (T27).
 
 ---
 

@@ -455,7 +455,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - An offscreen smoke test: build the tab, add a `ColorAreaTool` programmatically through the tab's API, check that the job JSON has 1 tool, delete it, check 0.
   - Do **not** launch the kiosk or touch the running app.
 
-### [ ] T27 Performance and final check
+### [x] T27 Performance and final check
 - `tools/bench_vision.py`: on a 1280×720 synthetic frame, run each tool 200 times (with a typical ROI of 300×200), then print a table of mean and p95 ms per tool and the total for one tool of each kind.
 - **Target:** all non-OCR tools together < 10 ms/frame on the Orin Nano. Record the table in `develop_record.md`. If a tool is slower, note it and suggest a fix (pyramid, smaller ROI); do not over-optimize.
 - Final: run the full test suite, update `core_function.md` §4 with the real status, and tick every box.

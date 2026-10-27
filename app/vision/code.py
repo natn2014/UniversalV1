@@ -39,8 +39,10 @@ def _cv_qr(gray: np.ndarray) -> Optional[Decoded]:
 
 
 def read_code(gray: np.ndarray, symbology: str = "any") -> Optional[Decoded]:
-    """Tries pyzbar, then (for QR) OpenCV, then both again at 2x scale."""
-    wants_qr = symbology.lower() in ("any", "qr", "qrcode")
+    """Tries pyzbar, then (only when the symbology is set to QR) OpenCV's
+    detector, then both again at 2x scale. With "any", pyzbar alone: it reads
+    QR too, and the OpenCV detector costs about 16 ms on every miss."""
+    wants_qr = symbology.lower() in ("qr", "qrcode")
     for scale in (1, 2):
         img = gray if scale == 1 else cv2.resize(gray, None, fx=2, fy=2, interpolation=cv2.INTER_CUBIC)
         found = _zbar(img, symbology) or (_cv_qr(img) if wants_qr else None)

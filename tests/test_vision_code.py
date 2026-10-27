@@ -47,6 +47,12 @@ class Code(unittest.TestCase):
     def test_small_code_found_at_2x(self):
         self.assertEqual(CodeTool().run(qr_frame(module=2)).text, "PART-123")
 
+    def test_cv_fallback_when_zbar_is_missing(self):
+        from unittest import mock
+        with mock.patch("app.vision.code.optional_deps.zbar_decode", None):
+            self.assertEqual(CodeTool(symbology="qrcode").run(qr_frame()).text, "PART-123")
+            self.assertEqual(CodeTool().run(qr_frame()).value, 0)  # "any" does not use the slow detector
+
     def test_roi_and_symbology_filter(self):
         self.assertTrue(CodeTool(symbology="qrcode", roi=(0.1, 0.1, 0.9, 0.9)).run(qr_frame()).ok)
         self.assertFalse(CodeTool(symbology="code39").run(qr_frame()).ok)

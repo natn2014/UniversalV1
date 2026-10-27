@@ -36,8 +36,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T23 | Blob Count | done | 0f710f6 |
 | T24 | Worker integration | done | 2b76039 |
 | T25 | Monitor integration | done | e09d2f0 |
-| T26 | Tools tab UI | done | |
-| T27 | Performance + final check | todo | |
+| T26 | Tools tab UI | done | 7d9832d |
+| T27 | Performance + final check | done | |
 
 Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason in the entry).
 
@@ -303,4 +303,40 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - Calibrate mm uses `QInputDialog.getDouble` for the known size (no numeric keypad widget exists in the app yet), then a drag across the feature; the direction follows the ROI's aspect.
   - Parameter form: bool -> check box, int -> spin box, float -> double spin box, known choices -> combo box, other str -> line edit; `pre` and taught values (template_roi, taught_center, ref_*) are hidden.
   - `QDoubleSpinBox` was not covered by the theme QSS; it now shares the `QSpinBox` rules.
+- Commit: 7d9832d
+
+### T27 Performance + final check: done  (2026-10-27)
+- Files: tools/bench_vision.py, core_function.md (section 4 status), tests/test_vision_code.py, app/vision/code.py
+- Tests added: 1  ·  Suite: 304/304 passing (baseline was 86; +218 tests, none skipped on this machine)
+- Timing (`.venv/bin/python tools/bench_vision.py`, Orin Nano, 1280x720 frame, 300x200 px ROI, 200 runs per tool, OCR 20 runs; the position tool gets the same area as its search area):
+
+| tool | mean ms | p95 ms |
+|---|---|---|
+| area | 0.11 | 0.13 |
+| blob_count | 0.46 | 0.48 |
+| brightness | 0.09 | 0.09 |
+| code (no code in view) | 16.78 | 16.82 |
+| color_area | 0.36 | 0.38 |
+| color_average | 0.46 | 0.49 |
+| color_prohibit | 0.82 | 0.85 |
+| diameter | 1.27 | 1.31 |
+| edge_pixels | 0.39 | 0.41 |
+| edge_presence | 0.25 | 0.28 |
+| ocr (Tesseract) | 183.41 | 189.75 |
+| outline (template mode) | 3.28 | 4.46 |
+| pitch | 0.30 | 0.32 |
+| position (2-D, no angle) | 1.94 | 2.01 |
+| shading | 0.19 | 0.20 |
+| width | 0.35 | 0.38 |
+| **total, one of each kind, no OCR** | **27.05** | **28.61** |
+| total, no OCR and no Code | 10.27 | 10.81 |
+| total, with OCR | 210.46 | 218.36 |
+
+- Against the < 10 ms target: the 14 tools other than Code and OCR add up to 10.3 ms (just over; Outline 3.3 ms and Position 1.9 ms are the largest, and a job rarely has one of every kind). The two slow tools are the decoders:
+  - Code: pyzbar at 1x and 2x costs about 15 ms on a miss. The OpenCV QR detector (16 ms) is now used only when `symbology` is set to QR, instead of on every "any" miss (which had cost 49 ms in the first run).
+  - OCR: about 185 ms per read (Tesseract), plus the three preprocessing steps.
+  - Suggested fixes (not done, per the TODO): run Code / OCR on a trigger or every Nth frame, or only while the Position tool reports a part; a smaller ROI or the half-scale pyramid for Outline; skip the 2x retry for Code on large ROIs.
+- Decisions / deviations from the TODO:
+  - `core_function.md` section 4 now has a Status column with what is built and what is still unmeasured on real parts (the 100-frame repeatability and 200-frame OCR criteria need real samples).
+  - Not built from the IV4 list: AI Differentiate, AI Identify, AI Count, AI Trigger, Sorting and AI Through Count modes.
 - Commit: pending
