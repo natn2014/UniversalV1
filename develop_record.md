@@ -11,7 +11,7 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 
 | T | Function | Status | Commit |
 |---|---|---|---|
-| T01 | vision/base.py framework | todo | |
+| T01 | vision/base.py framework | done | |
 | T02 | preprocess / shading correction | todo | |
 | T03 | Position Adjustment | todo | |
 | T04 | Total judgement | todo | |
@@ -54,3 +54,14 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 ```
 
 ## Entries
+
+### T01 vision/base.py framework: done  (2026-10-27)
+- Files: app/vision/__init__.py, app/vision/base.py, tests/test_vision_base.py
+- Tests added: 14  ·  Suite: 100/100 passing
+- Decisions / deviations from the TODO:
+  - `Tool.run` is a concrete template (crop, empty-ROI guard, ROI rect overlay, judging) that calls an abstract `process(patch, origin)`. Subclasses return overlay in patch coordinates; `run` shifts it to frame pixels. Position (T03) overrides `run`.
+  - Subclasses declare `PARAMS = {key: default}` and `DEFAULT_LOW/DEFAULT_HIGH`; `params()`, `set_params()` and `to_dict()` are generic. `low=None` means no bound, an omitted `low` means the class default.
+  - A taught image lives in `tool.template` (ndarray) with `template_file` (path) in the dict; `vision.store` (T05) reads and writes the PNG.
+  - Runtime-only attributes `mm_per_px` and `part_no` are set by the runner and never saved.
+  - Overlay `pts` layout is documented in the `base.py` docstring.
+- Commit: pending

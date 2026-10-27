@@ -24,7 +24,7 @@ Progress is logged in [develop_record.md](develop_record.md).
 
 ## Phase 1: Core
 
-### [ ] T01 `app/vision/base.py`: tool framework
+### [x] T01 `app/vision/base.py`: tool framework
 - **IV4:** Every tool has an ROI, a measured value, and an upper/lower limit that gives OK or NG.
 - **How it works:**
   - `Offset(dx: float = 0, dy: float = 0, angle: float = 0, score: float = 1.0, found: bool = True)`. This is the part's movement found by Position Adjustment.
