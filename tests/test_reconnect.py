@@ -1,17 +1,23 @@
 """Cable pull / replug recovery for the tower light and the camera, with
 fake hardware."""
 
+import os
 import time
 import unittest
 
 import numpy as np
-from PySide6.QtCore import QCoreApplication, QTimer
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")  # before Qt loads a platform
+
+from PySide6.QtCore import QTimer  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
 
 import app.camera as camera
 import app.tower as tower
 from app.settings import AppSettings
 
-APP = QCoreApplication.instance() or QCoreApplication([])
+# A QApplication, not QCoreApplication: the widget tests share this process.
+APP = QApplication.instance() or QApplication([])
 
 
 class FakeTowerLight:

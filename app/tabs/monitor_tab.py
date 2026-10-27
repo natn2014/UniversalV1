@@ -32,11 +32,21 @@ from ..judgement import JudgementLatch
 from ..ng_log import save_ng_image
 from ..paths import CAPTURES_IMAGES_DIR, CAPTURES_LABELS_DIR, NO_PART_NAME
 from ..roi import detections_in_crop, roi_to_pixels
-from ..theme import RUN_BUTTON_STYLES, action_button_qss, gloss_gradient, make_icon
+from ..theme import (
+    NG_RED,
+    OK_GREEN,
+    RUN_BUTTON_STYLES,
+    STANDBY_YELLOW,
+    action_button_qss,
+    gloss_gradient,
+    make_icon,
+)
+from ..vision.total import total_state
 from ..widgets.layout import bottom_bar, top_bar
 from ..widgets.master_dialog import MasterDialog
 from ..widgets.master_strip import MasterStrip
 from ..widgets.perspective_dialog import PerspectiveDialog
+from ..widgets.tool_overlay import draw_overlay, tool_value_text
 from ..widgets.video_view import VideoView
 from ..yolo_labels import pixel_box_to_yolo, write_yolo_label_file
 
@@ -57,6 +67,7 @@ class MonitorTab(QWidget):
         self._current_pixmap = None
         self._current_frame_image: Optional[QImage] = None
         self._current_frame_detections: list = []
+        self._current_tool_results: list = []
         self._latch = JudgementLatch()
         self._pending_ng_save: bool = False
         self._stop_requested: bool = False
@@ -170,6 +181,22 @@ class MonitorTab(QWidget):
         self.table.setMinimumWidth(220)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
+        # Rule-based vision tools (app/vision): one row per tool, hidden when
+        # the job has none.
+        self.tool_header = QLabel("Tools")
+        self.tool_header.setObjectName("panelHeader")
+        self.tool_table = QTableWidget(0, 3)
+        self.tool_table.setHorizontalHeaderLabels(["Tool", "Value", "Result"])
+        self.tool_table.verticalHeader().setVisible(False)
+        self.tool_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tool_table.setSelectionMode(QTableWidget.NoSelection)
+        self.tool_table.setAlternatingRowColors(True)
+        self.tool_table.setMinimumWidth(220)
+        self.tool_table.setMaximumHeight(170)
+        self.tool_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self._set_tool_panel_visible(False)
+        ctx.tools_changed.connect(self._on_tools_changed)
+
         self._build_layout()
         self._update_judgement_banner("YELLOW")
 
@@ -197,6 +224,8 @@ class MonitorTab(QWidget):
         panel_header.setObjectName("panelHeader")
         side_layout.addWidget(panel_header)
         side_layout.addWidget(self.table, 1)
+        side_layout.addWidget(self.tool_header)
+        side_layout.addWidget(self.tool_table)
         # In the side panel, not the bottom bar: that must fit the 1024-wide
         # kiosk screen and is already full.
         autocapture_header = QLabel("Auto Capture")
@@ -361,9 +390,9 @@ class MonitorTab(QWidget):
 
     def _update_judgement_banner(self, state: str) -> None:
         text, bg, fg = {
-            "GREEN": ("OK", "#2e7d32", "#ffffff"),
-            "RED": ("NG", "#c0392b", "#ffffff"),
-            "YELLOW": ("STANDBY", "#f4d03f", "#1a1a1a"),
+            "GREEN": ("OK", OK_GREEN, "#ffffff"),
+            "RED": ("NG", NG_RED, "#ffffff"),
+            "YELLOW": ("STANDBY", STANDBY_YELLOW, "#1a1a1a"),
         }[state]
         self.judgement_banner.setText(text)
         gloss = gloss_gradient(QColor(bg).lighter(135).name(), bg, QColor(bg).darker(125).name())
@@ -791,23 +820,26 @@ class MonitorTab(QWidget):
     @Slot(QImage, list)
     def on_frame(self, image: QImage, detections: list, tool_results: Optional[list] = None) -> None:
         detections = self._ctx.filters.apply(detections)  # Use filtered for drawing and table
+        tool_results = tool_results or []
         self._current_frame_image = image
         self._current_frame_detections = detections
+        self._current_tool_results = tool_results
         self._live = True
 
         if not self._preview:
             # One cycle = each time the held judgement becomes OK or NG.
-            raw_state = self._ctx.filters.judge(detections)
+            raw_state = self._raw_state(detections, tool_results)
             if self._latch.update(raw_state, self._ctx.settings["state_hold_ms"]):
                 self._count_cycle(raw_state)
             state = self._latch.state
             self._update_judgement_banner(state)
             self._ctx.tower.update_state(state)
 
-        pixmap = self._render_frame(image, detections)
+        pixmap = self._render_frame(image, detections, tool_results)
         self._current_pixmap = pixmap
         self.video_label.setPixmap(pixmap)
         self._update_class_table(detections)
+        self._update_tool_table(tool_results)
         if self._ctx.masters:
             self._match_masters(image, detections)
         if self._pending_ng_save:
@@ -818,12 +850,25 @@ class MonitorTab(QWidget):
             for then in pending:
                 then()
 
-    def _render_frame(self, image: QImage, detections: list) -> QPixmap:
-        """Frame with the ROI and detection boxes drawn on it (also what the
-        NG log saves)."""
+    def _raw_state(self, detections: list, tool_results: list) -> str:
+        """YOLO's state as before when the job has no tools; otherwise the
+        AND / OR of the tools and YOLO (a lost part gives STANDBY)."""
+        yolo_state = self._ctx.filters.judge(detections)
+        if not tool_results:
+            return yolo_state
+        if self._ctx.model_path is None:
+            yolo_state = None  # no model: the tools alone decide
+        position_found = all(r.ok for r in tool_results if r.kind == "position")
+        return total_state(tool_results, yolo_state, self._ctx.tools_gate, position_found)
+
+    def _render_frame(self, image: QImage, detections: list, tool_results: Optional[list] = None) -> QPixmap:
+        """Frame with the ROI, tool overlays and detection boxes drawn on it
+        (also what the NG log saves)."""
         pixmap = QPixmap.fromImage(image)
         painter = QPainter(pixmap)
         self._draw_roi(painter, image)
+        for result in tool_results or []:
+            draw_overlay(painter, result.overlay)
         if detections:
             # Assign colors to each detection based on class name
             for det in detections:
@@ -871,3 +916,37 @@ class MonitorTab(QWidget):
 
             self.table.setItem(row, 0, class_item)
             self.table.setItem(row, 1, count_item)
+
+    # --- Vision tools ---------------------------------------------------
+
+    def _set_tool_panel_visible(self, visible: bool) -> None:
+        self.tool_header.setVisible(visible)
+        self.tool_table.setVisible(visible)
+
+    def _on_tools_changed(self, tools: list) -> None:
+        self._set_tool_panel_visible(bool(tools))
+        if not tools:
+            self._current_tool_results = []
+            self.tool_table.setRowCount(0)
+
+    def _update_tool_table(self, tool_results: list) -> None:
+        if not tool_results:
+            self.tool_table.setRowCount(0)
+            return
+        self._set_tool_panel_visible(True)
+        mm = bool(self._ctx.mm_per_px)
+        self.tool_table.setRowCount(len(tool_results))
+        for row, result in enumerate(tool_results):
+            verdict = QTableWidgetItem("OK" if result.ok else "NG")
+            verdict.setTextAlignment(Qt.AlignCenter)
+            verdict.setBackground(QBrush(QColor(OK_GREEN if result.ok else NG_RED)))
+            verdict.setForeground(QBrush(QColor("#ffffff")))
+            font = verdict.font()
+            font.setBold(True)
+            verdict.setFont(font)
+            value = QTableWidgetItem(tool_value_text(result, mm))
+            value.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            value.setToolTip(result.text)
+            self.tool_table.setItem(row, 0, QTableWidgetItem(result.name))
+            self.tool_table.setItem(row, 1, value)
+            self.tool_table.setItem(row, 2, verdict)

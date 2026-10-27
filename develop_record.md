@@ -34,8 +34,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T21 | Code tool (QR / 1D) | done | 23ffed7 |
 | T22 | Outline | done | 8b8d1a4 |
 | T23 | Blob Count | done | 0f710f6 |
-| T24 | Worker integration | done | |
-| T25 | Monitor integration | todo | |
+| T24 | Worker integration | done | 2b76039 |
+| T25 | Monitor integration | done | |
 | T26 | Tools tab UI | todo | |
 | T27 | Performance + final check | todo | |
 
@@ -277,4 +277,15 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - Also added `VideoWorker.set_part_no` (for the Code tool's `use_job_part_no`); `AppContext.set_current_part` pushes it. `set_tools` and `set_mm_per_px` push to the worker.
   - With an empty tools list the worker does nothing extra (no `run_tools` call).
   - Context tests build `AppContext` with `__new__` plus a real, never-started `VideoWorker`.
+- Commit: 2b76039
+
+### T25 Monitor integration: done  (2026-10-27)
+- Files: app/tabs/monitor_tab.py, app/widgets/tool_overlay.py, app/theme.py, tests/test_vision_monitor.py, tests/test_reconnect.py
+- Tests added: 11  ·  Suite: 280/280 passing
+- Decisions / deviations from the TODO:
+  - `app/theme.py` had no verdict color constants (the banner hard-coded them), so `OK_GREEN`, `NG_RED`, `STANDBY_YELLOW` were added and the banner now uses them (same values, no visual change). Overlays use lighter tints of the first two so they show on a camera image.
+  - `on_frame(image, detections, tool_results=None)`: with no tool results (no tools, or all disabled) the raw state is `filters.judge(detections)` exactly as before. With results: `total_state(results, yolo_state, ctx.tools_gate, position_found)`. YOLO counts as an input only when a model path is set; with no model the tools alone decide. A YOLO "no detection" (YELLOW) still makes the total STANDBY when a model is loaded, as the TODO specifies.
+  - Overlay drawing lives in `app/widgets/tool_overlay.py` (`draw_overlay`, `tool_value_text`). `_render_frame` has a third optional argument, so the NG log image also carries the overlays.
+  - The tool table (Tool / Value / OK-NG cell with verdict background) sits under the detection table, hidden when the job has no tools. The "pill" is a colored, bold table cell rather than a separate widget (cheaper at 30 fps). The mm unit is added only for `width` and `diameter`; OCR and Code rows show their text.
+  - `tests/test_reconnect.py` now creates a `QApplication` (offscreen) instead of `QCoreApplication`, because the Monitor smoke test needs widgets in the same process. The monitor test uses a real `AppContext` with the settings file and `save_ng_image` patched to a temp dir; the tower and camera are never opened.
 - Commit: pending

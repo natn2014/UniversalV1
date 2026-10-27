@@ -413,7 +413,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - A tool that raises gives an NG result, not an exception.
   - The existing `tests/test_reconnect.py` and `tests/test_camera_resolution.py` still pass after the signal change.
 
-### [ ] T25 Monitor integration (`app/tabs/monitor_tab.py`)
+### [x] T25 Monitor integration (`app/tabs/monitor_tab.py`)
 - **How it works:**
   - `on_frame(image, detections, tool_results)`:
     - YOLO state = `filters.judge(...)` as today when a model is loaded, otherwise None.

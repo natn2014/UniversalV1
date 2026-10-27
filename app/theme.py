@@ -30,6 +30,12 @@ DARK_STRIP = (
     "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #2f343b, stop:1 #16191d)"
 )
 
+# Verdict colors, identical on the banner, the tool overlays and the result
+# tables. Reserved: don't reuse green / red for decoration.
+OK_GREEN = "#2e7d32"
+NG_RED = "#c0392b"
+STANDBY_YELLOW = "#f4d03f"
+
 # QSS can only draw sub-control arrows from image files, so the spinbox
 # arrows are written once as tiny SVGs next to the app.
 UI_ASSETS_DIR = ROOT_DIR / ".ui_assets"
