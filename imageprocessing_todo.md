@@ -133,7 +133,7 @@ Progress is logged in [develop_record.md](develop_record.md).
 
 ## Phase 2: Color and brightness
 
-### [ ] T06 `app/vision/color.py` `ColorAreaTool` (kind `color_area`)
+### [x] T06 `app/vision/color.py` `ColorAreaTool` (kind `color_area`)
 - **IV4:** Color Area: the area of pixels that match a taught color.
 - **How it works:**
   1. Crop the ROI and apply `pre`, then convert to HSV.

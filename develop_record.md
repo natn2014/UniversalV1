@@ -15,8 +15,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T02 | preprocess / shading correction | done | e6873c4 |
 | T03 | Position Adjustment | done | 51e92af |
 | T04 | Total judgement | done | d0cf1b0 |
-| T05 | Save tools in job | done | |
-| T06 | Color Area | todo | |
+| T05 | Save tools in job | done | 05392cb |
+| T06 | Color Area | done | |
 | T07 | Color Average (ΔE2000) | todo | |
 | T08 | Color Prohibit | todo | |
 | T09 | Area (mono) | todo | |
@@ -108,4 +108,15 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - `AppContext` gained `tools`, `tools_gate` (saved as `"tools_gate"`, default AND), `tools_changed`, `set_tools`, `tool_entries`, `load_tools(config)`. `set_tools` writes the dict list directly instead of going through `_save_to_job`.
   - A missing template PNG keeps the tool (untaught, so it reports NG "not taught") instead of dropping it; unknown kinds and malformed entries are logged and skipped.
   - `AppContext` is built in tests with `__new__` to avoid the camera, tower and settings file.
+- Commit: 05392cb
+
+### T06 Color Area: done  (2026-10-27)
+- Files: app/vision/color.py, app/vision/__init__.py, tests/test_vision_color.py
+- Tests added: 11  ·  Suite: 149/149 passing
+- Decisions / deviations from the TODO:
+  - Shared helpers in color.py for T08 / T23: `hsv_mask`, `learn_hsv_range`, `HSV_PARAMS`, and the `HsvTool` base (teach + mask).
+  - "Minimum widths" (h 8, s 40, v 40) are read as minimum half-widths around the mean. A hue half-width of 90 or more means the whole hue circle.
+  - `open_px` is the opening kernel size in px (values below 2 do nothing).
+  - `teach(frame, point=(x, y) | teach_roi=(fractions))`; default samples the tool's own ROI.
+  - Brightness test uses a mid-brightness color (V about 120): the minimum V half-width of 40 would not cover +20% on V=220.
 - Commit: pending
