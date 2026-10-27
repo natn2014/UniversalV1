@@ -157,6 +157,14 @@ class Tool:
         result.overlay = [frame_box] + shift_overlay(result.overlay, x0, y0)
         return result
 
+    def scale(self, px: float) -> float:
+        """Pixels -> mm when the job is calibrated, otherwise unchanged."""
+        return px * self.mm_per_px if self.mm_per_px else px
+
+    @property
+    def unit(self) -> str:
+        return "mm" if self.mm_per_px else "px"
+
     def result(self, value: float, overlay: Optional[List[dict]] = None, text: str = "",
                extra: Optional[dict] = None, ok: Optional[bool] = None) -> ToolResult:
         value = float(value)

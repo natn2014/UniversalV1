@@ -277,7 +277,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - 8 bars with a 20 px pitch give count 8 and mean 20 ± 0.3.
   - With one bar removed, count is 7 and max is about 40.
 
-### [ ] T17 `DiameterTool` (kind `diameter`)
+### [x] T17 `DiameterTool` (kind `diameter`)
 - **IV4:** Diameter: the diameter of a round feature.
 - **How it works:**
   - Convert the crop to gray, apply `pre`, and run Canny to get the edge points (`np.argwhere`).

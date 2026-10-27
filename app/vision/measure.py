@@ -3,6 +3,7 @@ pixels, or mm when the job is calibrated (`Tool.mm_per_px`, set by the runner)."
 
 from typing import List, Optional, Tuple
 
+import cv2
 import numpy as np
 
 from .base import Tool, overlay_item, register
@@ -20,13 +21,6 @@ class ScanTool(Tool):
 
     def scan(self, patch: np.ndarray) -> np.ndarray:
         return profile(self.gray(patch), self.direction)
-
-    def scale(self, px: float) -> float:
-        return px * self.mm_per_px if self.mm_per_px else px
-
-    @property
-    def unit(self) -> str:
-        return "mm" if self.mm_per_px else "px"
 
     def edge_line(self, pos: float, patch: np.ndarray, ok: bool, label: str = "") -> dict:
         h, w = patch.shape[:2]
@@ -115,4 +109,45 @@ class PitchTool(ScanTool):
             return self.fail("not enough edges")
         res = self.result(stats[self.measure], text=f"{len(pos)} edges", extra={**stats, "positions": pos})
         res.overlay = [self.edge_line(p, patch, res.ok) for p in pos]
+        return res
+
+
+MIN_CIRCLE_POINTS = 10
+INLIER_PX = 2.0
+
+
+def fit_circle(xs: np.ndarray, ys: np.ndarray) -> Tuple[float, float, float]:
+    """Algebraic least-squares circle (Kasa): x^2 + y^2 = a x + b y + c."""
+    a = np.column_stack([xs, ys, np.ones_like(xs)])
+    (p, q, c), *_ = np.linalg.lstsq(a, xs ** 2 + ys ** 2, rcond=None)
+    cx, cy = p / 2.0, q / 2.0
+    return float(cx), float(cy), float(np.sqrt(max(c + cx ** 2 + cy ** 2, 0.0)))
+
+
+@register("diameter")
+class DiameterTool(Tool):
+    """Diameter of the round feature in the ROI, fitted to its Canny edge points."""
+
+    PARAMS = {"canny_lo": 50, "canny_hi": 150}
+
+    def process(self, patch, origin):
+        edges = cv2.Canny(cv2.GaussianBlur(self.gray(patch), (3, 3), 0), self.canny_lo, self.canny_hi)
+        ys, xs = np.nonzero(edges)
+        if len(xs) < MIN_CIRCLE_POINTS:
+            return self.fail("circle not found")
+        xs, ys = xs.astype(np.float64), ys.astype(np.float64)
+        cx, cy, r = fit_circle(xs, ys)
+        dist = np.hypot(xs - cx, ys - cy)
+        # Outliers pull the first fit off; judge them against the median radius.
+        keep = np.abs(dist - np.median(dist)) <= INLIER_PX
+        if keep.sum() >= MIN_CIRCLE_POINTS:
+            cx, cy, r = fit_circle(xs[keep], ys[keep])
+            dist = np.hypot(xs[keep] - cx, ys[keep] - cy)
+        rms = float(np.sqrt(np.mean((dist - r) ** 2)))
+        value = self.scale(2 * r)
+        text = f"{value:.2f} {self.unit}"
+        res = self.result(value, text=text, extra={"center": [cx, cy], "radius": r, "rms": rms})
+        res.overlay = [overlay_item("circle", [cx, cy, r], res.ok, text),
+                       overlay_item("line", [cx - 4, cy, cx + 4, cy], res.ok),
+                       overlay_item("line", [cx, cy - 4, cx, cy + 4], res.ok)]
         return res

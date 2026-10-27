@@ -3,7 +3,7 @@ import unittest
 import cv2
 import numpy as np
 
-from app.vision.measure import EdgePresenceTool, PitchTool, WidthTool
+from app.vision.measure import DiameterTool, EdgePresenceTool, PitchTool, WidthTool
 
 
 def bar_frame(width=40, x=100, size=(100, 300), noise=0.0, seed=0):
@@ -114,6 +114,40 @@ class Pitch(unittest.TestCase):
         res = PitchTool(measure="mean").run(np.full((60, 240), 90, np.uint8))
         self.assertFalse(res.ok)
         self.assertEqual(PitchTool().run(np.full((60, 240), 90, np.uint8)).value, 0)
+
+
+def disc(r=30, size=(120, 140), center=(65, 58)):
+    img = np.full(size, 20, np.uint8)
+    cv2.circle(img, center, r, 220, -1)
+    return img
+
+
+class Diameter(unittest.TestCase):
+    def test_filled_circle(self):
+        res = DiameterTool().run(disc())
+        self.assertAlmostEqual(res.value, 60, delta=1)
+        self.assertAlmostEqual(res.extra["center"][0], 65, delta=1)
+        self.assertAlmostEqual(res.extra["center"][1], 58, delta=1)
+        self.assertEqual(res.overlay[1]["type"], "circle")
+
+    def test_outliers(self):
+        img = disc()
+        for x, y in [(10, 10), (125, 15), (20, 105), (118, 108), (70, 8)]:
+            img[y - 1:y + 2, x - 1:x + 2] = 255  # isolated specks make stray edge points
+        res = DiameterTool().run(img)
+        self.assertAlmostEqual(res.value, 60, delta=1.5)
+
+    def test_blank_roi(self):
+        res = DiameterTool().run(np.full((100, 100, 3), 90, np.uint8))
+        self.assertFalse(res.ok)
+        self.assertEqual(res.text, "circle not found")
+
+    def test_mm_and_limits(self):
+        tool = DiameterTool(low=5.9, high=6.1)
+        tool.mm_per_px = 0.1
+        res = tool.run(disc())
+        self.assertAlmostEqual(res.value, 6.0, delta=0.1)
+        self.assertTrue(res.ok)
 
 
 if __name__ == "__main__":

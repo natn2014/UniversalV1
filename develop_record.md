@@ -26,8 +26,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T13 | Edge-profile core | done | 08fa916 |
 | T14 | Width | done | b903d42 |
 | T15 | Edge Presence | done | 78c14b9 |
-| T16 | Pitch | done | |
-| T17 | Diameter | todo | |
+| T16 | Pitch | done | c5d9ccb |
+| T17 | Diameter | done | |
 | T18 | mm calibration | todo | |
 | T19 | OCR read | todo | |
 | T20 | OCR verify | todo | |
@@ -195,4 +195,13 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - Tests added: 5  ·  Suite: 200/200 passing
 - Decisions / deviations from the TODO:
   - `extra` has `count`, `mean`, `min`, `max` (the last three only with 2 or more edges, scaled to mm when calibrated) and `positions`. `count` is never scaled. A mean/min/max measure with fewer than 2 edges returns ok=False "not enough edges"; count with no edges is value 0.
+- Commit: c5d9ccb
+
+### T17 Diameter: done  (2026-10-27)
+- Files: app/vision/measure.py, app/vision/base.py (`scale` / `unit` moved up to `Tool`), tests/test_vision_measure.py
+- Tests added: 4  ·  Suite: 204/204 passing
+- Decisions / deviations from the TODO:
+  - The refinement step drops points more than 2 px from the *median* distance to the first fit's center, not from the first fit's radius: a Kasa fit pulled off by outliers has a bad radius, the median is stable. Still one refinement pass.
+  - "10% outliers" is tested as isolated bright specks that add stray edge points (about 10% of the circle's edge points), not 10% salt-and-pepper pixels, which would destroy any edge-based circle fit.
+  - Edge image is Gaussian-blurred (3x3) before Canny, as in Edge Pixels.
 - Commit: pending
