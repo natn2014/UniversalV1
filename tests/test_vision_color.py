@@ -4,7 +4,14 @@ import cv2
 import numpy as np
 
 from app.vision.base import Offset
-from app.vision.color import ColorAreaTool, ColorAverageTool, ColorProhibitTool, delta_e_2000
+from app.vision.color import (
+    ColorAreaTool,
+    ColorAverageTool,
+    ColorProhibitTool,
+    delta_e_2000,
+    merge_hsv_range,
+    widen_hsv_range,
+)
 
 RED = (0, 0, 220)
 BLUE = (200, 40, 20)
@@ -170,6 +177,47 @@ class ColorProhibit(unittest.TestCase):
         self.assertEqual(ColorProhibitTool().high, 29)
         self.assertEqual(ColorProhibitTool(min_blob_px=50).high, 49)
         self.assertEqual(ColorProhibitTool(high=None).high, None)
+
+
+
+class EyedropperRange(unittest.TestCase):
+    def rng(self, h_lo, h_hi, s=(80, 200), v=(50, 200)):
+        return {"h_lo": h_lo, "h_hi": h_hi, "s_lo": s[0], "s_hi": s[1], "v_lo": v[0], "v_hi": v[1]}
+
+    def test_merge_across_the_red_wrap(self):
+        out = merge_hsv_range(self.rng(170, 5), self.rng(0, 15, s=(60, 255)))
+        self.assertEqual((out["h_lo"], out["h_hi"], out["s_lo"], out["s_hi"]), (170, 15, 60, 255))
+
+    def test_merge_takes_the_shorter_arc(self):
+        out = merge_hsv_range(self.rng(10, 20), self.rng(100, 110))
+        self.assertEqual((out["h_lo"], out["h_hi"]), (10, 110))
+        out = merge_hsv_range(self.rng(10, 20), self.rng(160, 170))
+        self.assertEqual((out["h_lo"], out["h_hi"]), (160, 20))
+
+    def test_merge_with_full_hue_stays_full(self):
+        out = merge_hsv_range(self.rng(0, 179), self.rng(30, 40))
+        self.assertEqual((out["h_lo"], out["h_hi"]), (0, 179))
+
+    def test_widen_and_narrow(self):
+        r = self.rng(175, 5)
+        wide = widen_hsv_range(r, 1)
+        self.assertEqual((wide["h_lo"], wide["h_hi"], wide["s_lo"], wide["s_hi"]), (172, 8, 70, 210))
+        narrow = widen_hsv_range(r, -20)
+        self.assertGreaterEqual((narrow["h_hi"] - narrow["h_lo"]) % 180, 8)
+        self.assertLessEqual(narrow["s_lo"], narrow["s_hi"])
+        self.assertEqual(widen_hsv_range(r, 40)["h_hi"], 179)
+
+    def test_tool_pick_then_add(self):
+        img = frame_with(GRAY)
+        img[50:100, 100:200] = RED
+        img[150:200, 100:200] = BLUE
+        t = ColorAreaTool()
+        t.pick(img, (150, 75))
+        red = t.run(img).value
+        t.pick(img, (150, 175), add=True)
+        self.assertGreater(t.run(img).value, red * 1.5)
+        t.pick(img, (150, 75))  # without add: starts again from red only
+        self.assertAlmostEqual(t.run(img).value, red, delta=0.5)
 
 
 if __name__ == "__main__":

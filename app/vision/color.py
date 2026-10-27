@@ -22,6 +22,66 @@ def to_bgr(img: np.ndarray) -> np.ndarray:
 HSV_PARAMS = {"h_lo": 170, "h_hi": 10, "s_lo": 80, "s_hi": 255, "v_lo": 50, "v_hi": 255}
 MIN_HALF_WIDTH = {"h": 8.0, "s": 40.0, "v": 40.0}
 POINT_BOX = 9  # px side of the box sampled around a tapped point
+WIDEN_STEP = {"h": 3, "s": 10, "v": 10}  # one [+] / [-] step, each side
+FULL_HUE = {"h_lo": 0, "h_hi": 179}
+
+
+def point_sample(frame: np.ndarray, point: Tuple[int, int]) -> np.ndarray:
+    """The POINT_BOX square around a tapped point (clipped to the frame)."""
+    x, y = int(point[0]), int(point[1])
+    r = POINT_BOX // 2
+    return frame[max(0, y - r):y + r + 1, max(0, x - r):x + r + 1]
+
+
+def _hue_arc(lo: int, hi: int) -> Tuple[int, int]:
+    """(start, length) of a hue range on the 0..179 circle."""
+    return lo, (hi - lo) % 180
+
+
+def _is_full_hue(r: dict) -> bool:
+    return _hue_arc(r["h_lo"], r["h_hi"])[1] >= 179
+
+
+def merge_hsv_range(a: dict, b: dict) -> dict:
+    """Smallest HSV range covering both: the shorter hue arc that holds both
+    arcs, and the union of the S and V spans."""
+    out = {}
+    if _is_full_hue(a) or _is_full_hue(b):
+        out.update(FULL_HUE)
+    else:
+        arcs = [_hue_arc(a["h_lo"], a["h_hi"]), _hue_arc(b["h_lo"], b["h_hi"])]
+        best = min(((start, max((s - start) % 180 + n for s, n in arcs)) for start, _ in arcs),
+                   key=lambda c: c[1])
+        out.update(FULL_HUE if best[1] >= 179 else {"h_lo": best[0], "h_hi": (best[0] + best[1]) % 180})
+    for key in ("s", "v"):
+        out[f"{key}_lo"] = min(a[f"{key}_lo"], b[f"{key}_lo"])
+        out[f"{key}_hi"] = max(a[f"{key}_hi"], b[f"{key}_hi"])
+    return out
+
+
+def widen_hsv_range(r: dict, steps: int) -> dict:
+    """The range grown (or shrunk, steps < 0) by WIDEN_STEP per side, never
+    narrower than the minimum widths. A full hue circle stays full."""
+    out = dict(r)
+    if not _is_full_hue(r):
+        start, length = _hue_arc(r["h_lo"], r["h_hi"])
+        grow = WIDEN_STEP["h"] * steps
+        new_len = max(length + 2 * grow, int(MIN_HALF_WIDTH["h"]))
+        if new_len >= 179:
+            out.update(FULL_HUE)
+        else:
+            new_start = start - (new_len - length) // 2
+            out.update(h_lo=new_start % 180, h_hi=(new_start + new_len) % 180)
+    for key in ("s", "v"):
+        lo, hi = r[f"{key}_lo"], r[f"{key}_hi"]
+        grow = WIDEN_STEP[key] * steps
+        new_lo, new_hi = max(0, lo - grow), min(255, hi + grow)
+        min_width = int(MIN_HALF_WIDTH[key] / 2)
+        if new_hi - new_lo < min_width:  # narrowed past the minimum: keep the middle
+            mid = (lo + hi) // 2
+            new_lo, new_hi = max(0, mid - min_width // 2), min(255, mid + min_width // 2)
+        out[f"{key}_lo"], out[f"{key}_hi"] = int(new_lo), int(new_hi)
+    return out
 
 
 def open_mask(mask: np.ndarray, open_px: int) -> np.ndarray:
@@ -70,6 +130,21 @@ def learn_hsv_range(hsv_pixels: np.ndarray, k: float = 2.5) -> dict:
 class HsvTool(Tool):
     """Shared by the tools that threshold an HSV range and can learn it."""
 
+    PICK = "color"
+
+    def hsv_range(self) -> dict:
+        return {key: getattr(self, key) for key in HSV_PARAMS}
+
+    def pick(self, frame, point, add=False, offset=None) -> None:
+        sample = point_sample(frame, point)
+        if sample.size == 0:
+            return
+        learned = learn_hsv_range(self.hsv(sample), self.k)
+        self.set_params(merge_hsv_range(self.hsv_range(), learned) if add else learned)
+
+    def widen(self, steps: int) -> None:
+        self.set_params(widen_hsv_range(self.hsv_range(), steps))
+
     def hsv(self, patch: np.ndarray) -> np.ndarray:
         return to_hsv(self.prepared(patch))
 
@@ -83,9 +158,7 @@ class HsvTool(Tool):
         fractions) or, by default, the tool's own ROI."""
         h, w = frame.shape[:2]
         if point is not None:
-            x, y = int(point[0]), int(point[1])
-            r = POINT_BOX // 2
-            sample = frame[max(0, y - r):y + r + 1, max(0, x - r):x + r + 1]
+            sample = point_sample(frame, point)
         elif teach_roi is not None:
             x1, y1, x2, y2 = roi_to_pixels(tuple(teach_roi), w, h)
             sample = frame[y1:y2, x1:x2]

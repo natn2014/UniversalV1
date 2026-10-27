@@ -157,6 +157,22 @@ class Tool:
     def teach(self, frame: np.ndarray, offset: Optional[Offset] = None, **kw: Any) -> None:
         """Registers the master from a frame. Default: nothing to learn."""
 
+    # Eyedropper (Keyence "Color / Brightness Extraction"): tap a spot to set
+    # what the tool counts, tap more spots to add them, widen or narrow in steps.
+    PICK: Optional[str] = None  # "color", "gray" or None (no eyedropper)
+
+    @property
+    def pick_mode(self) -> Optional[str]:
+        return self.PICK
+
+    def pick(self, frame: np.ndarray, point: Tuple[int, int], add: bool = False,
+             offset: Optional[Offset] = None) -> None:
+        """Sets (or with `add`, extends) the counted range from the spot at
+        `point` (frame pixels)."""
+
+    def widen(self, steps: int) -> None:
+        """Widens (steps > 0) or narrows (steps < 0) the counted range."""
+
     def process(self, patch: np.ndarray, origin: Tuple[int, int]) -> ToolResult:
         raise NotImplementedError
 

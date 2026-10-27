@@ -111,11 +111,67 @@ class AddTeachDelete(ToolsTabTest):
 
     def test_pick_color_teaches_from_a_point(self):
         tool = self.tab.add_tool("color_area", (0.1, 0.1, 0.9, 0.9))
+        self.assertEqual(self.tab.pick_color_button.text(), "Pick Color")
         self.tab.pick_color_button.click()
-        self.assertEqual(self.tab._mode, "pick_color")
+        self.assertEqual(self.tab._mode, "pick")
+        self.assertTrue(self.tab.pick_card.isVisibleTo(self.tab))
         self.tab.view.point_picked.emit((0.31, 0.31))  # inside the red patch
-        self.assertIsNone(self.tab._mode)
+        self.assertEqual(self.tab._mode, "pick")  # stays open for more taps
         self.assertTrue(tool.h_lo > tool.h_hi or tool.h_lo <= 5)  # red hue range
+        self.assertEqual(self.saved_tools()[0]["h_lo"], tool.h_lo)  # saved to the job
+
+    def test_more_taps_add_and_buttons_adjust(self):
+        tool = self.tab.add_tool("color_area", (0.1, 0.1, 0.9, 0.9))
+        before = dict(tool.hsv_range())
+        self.tab.pick_color_button.click()
+        self.tab.view.point_picked.emit((0.31, 0.31))  # red
+        red_only = tool.run(frame()).value
+        self.tab.view.point_picked.emit((0.05, 0.9))  # gray background: added
+        self.assertEqual(self.tab._pick_taps, 2)
+        self.assertGreater(tool.run(frame()).value, red_only + 30)
+        s_lo = tool.s_lo
+        self.tab.wider_button.click()
+        self.assertLessEqual(tool.s_lo, s_lo)
+        v_lo = tool.v_lo
+        self.tab.narrow_button.click()
+        self.assertGreaterEqual(tool.v_lo, v_lo)
+        self.tab.clear_pick_button.click()
+        self.assertEqual(tool.hsv_range(), before)
+        self.assertEqual(self.tab._pick_taps, 0)
+        self.assertFalse(self.tab.wider_button.isEnabled())
+        self.tab.done_pick_button.click()
+        self.assertIsNone(self.tab._mode)
+        self.assertFalse(self.tab.pick_card.isVisibleTo(self.tab))
+
+    def test_selecting_another_tool_ends_the_pick(self):
+        self.tab.add_tool("color_area", (0.1, 0.1, 0.9, 0.9))
+        self.tab.add_tool("color_prohibit", (0.1, 0.1, 0.9, 0.9))
+        self.tab.pick_color_button.click()
+        self.tab.view.point_picked.emit((0.31, 0.31))
+        self.assertEqual(self.tab._mode, "pick")
+        self.tab.table.selectRow(0)
+        self.assertIsNone(self.tab._mode)
+
+    def test_pick_gray_sets_threshold_for_area(self):
+        tool = self.tab.add_tool("area", (0.25, 0.55, 0.45, 0.85))  # holds the white bar
+        self.assertEqual(self.tab.pick_color_button.text(), "Pick Gray")
+        self.tab.pick_color_button.click()
+        self.assertEqual(self.tab.pick_header.text(), "Brightness Extraction")
+        self.tab.view.point_picked.emit((220 / 640, 340 / 480))  # on the bar (230) over 90
+        self.assertEqual((tool.method, tool.polarity, tool.threshold), ("fixed", "bright", 160))
+        bar = 40 * 80 * 100.0 / tool.crop(frame())[0].shape[0] / tool.crop(frame())[0].shape[1]
+        self.assertAlmostEqual(tool.run(frame()).value, bar, delta=0.5)
+        self.tab.wider_button.click()
+        self.assertEqual(tool.threshold, 155)
+
+    def test_pick_button_follows_the_tool(self):
+        self.tab.add_tool("brightness", (0.1, 0.1, 0.3, 0.3))
+        self.assertFalse(self.tab.pick_color_button.isVisibleTo(self.tab))
+        blob = self.tab.add_tool("blob_count", (0.1, 0.1, 0.3, 0.3))
+        self.assertEqual(self.tab.pick_color_button.text(), "Pick Gray")
+        blob.source = "color"
+        self.tab._on_selected(self.tab.selected_index())
+        self.assertEqual(self.tab.pick_color_button.text(), "Pick Color")
 
     def test_delete_is_a_touch_confirm(self):
         self.tab.add_tool("area", (0.1, 0.1, 0.3, 0.3))

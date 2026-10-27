@@ -47,7 +47,6 @@ CATEGORIES = [
     ("Text & Code", ["ocr", "code"]),
     ("Pattern & Count", ["outline", "blob_count"]),
 ]
-HSV_KINDS = {"color_area", "color_prohibit", "blob_count"}
 # The case each tool suits, shown under its tile with an example picture
 # (drawn by tools/make_tool_thumbs.py).
 KIND_USES = {

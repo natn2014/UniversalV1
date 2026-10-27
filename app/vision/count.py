@@ -5,13 +5,13 @@ import math
 import cv2
 import numpy as np
 
-from .brightness import binarize
+from .brightness import GrayPick, binarize
 from .base import overlay_item, region_item, register
 from .color import HSV_PARAMS, HsvTool, open_mask
 
 
 @register("blob_count")
-class BlobCountTool(HsvTool):
+class BlobCountTool(GrayPick, HsvTool):
     """`source` "gray" thresholds like Area, "color" uses the HSV range like
     Color Area. A blob counts when its area, aspect ratio (w/h) and
     circularity (4*pi*A/P^2) are inside the limits."""
@@ -21,6 +21,22 @@ class BlobCountTool(HsvTool):
         **HSV_PARAMS, "k": 2.5,
         "open_px": 1, "area_min": 20, "area_max": 1e9, "aspect_min": 0.0, "aspect_max": 1e9, "circ_min": 0.0,
     }
+
+    @property
+    def pick_mode(self):
+        return "color" if self.source == "color" else "gray"
+
+    def pick(self, frame, point, add=False, offset=None) -> None:
+        if self.source == "color":
+            HsvTool.pick(self, frame, point, add, offset)
+        else:
+            self.gray_pick(frame, point, add, offset)
+
+    def widen(self, steps: int) -> None:
+        if self.source == "color":
+            HsvTool.widen(self, steps)
+        else:
+            self.gray_widen(steps)
 
     def blob_mask(self, patch: np.ndarray) -> np.ndarray:
         if self.source == "color":

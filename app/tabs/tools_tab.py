@@ -7,7 +7,7 @@ the limits against the value. Every
 change is written to the job through `ctx.set_tools(..., save_to_job=True)`.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -43,7 +43,6 @@ from ..vision.total import total_state
 from ..widgets.layout import bottom_bar, make_card, top_bar
 from ..widgets.tool_overlay import draw_overlay, tool_value_text
 from ..widgets.tool_params import (
-    HSV_KINDS,
     TOUCH_HEIGHT,
     AddToolDialog,
     DeleteToolDialog,
@@ -59,6 +58,8 @@ AUTO_TEACH = {"position", "color_area", "color_average", "outline"}
 SELECTED_COLOR = QColor("#f0a330")
 IDLE_COLOR = QColor("#9aa3ad")
 LIMIT_PERCENT = 10.0
+# What an eyedropper session can change, so Clear can put it back.
+PICK_KEYS = ("h_lo", "h_hi", "s_lo", "s_hi", "v_lo", "v_hi", "method", "threshold", "polarity")
 
 
 class ToolsTab(QWidget):
@@ -72,9 +73,14 @@ class ToolsTab(QWidget):
         self._last_image: Optional[QImage] = None  # newest frame the worker delivered
         self._live_results: List[ToolResult] = []  # the worker's tool results for that frame
         self._results: Dict[str, ToolResult] = {}
-        self._mode: Optional[str] = None  # add / set_roi / teach_box / calibrate / pick_color
+        self._mode: Optional[str] = None  # add / set_roi / teach_box / calibrate / pick
         self._pending_kind: Optional[str] = None
         self._pending_mm: float = 0.0
+        # Eyedropper session: the tool, how many spots were tapped, and its
+        # range before the first tap (what Clear goes back to).
+        self._pick_tool: Optional[Tool] = None
+        self._pick_taps = 0
+        self._pick_backup: dict = {}
         self._busy = False  # ignore our own tools_changed echo
         self._loading = False  # filling widgets from a tool, not user edits
 
@@ -133,6 +139,24 @@ class ToolsTab(QWidget):
         self.roi_button.setCheckable(True)
         self.pick_color_button = self._button("Pick Color", self._on_pick_color_clicked)
         self.pick_color_button.setCheckable(True)
+        self.pick_card, pick_body = make_card("Color Extraction")
+        self.pick_header = self.pick_card.findChild(QLabel, "cardHeader")
+        self.pick_count_label = QLabel()
+        self.pick_count_label.setWordWrap(True)
+        self.narrow_button = self._button("−  Narrower", lambda: self.widen_selected(-1))
+        self.wider_button = self._button("+  Wider", lambda: self.widen_selected(1))
+        self.clear_pick_button = self._button("Clear", self.clear_pick)
+        self.done_pick_button = self._button("Done", self._exit_mode)
+        self.done_pick_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["start"]))
+        pick_grid = QGridLayout()
+        pick_grid.setSpacing(8)
+        pick_grid.addWidget(self.narrow_button, 0, 0)
+        pick_grid.addWidget(self.wider_button, 0, 1)
+        pick_grid.addWidget(self.clear_pick_button, 1, 0)
+        pick_grid.addWidget(self.done_pick_button, 1, 1)
+        pick_body.addWidget(self.pick_count_label)
+        pick_body.addLayout(pick_grid)
+        self.pick_card.hide()
         self.delete_button = self._button("Delete", self._on_delete_clicked)
         self.delete_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["stop"]))
         self.gate_button = self._button("", self._on_gate_clicked)
@@ -225,6 +249,7 @@ class ToolsTab(QWidget):
         right_layout.setSpacing(8)
         right_layout.addWidget(list_panel)
         right_layout.addLayout(buttons)
+        right_layout.addWidget(self.pick_card)
         right_layout.addWidget(limits_card)
         right_layout.addWidget(params_card)
         right_layout.addStretch(1)
@@ -443,10 +468,16 @@ class ToolsTab(QWidget):
                        self.low_check, self.high_check, self.low_spin, self.high_spin,
                        self.enabled_check, self.follow_check):
             widget.setEnabled(has)
-        self.pick_color_button.setVisible(has and tool.kind in HSV_KINDS)
-        self.pick_color_button.setEnabled(has)
-        self._exit_mode()
+        self._update_pick_button(tool)
+        if not (self._mode == "pick" and tool is not None and tool is self._pick_tool):
+            self._exit_mode()  # a pick session survives its own saves, not a change of tool
         self._render()
+
+    def _update_pick_button(self, tool: Optional[Tool]) -> None:
+        mode = tool.pick_mode if tool is not None else None
+        self.pick_color_button.setVisible(mode is not None)
+        self.pick_color_button.setEnabled(mode is not None)
+        self.pick_color_button.setText("Pick Gray" if mode == "gray" else "Pick Color")
 
     def _load_limits(self, tool: Tool) -> None:
         was, self._loading = self._loading, True
@@ -568,6 +599,7 @@ class ToolsTab(QWidget):
     def _on_params_changed(self) -> None:
         if not self._loading:
             self._edited()
+            self._update_pick_button(self.selected_tool())  # Blob Count's source picks color or gray
 
     def _on_flags_changed(self, _=None) -> None:
         tool = self.selected_tool()
@@ -609,7 +641,7 @@ class ToolsTab(QWidget):
         self._exit_mode()
         self._mode = mode
         self.hint_label.setText(hint)
-        for name, button in (("set_roi", self.roi_button), ("pick_color", self.pick_color_button)):
+        for name, button in (("set_roi", self.roi_button), ("pick", self.pick_color_button)):
             button.blockSignals(True)
             button.setChecked(mode == name)
             button.blockSignals(False)
@@ -622,6 +654,8 @@ class ToolsTab(QWidget):
     def _exit_mode(self) -> None:
         self._mode = None
         self._pending_kind = None
+        self._pick_tool = None
+        self.pick_card.hide()
         self.view.set_roi_mode(False)
         self.view.set_point_mode(False)
         for button in (self.roi_button, self.pick_color_button):
@@ -658,10 +692,65 @@ class ToolsTab(QWidget):
             self.teach_selected()
 
     def _on_pick_color_clicked(self, checked: bool) -> None:
-        if not checked:
+        tool = self.selected_tool()
+        if not checked or tool is None or tool.pick_mode is None:
             self._exit_mode()
-        elif not self._enter_mode("pick_color", "Tap the color to learn on the image", point=True):
+            return
+        what = "color" if tool.pick_mode == "color" else "brightness"
+        if not self._enter_mode("pick", f"Tap the {what} to count on the image", point=True):
             self.pick_color_button.setChecked(False)
+            return
+        self._pick_tool = tool
+        self._pick_taps = 0
+        self._pick_backup = {key: getattr(tool, key) for key in PICK_KEYS if hasattr(tool, key)}
+        self.pick_header.setText("Color Extraction" if what == "color" else "Brightness Extraction")
+        self.pick_card.show()
+        self._update_pick_text()
+
+    def _update_pick_text(self) -> None:
+        if self._pick_taps == 0:
+            text = "Tap the spot to count. The counted pixels turn yellow (red for Color Prohibit)."
+            hint = "Tap the spot to count on the image"
+        else:
+            spots = "1 spot" if self._pick_taps == 1 else f"{self._pick_taps} spots"
+            text = f"{spots} picked. Tap more spots to add them, or use − / + to narrow or widen."
+            hint = "Tap more spots to add them  ·  − / + narrow or widen  ·  Done when it looks right"
+        self.pick_count_label.setText(text)
+        self.hint_label.setText(hint)
+        for button in (self.narrow_button, self.wider_button):
+            button.setEnabled(self._pick_taps > 0)
+
+    def pick_at(self, point: Tuple[int, int]) -> None:
+        """One eyedropper tap (frame pixels): the first sets the range, later
+        ones add to it. The session stays open for more taps."""
+        tool = self._pick_tool
+        if tool is None or self._frame is None:
+            return
+        try:
+            tool.pick(self._frame, point, add=self._pick_taps > 0)
+        except Exception as exc:
+            self._ctx.status.emit(f"Pick failed: {exc}")
+            return
+        self._pick_taps += 1
+        self._set_tools(list(self.tools))
+        self._update_pick_text()
+
+    def widen_selected(self, steps: int) -> None:
+        tool = self._pick_tool or self.selected_tool()
+        if tool is None or tool.pick_mode is None:
+            return
+        tool.widen(steps)
+        self._set_tools(list(self.tools))
+
+    def clear_pick(self) -> None:
+        """Back to the range from before the first tap; the next tap starts afresh."""
+        tool = self._pick_tool
+        if tool is None:
+            return
+        tool.set_params(self._pick_backup)
+        self._pick_taps = 0
+        self._set_tools(list(self.tools))
+        self._update_pick_text()
 
     def _on_calibrate_clicked(self) -> None:
         mm, ok = QInputDialog.getDouble(self, "Calibrate mm", "Known size of the feature (mm):", 5.0, 0.01, 10000.0, 2)
@@ -682,11 +771,10 @@ class ToolsTab(QWidget):
             self.calibrate(roi, self._pending_mm)
 
     def _on_point_picked(self, point: tuple) -> None:
-        if self._mode != "pick_color" or self._frame is None:
+        if self._mode != "pick" or self._frame is None:
             return
-        self._exit_mode()
         h, w = self._frame.shape[:2]
-        self.teach_selected(point=(int(point[0] * w), int(point[1] * h)))
+        self.pick_at((int(point[0] * w), int(point[1] * h)))
 
     def _on_gate_clicked(self) -> None:
         self._ctx.tools_gate = "OR" if self._ctx.tools_gate == "AND" else "AND"

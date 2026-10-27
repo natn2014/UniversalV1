@@ -377,3 +377,13 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - `region_item(..., color=)` with palettes yellow / red / lines in `tool_overlay.REGION_PALETTES`. Text overlay labels get a dark one-pixel shadow so they read on a fill.
 - Bench (ms, unchanged): blob_count 0.73, color_prohibit 1.09, edge_pixels 0.39.
 - Tests: `EdgePixelsOverlay` (2), `test_only_counted_blobs_are_filled`, `test_nothing_counted_has_no_region`, the red region in `test_spot_is_ng`, `test_region_palettes`.
+
+### Eyedropper: Color / Brightness Extraction (Keyence style)
+- Study: on the IV, the Color Area tool's [Color Extraction] screen lets you tap the reference color on the image, tap more spots to add them, widen or narrow the range with [+] / [-], [Clear] and start again, and check on the live image; Advanced Color Extraction gives exact HSB numbers. On mono models, [Brightness Extraction] does the same with a gray level.
+- What changed:
+  - Tool API (`app/vision/base.py`): `PICK` / `pick_mode` ("color", "gray" or None), `pick(frame, point, add)` and `widen(steps)`.
+  - Color (Color Area, Color Prohibit, Blob Count with source color): `merge_hsv_range` (the shorter hue arc covering both ranges and the union of the S/V spans) and `widen_hsv_range` (±3 hue, ±10 S/V per step, never below the minimum widths; a full hue circle stays full).
+  - Gray (Area (mono), Blob Count with source gray): `pick_threshold` sets polarity (bright when the tap is in the upper half of the ROI's 5–95 % range) and a fixed threshold halfway between the tapped gray and the median of the ROI pixels on the other side. More taps only lower (bright) or raise (dark) the threshold, so every tapped spot counts; ±5 per step.
+  - Tools tab: Pick Color / Pick Gray opens a session with an Extraction card (− Narrower, + Wider, Clear, Done). Each tap adds to the range and is saved, and the yellow/red fill shows the result straight away. The session survives its own saves and ends on Done, on selecting another tool, or on Resume Live. Clear goes back to the range from before the first tap.
+- Not done: showing the hue in degrees (0–359°) like Keyence; the form still uses OpenCV's 0–179.
+- Tests: `EyedropperRange` (5), `GrayEyedropper` (3), and Tools tab tests for the multi-tap session, the gray pick, ending the session on a tool change, and the button label.

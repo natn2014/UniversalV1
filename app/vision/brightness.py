@@ -1,6 +1,8 @@
 """Brightness tools: Area (mono), Brightness Average, Edge Pixels and the
 shading-uniformity check. All work on the gray ROI after the `pre` chain."""
 
+from typing import Optional, Tuple
+
 import cv2
 import numpy as np
 
@@ -16,11 +18,65 @@ def binarize(gray: np.ndarray, method: str = "fixed", threshold: float = 128, po
     return (gray > threshold).astype(np.uint8) * 255
 
 
+GRAY_STEP = 5  # one [+] / [-] step of the threshold
+POINT_BOX = 9  # px side of the box sampled around a tapped point
+EDGE_GAP = 15  # gray levels a pixel must differ from the tapped one to count as background
+
+
+def pick_threshold(roi_gray: np.ndarray, tapped: float, polarity: Optional[str] = None) -> Tuple[int, str]:
+    """Fixed threshold and polarity that count the tapped gray level: halfway
+    between it and the background (the ROI pixels on the other side of it).
+    Polarity is bright when the tap is in the upper half of the ROI's range."""
+    p5, p95 = np.percentile(roi_gray, (5, 95))
+    if polarity is None:
+        polarity = "bright" if tapped >= (p5 + p95) / 2 else "dark"
+    if polarity == "bright":
+        other = roi_gray[roi_gray < tapped - EDGE_GAP]
+        background = float(np.median(other)) if other.size else float(roi_gray.min())
+    else:
+        other = roi_gray[roi_gray > tapped + EDGE_GAP]
+        background = float(np.median(other)) if other.size else float(roi_gray.max())
+    return int(np.clip(round((tapped + background) / 2), 1, 254)), polarity
+
+
+class GrayPick:
+    """Brightness eyedropper for tools with `threshold` / `polarity` / `method`
+    (Keyence "Brightness Extraction"): the first tap sets them, later taps
+    only lower (bright) or raise (dark) the threshold so every tapped spot counts."""
+
+    def gray_pick(self, frame, point, add=False, offset=None) -> None:
+        x, y = int(point[0]), int(point[1])
+        r = POINT_BOX // 2
+        sample = frame[max(0, y - r):y + r + 1, max(0, x - r):x + r + 1]
+        patch, _ = self.crop(frame, offset)
+        if sample.size == 0 or patch.size == 0:
+            return
+        tapped = float(np.median(self.gray(sample)))
+        keep = self.polarity if add else None
+        threshold, polarity = pick_threshold(self.gray(patch), tapped, keep)
+        if add:
+            threshold = min(threshold, self.threshold) if polarity == "bright" else max(threshold, self.threshold)
+        self.set_params({"method": "fixed", "threshold": int(threshold), "polarity": polarity})
+
+    def gray_widen(self, steps: int) -> None:
+        """Wider counts more pixels: a lower threshold for bright, higher for dark."""
+        sign = -1 if self.polarity == "bright" else 1
+        self.set_params({"method": "fixed",
+                         "threshold": int(np.clip(self.threshold + sign * GRAY_STEP * steps, 0, 255))})
+
+
 @register("area")
-class AreaTool(Tool):
+class AreaTool(GrayPick, Tool):
     """Percentage of the ROI above (bright) or below (dark) a gray threshold."""
 
     PARAMS = {"method": "fixed", "threshold": 128, "polarity": "bright"}
+    PICK = "gray"
+
+    def pick(self, frame, point, add=False, offset=None) -> None:
+        self.gray_pick(frame, point, add, offset)
+
+    def widen(self, steps: int) -> None:
+        self.gray_widen(steps)
 
     def process(self, patch, origin):
         mask = binarize(self.gray(patch), self.method, self.threshold, self.polarity)

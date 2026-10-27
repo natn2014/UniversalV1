@@ -3,7 +3,7 @@ import unittest
 import cv2
 import numpy as np
 
-from app.vision.brightness import AreaTool, BrightnessAverageTool, EdgePixelsTool, ShadingUniformityTool
+from app.vision.brightness import AreaTool, pick_threshold, BrightnessAverageTool, EdgePixelsTool, ShadingUniformityTool
 
 
 def square_frame(frac=0.3, fg=230, bg=10, size=(200, 300)):
@@ -132,6 +132,36 @@ class Shading(unittest.TestCase):
         res = ShadingUniformityTool(grid_x=2, grid_y=1).run(self.ramp())
         self.assertEqual([o["label"][:3] for o in res.overlay[1:]], ["min", "max"])
         self.assertEqual(res.overlay[1]["pts"], [0, 0, 200, 200])
+
+
+class GrayEyedropper(unittest.TestCase):
+    def test_bright_part_on_dark(self):
+        roi = np.full((100, 100), 40, np.uint8)
+        roi[30:70, 30:70] = 200
+        self.assertEqual(pick_threshold(roi, 200), (120, "bright"))
+
+    def test_dark_part_filling_most_of_a_bright_roi(self):
+        roi = np.full((100, 100), 220, np.uint8)
+        roi[5:95, 5:95] = 30
+        self.assertEqual(pick_threshold(roi, 30), (125, "dark"))
+
+    def test_tool_pick_add_and_widen(self):
+        img = np.full((100, 100), 20, np.uint8)
+        img[10:40, 10:90] = 200
+        img[60:90, 10:90] = 120
+        t = AreaTool(roi=(0, 0, 1, 1))
+        t.pick(img, (50, 25))
+        self.assertEqual((t.polarity, t.threshold), ("bright", 110))
+        self.assertAlmostEqual(t.run(img).value, 24 + 24, delta=0.5)  # 120 is above 110 too
+        t.threshold = 150
+        t.pick(img, (50, 75), add=True)  # the 120 band must count as well
+        self.assertEqual(t.threshold, 70)
+        t.widen(1)
+        self.assertEqual(t.threshold, 65)
+        t.widen(-2)
+        self.assertEqual(t.threshold, 75)
+        self.assertEqual(t.method, "fixed")
+
 
 
 if __name__ == "__main__":
