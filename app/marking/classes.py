@@ -45,6 +45,18 @@ def read_classes_file(dataset_root: Path) -> Optional[List[str]]:
     return names or None
 
 
+def validate_class_name(name: str, existing: List[str]) -> Optional[str]:
+    """Why `name` can't be a new class name (None = fine). Compare against
+    `existing` without the class being renamed."""
+    if not name.strip():
+        return "Class name can't be empty."
+    if "\n" in name or "\r" in name:
+        return "Class name must be one line."
+    if name.strip().lower() in (n.lower() for n in existing):
+        return f'There is already a class "{name.strip()}".'
+    return None
+
+
 def write_classes_file(dataset_root: Path, names: List[str]) -> None:
     dataset_root.mkdir(parents=True, exist_ok=True)
     (dataset_root / CLASSES_FILE).write_text("\n".join(names) + "\n")

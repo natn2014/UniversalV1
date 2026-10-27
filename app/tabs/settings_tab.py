@@ -36,6 +36,7 @@ class SettingsTab(QWidget):
         self.model_label = QLabel("No model selected")
         self.load_model_button = QPushButton("Load .pt Model")
         self.load_model_button.clicked.connect(self.load_model)
+        ctx.model_pick_requested.connect(self.load_model)
         ctx.model_path_changed.connect(lambda path: self.model_label.setText(path.name))
         ctx.model_classes_changed.connect(self._populate_class_filters)
 
@@ -54,6 +55,7 @@ class SettingsTab(QWidget):
         self.resolution_actual_label.setObjectName("hint")
         ctx.worker.resolution_changed.connect(self._on_actual_resolution)
         ctx.worker.camera_index_changed.connect(self._on_camera_index_changed)
+        ctx.camera_scan_requested.connect(self.scan_cameras)
 
         self.tower_status_label = QLabel("Tower Light: Not Connected")
         tower.connection_text_changed.connect(self.tower_status_label.setText)
@@ -99,6 +101,17 @@ class SettingsTab(QWidget):
             settings.set(state_hold_ms=self.state_hold_spinbox.value())
         self.state_hold_spinbox.valueChanged.connect(
             lambda value: settings.set(state_hold_ms=value))
+
+        self.autocapture_max_spinbox = self._make_setting_spinbox(
+            "autocapture_max_images", 1, 100000, 50, " images")
+        self.autocapture_threshold_spinbox = self._make_setting_spinbox(
+            "autocapture_threshold", 0, 32, 1, " / 64 bits")
+        self.autocapture_interval_spinbox = self._make_setting_spinbox(
+            "autocapture_interval_ms", 0, 60000, 100, " ms")
+        self.autocapture_wait_clear_checkbox = QCheckBox("Wait for part to leave before next capture")
+        self.autocapture_wait_clear_checkbox.setChecked(settings["autocapture_wait_clear"])
+        self.autocapture_wait_clear_checkbox.toggled.connect(
+            lambda checked: settings.set(autocapture_wait_clear=checked))
 
         # Filter panel
         self.confidence_slider = QSlider(Qt.Horizontal)
@@ -166,6 +179,20 @@ class SettingsTab(QWidget):
         hold_hint.setWordWrap(True)
         tower_body.addWidget(hold_hint)
 
+        autocapture_card, autocapture_body = make_card("Auto Capture")
+        autocapture_body.addLayout(row(QLabel("Max images per job:"), None, self.autocapture_max_spinbox))
+        autocapture_body.addLayout(row(QLabel("Match threshold:"), None, self.autocapture_threshold_spinbox))
+        autocapture_body.addLayout(row(QLabel("Min interval:"), None, self.autocapture_interval_spinbox))
+        autocapture_body.addWidget(self.autocapture_wait_clear_checkbox)
+        autocapture_hint = QLabel(
+            "Saves a frame when it differs from a master by at most the threshold "
+            "(0 = identical; 8-12 typical), at most once per interval. Waiting for the part "
+            "to leave saves each part once; turn it off to shoot several angles of one part. "
+            "Set masters on the Monitor tab.")
+        autocapture_hint.setObjectName("hint")
+        autocapture_hint.setWordWrap(True)
+        autocapture_body.addWidget(autocapture_hint)
+
         filters_card, filters_body = make_card("Detection Filters")
         self.confidence_label.setStyleSheet("color: #ffcf73; font-weight: 700;")
         filters_body.addLayout(row(QLabel("Confidence threshold"), None, self.confidence_label))
@@ -185,6 +212,7 @@ class SettingsTab(QWidget):
         left_column.addWidget(model_card)
         left_column.addWidget(camera_card)
         left_column.addWidget(tower_card)
+        left_column.addWidget(autocapture_card)
         left_column.addStretch(1)
 
         columns = QHBoxLayout()
@@ -204,6 +232,17 @@ class SettingsTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(scroll)
+
+    def _make_setting_spinbox(self, key: str, low: int, high: int, step: int, suffix: str) -> QSpinBox:
+        """Spinbox bound to an app setting, saved on every change."""
+        settings = self._ctx.settings
+        spinbox = QSpinBox()
+        spinbox.setRange(low, high)
+        spinbox.setSingleStep(step)
+        spinbox.setSuffix(suffix)
+        spinbox.setValue(settings[key])
+        spinbox.valueChanged.connect(lambda value: settings.set(**{key: value}))
+        return spinbox
 
     @staticmethod
     def _make_buzzer_style_combo(selected_pattern: int) -> QComboBox:
@@ -351,6 +390,7 @@ class SettingsTab(QWidget):
             "selected_classes": sorted(filters.selected_classes),
             "perspective": filters.perspective,
             "roi": list(filters.roi) if filters.roi else None,
+            "autocapture_masters": ctx.master_entries(),
         }
 
     def apply_config(self, config: dict) -> bool:
@@ -374,6 +414,7 @@ class SettingsTab(QWidget):
         # Top view first: the ROI's fractions refer to it.
         self._ctx.set_perspective(config.get("perspective"))
         self._ctx.set_roi(config.get("roi"))
+        self._ctx.set_masters(config.get("autocapture_masters"))
         self.confidence_slider.setValue(int(round(config.get("confidence_threshold", 0.0) * 100)))
         self.max_detections_spinbox.setValue(int(config.get("max_detections", 0)))
 

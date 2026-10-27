@@ -4,6 +4,7 @@ from typing import Optional
 from PySide6.QtCore import QObject, Signal
 
 from . import jobs
+from .autocapture import load_masters
 from .camera import VideoWorker, parse_resolution
 from .judgement import DetectionFilters
 from .optional_deps import YOLO
@@ -23,6 +24,13 @@ class AppContext(QObject):
     model_classes_changed = Signal(list)
     roi_changed = Signal(object)  # Optional[Roi]
     perspective_changed = Signal(object)  # Optional[Quad]
+    masters_changed = Signal(list)  # [Master]
+    # Requests one tab makes of another, so a missing step can be done for
+    # the user instead of telling them to go and do it.
+    camera_scan_requested = Signal()  # rescan; handled synchronously
+    model_pick_requested = Signal()  # open the .pt picker; synchronous
+    stop_stream_requested = Signal()
+    show_tab_requested = Signal(str)  # tab title, e.g. "Job Change"
 
     def __init__(self, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
@@ -35,6 +43,7 @@ class AppContext(QObject):
         self.camera_index: Optional[int] = None
         self.current_part_no: Optional[str] = None
         self.training_active: bool = False
+        self.masters: list = load_masters(None)
 
     @property
     def model_path(self) -> Optional[Path]:
@@ -92,6 +101,16 @@ class AppContext(QObject):
         self.worker.set_roi(roi)
         self.roi_changed.emit(roi)
         self._save_to_job(save_to_job, roi=roi)
+
+    def set_masters(self, entries, save_to_job: bool = False) -> None:
+        """Sets the auto-capture master images from config entries
+        ({"class_name", "image"} each)."""
+        self.masters = load_masters(entries)
+        self.masters_changed.emit(self.masters)
+        self._save_to_job(save_to_job, autocapture_masters=self.master_entries())
+
+    def master_entries(self) -> list:
+        return [m.to_entry() for m in self.masters]
 
     def set_current_part(self, part_no: Optional[str]) -> None:
         """None drops the part association (and the boot auto-load); the loaded

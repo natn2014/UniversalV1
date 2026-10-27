@@ -1,7 +1,7 @@
 import html
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from PySide6.QtCore import QRect, QSize, Qt, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
@@ -18,6 +18,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..autocapture import (
+    AutoCaptureGate,
+    autocapture_images_dir,
+    autocapture_part_dir,
+    capture_stem,
+    count_images,
+    image_hash,
+    qimage_to_array,
+)
 from ..context import AppContext
 from ..judgement import JudgementLatch
 from ..ng_log import save_ng_image
@@ -25,6 +34,8 @@ from ..paths import CAPTURES_IMAGES_DIR, CAPTURES_LABELS_DIR, NO_PART_NAME
 from ..roi import detections_in_crop, roi_to_pixels
 from ..theme import RUN_BUTTON_STYLES, action_button_qss, gloss_gradient, make_icon
 from ..widgets.layout import bottom_bar, top_bar
+from ..widgets.master_dialog import MasterDialog
+from ..widgets.master_strip import MasterStrip
 from ..widgets.perspective_dialog import PerspectiveDialog
 from ..widgets.video_view import VideoView
 from ..yolo_labels import pixel_box_to_yolo, write_yolo_label_file
@@ -51,6 +62,14 @@ class MonitorTab(QWidget):
         self._stop_requested: bool = False
         self._camera_lost: bool = False
         self._tower_lost: bool = False
+        self._autocapture_gate: Optional[AutoCaptureGate] = None
+        # Setup preview: camera started only so the user can set something up
+        # (masters, ROI, top view, a capture). Frames show, but nothing is
+        # judged or counted and the tower stays off.
+        self._preview: bool = False
+        self._live: bool = False  # a frame arrived since the stream started
+        self._on_first_frame: list = []  # callables run on the first frame
+        ctx.worker.finished.connect(self._on_stream_finished)
 
         self.run_button = QPushButton()
         self.run_button.setIconSize(ICON_SIZE)
@@ -119,6 +138,29 @@ class MonitorTab(QWidget):
         self.top_view_button.clicked.connect(self._open_top_view_dialog)
         ctx.perspective_changed.connect(self._refresh_monitor_info)
 
+        self.masters_button = QPushButton("Masters")
+        self.masters_button.setIcon(make_icon("master", "#e0e0e0"))
+        self.masters_button.setIconSize(ICON_SIZE)
+        self.masters_button.setFixedHeight(TOOLBAR_HEIGHT)
+        self.masters_button.clicked.connect(self._open_master_dialog)
+
+        self.autocapture_button = QPushButton()
+        self.autocapture_button.setIconSize(ICON_SIZE)
+        self.autocapture_button.setFixedHeight(TOOLBAR_HEIGHT)
+        self.autocapture_button.setCheckable(True)
+        self.autocapture_button.toggled.connect(self._on_autocapture_toggled)
+        # Off whenever the stream stops or the job changes: the count and
+        # masters belong to one job's run.
+        ctx.worker.finished.connect(lambda: self.autocapture_button.setChecked(False))
+        ctx.part_changed.connect(lambda _: self.autocapture_button.setChecked(False))
+        ctx.masters_changed.connect(lambda _: self._refresh_autocapture_button())
+        self.master_strip = MasterStrip()
+        self.master_strip.set_masters(ctx.masters)
+        self.master_strip.edit_requested.connect(self._open_master_dialog)
+        ctx.masters_changed.connect(self.master_strip.set_masters)
+        ctx.worker.finished.connect(lambda: self.master_strip.set_match(None, False))
+        self._refresh_autocapture_button()
+
         self.table = QTableWidget(0, 2)
         self.table.setHorizontalHeaderLabels(["Class", "Count"])
         self.table.verticalHeader().setVisible(False)
@@ -155,6 +197,18 @@ class MonitorTab(QWidget):
         panel_header.setObjectName("panelHeader")
         side_layout.addWidget(panel_header)
         side_layout.addWidget(self.table, 1)
+        # In the side panel, not the bottom bar: that must fit the 1024-wide
+        # kiosk screen and is already full.
+        autocapture_header = QLabel("Auto Capture")
+        autocapture_header.setObjectName("panelHeader")
+        side_layout.addWidget(autocapture_header)
+        side_layout.addWidget(self.master_strip)
+        autocapture_row = QHBoxLayout()
+        autocapture_row.setContentsMargins(6, 6, 6, 0)
+        autocapture_row.setSpacing(6)
+        autocapture_row.addWidget(self.autocapture_button, 1)
+        autocapture_row.addWidget(self.masters_button)
+        side_layout.addLayout(autocapture_row)
         side_layout.addWidget(self._build_cycle_counters())
 
         content_row = QHBoxLayout()
@@ -342,13 +396,17 @@ class MonitorTab(QWidget):
 
     @Slot()
     def _open_top_view_dialog(self) -> None:
+        self.ensure_live(self._open_top_view_now, "Starting camera for Top View...")
+
+    def _open_top_view_now(self) -> None:
         frame = self._ctx.worker.last_raw_frame
-        if frame is None or not self._ctx.worker.isRunning():
-            self._ctx.status.emit("Start the camera first, then set the Top View corners.")
+        if frame is None:
             return
         self.roi_button.setChecked(False)
         dialog = PerspectiveDialog(frame.copy(), self._ctx.filters.perspective, parent=self)
-        if dialog.exec() != PerspectiveDialog.Accepted:
+        accepted = dialog.exec() == PerspectiveDialog.Accepted
+        self.end_preview()
+        if not accepted:
             return
         self._ctx.set_perspective(dialog.quad, save_to_job=True)
         saved = f" (saved to job {self._ctx.current_part_no})" if self._ctx.current_part_no else ""
@@ -359,15 +417,22 @@ class MonitorTab(QWidget):
 
     @Slot(bool)
     def _on_roi_button_toggled(self, checked: bool) -> None:
-        if checked and self._current_frame_image is None:
-            self._ctx.status.emit("Start the camera first, then draw the ROI on the image.")
-            self.roi_button.setChecked(False)
+        if not checked:
+            self.video_label.set_roi_mode(False)
+            self.end_preview()
             return
-        self.video_label.set_roi_mode(checked)
+
+        def enter_roi_mode() -> None:
+            if self.roi_button.isChecked():
+                self.video_label.set_roi_mode(True)
+                self._ctx.status.emit("Drag on the image to draw the detection area.")
+
+        if not self.ensure_live(enter_roi_mode, "Starting camera for the ROI..."):
+            self.roi_button.setChecked(False)
 
     @Slot(tuple)
     def _on_roi_drawn(self, roi: tuple) -> None:
-        self.roi_button.setChecked(False)
+        self.roi_button.setChecked(False)  # also ends a setup preview
         self._ctx.set_roi(roi, save_to_job=True)
         saved = f" (saved to job {self._ctx.current_part_no})" if self._ctx.current_part_no else ""
         self._ctx.status.emit(f"Detection area set{saved}.")
@@ -406,10 +471,67 @@ class MonitorTab(QWidget):
 
     @Slot()
     def toggle_stream(self) -> None:
-        if self._ctx.worker.isRunning():
+        # During a setup preview the button reads Start: it turns the
+        # preview into a real run.
+        if self._ctx.worker.isRunning() and not self._preview:
             self.stop_stream()
         else:
             self.start_stream()
+
+    @property
+    def in_preview(self) -> bool:
+        return self._preview and self._ctx.worker.isRunning()
+
+    def ensure_live(self, then: Callable[[], None], message: str = "Starting camera...",
+                    preview: bool = True) -> bool:
+        """Runs `then` once live frames are flowing, starting the camera if
+        it is stopped (as a setup preview unless preview=False). Returns
+        False if the camera could not be started (the reason is shown)."""
+        worker = self._ctx.worker
+        if worker.isRunning() and self._stop_requested:
+            # Still shutting down from a Stop: start again once it has.
+            def retry() -> None:
+                worker.finished.disconnect(retry)
+                self.ensure_live(then, message, preview)
+            worker.finished.connect(retry)
+            self._ctx.status.emit(message)
+            return True
+        if worker.isRunning():
+            if not preview and self._preview:
+                self._end_preview_keep_running()
+            if self._live:
+                then()
+            else:
+                self._on_first_frame.append(then)
+            return True
+        self._on_first_frame = [then]
+        self._preview = preview
+        if not self.start_stream(keep_preview=True):
+            self._on_first_frame = []
+            self._preview = False
+            return False
+        self._ctx.status.emit(message)
+        return True
+
+    def end_preview(self) -> None:
+        """Stops the camera if it was only started for a setup step."""
+        if self.in_preview and self._autocapture_gate is None:
+            self.stop_stream()
+
+    def _end_preview_keep_running(self) -> None:
+        """Setup preview -> real run, without restarting the camera."""
+        self._preview = False
+        self._reset_judgement()
+        self._refresh_run_button()
+        if not self._ctx.tower.connected:
+            self._ctx.tower.connect_device()
+
+    @Slot()
+    def _on_stream_finished(self) -> None:
+        self._preview = False
+        self._live = False
+        self._on_first_frame = []
+        self._refresh_run_button()
 
     def _refresh_run_button(self) -> None:
         running = self._ctx.worker.isRunning()
@@ -423,6 +545,9 @@ class MonitorTab(QWidget):
         elif running and self._camera_lost:
             text, icon, style = "Stop", "stop", RUN_BUTTON_STYLES["stop"]
             status, dot = "No camera", "#f4d03f"
+        elif running and self._preview:
+            text, icon, style = "Start", "play", RUN_BUTTON_STYLES["start"]
+            status, dot = "Preview", "#f0a020"
         elif running:
             text, icon, style = "Stop", "stop", RUN_BUTTON_STYLES["stop"]
             status, dot = "Running", "#2ecc71"
@@ -440,23 +565,34 @@ class MonitorTab(QWidget):
         )
 
     @Slot()
-    def start_stream(self) -> None:
+    def start_stream(self, keep_preview: bool = False) -> bool:
+        """Starts monitoring; returns False (reason shown) if it can't."""
         ctx = self._ctx
         if ctx.worker.isRunning():
+            if self._preview and not keep_preview:
+                self._end_preview_keep_running()
+                ctx.status.emit("Running.")
+                return True
             ctx.status.emit("Already running.")
-            return
+            return True
         if ctx.training_active:
             ctx.status.emit("Training in progress. Wait for it to finish.")
-            return
+            return False
         if ctx.camera_index is None:
-            ctx.status.emit("Select a valid camera.")
-            return
+            ctx.camera_scan_requested.emit()  # maybe plugged in since boot
+        if ctx.camera_index is None:
+            ctx.status.emit("No camera found — check the USB cable.")
+            return False
+        if not keep_preview:
+            self._preview = False
+        self._live = False
         ctx.worker.set_camera_index(int(ctx.camera_index))
         self._reset_judgement()
         ctx.worker.start()
         self._refresh_run_button()
-        if not ctx.tower.connected:
+        if not ctx.tower.connected and not self._preview:
             ctx.tower.connect_device()
+        return True
 
     @Slot()
     def stop_stream(self) -> None:
@@ -472,10 +608,15 @@ class MonitorTab(QWidget):
 
     @Slot()
     def capture_frame(self) -> None:
-        if self._current_frame_image is None:
-            self._ctx.status.emit("No frame to capture.")
-            return
+        self.ensure_live(self._capture_now, "Starting camera to capture...")
 
+    def _capture_now(self) -> None:
+        try:
+            self._save_capture()
+        finally:
+            self.end_preview()
+
+    def _save_capture(self) -> None:
         CAPTURES_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
         CAPTURES_LABELS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -485,31 +626,165 @@ class MonitorTab(QWidget):
         image_path = CAPTURES_IMAGES_DIR / f"{stem}.jpg"
         label_path = CAPTURES_LABELS_DIR / f"{stem}.txt"
 
-        # With an ROI, save what the model sees (the area only), so training
-        # images match inference input.
-        image = self._current_frame_image
-        detections = self._current_frame_detections
+        image, boxes = self._crop_and_labels(self._current_frame_image, self._current_frame_detections)
+        pixmap = QPixmap.fromImage(image)
+        if not pixmap.save(str(image_path), "JPG"):
+            self._ctx.status.emit("Frame save failed.")
+            return
+        write_yolo_label_file(label_path, boxes)
+
+        self._ctx.status.emit(f"Captured: {image_path.name} ({len(boxes)} boxes)")
+
+    def _crop_and_labels(self, image: QImage, detections: list):
+        """(image, YOLO boxes) as saved for training. With an ROI, that is
+        what the model sees (the area only), so training images match
+        inference input."""
         box = self._roi_pixels(image)
         if box is not None:
             x1, y1, x2, y2 = box
             image = image.copy(x1, y1, x2 - x1, y2 - y1)
             detections = detections_in_crop(detections, box)
-
-        pixmap = QPixmap.fromImage(image)
-        if not pixmap.save(str(image_path), "JPG"):
-            self._ctx.status.emit("Frame save failed.")
-            return
-
-        img_w = image.width()
-        img_h = image.height()
         boxes = []
         for det in detections:
-            box = pixel_box_to_yolo(det["x1"], det["y1"], det["x2"], det["y2"], img_w, img_h)
-            box["cls_id"] = det["cls_id"]
-            boxes.append(box)
-        write_yolo_label_file(label_path, boxes)
+            yolo = pixel_box_to_yolo(det["x1"], det["y1"], det["x2"], det["y2"], image.width(), image.height())
+            yolo["cls_id"] = det["cls_id"]
+            boxes.append(yolo)
+        return image, boxes
 
-        self._ctx.status.emit(f"Captured: {image_path.name} ({len(boxes)} boxes)")
+    def _roi_crop(self, image: QImage) -> QImage:
+        """The frame cut to the ROI (what the model and masters see)."""
+        box = self._roi_pixels(image)
+        if box is None:
+            return image
+        x1, y1, x2, y2 = box
+        return image.copy(x1, y1, x2 - x1, y2 - y1)
+
+    def _current_roi_crop(self) -> Optional[QImage]:
+        """Latest live frame cut to the ROI, None while not live."""
+        image = self._current_frame_image
+        if image is None or not self._live:
+            return None
+        return self._roi_crop(image)
+
+    # --- Auto capture (masters + hash similarity) -----------------------
+
+    @Slot()
+    def _open_master_dialog(self) -> bool:
+        """Returns True if masters were saved."""
+        part_no = self._ctx.current_part_no
+        if not part_no:
+            self._ctx.show_tab_requested.emit("Job Change")
+            self._ctx.status.emit("Pick or scan a job — masters are saved per job.")
+            return False
+        dialog = MasterDialog(self._ctx.masters, part_no, self._current_roi_crop,
+                              lambda then: self.ensure_live(then, "Starting camera for masters..."),
+                              parent=self)
+        accepted = dialog.exec() == MasterDialog.Accepted
+        if accepted:
+            self._ctx.set_masters(dialog.entries, save_to_job=True)
+            self._ctx.status.emit(f"Masters saved to job {part_no}: {len(self._ctx.masters)} set.")
+        self.end_preview()
+        return accepted
+
+    def _autocapture_dir(self) -> Path:
+        return autocapture_part_dir(self._ctx.current_part_no)
+
+    @Slot(bool)
+    def _on_autocapture_toggled(self, checked: bool) -> None:
+        if checked:
+            settings = self._ctx.settings
+            gate = AutoCaptureGate(
+                threshold=settings["autocapture_threshold"],
+                interval_s=settings["autocapture_interval_ms"] / 1000,
+                max_images=settings["autocapture_max_images"],
+                count=count_images(self._autocapture_dir()),
+                require_clear=settings["autocapture_wait_clear"],
+            )
+            if not self._ctx.masters or not self._live or self._preview:
+                # Missing a step: uncheck for now, do the step, then come back.
+                self.autocapture_button.blockSignals(True)
+                self.autocapture_button.setChecked(False)
+                self.autocapture_button.blockSignals(False)
+                if not self._ctx.masters:
+                    if self._open_master_dialog() and self._ctx.masters:
+                        self.autocapture_button.setChecked(True)
+                else:
+                    self.ensure_live(lambda: self.autocapture_button.setChecked(True),
+                                     "Starting camera for Auto Capture...", preview=False)
+                return
+            problem = None
+            if gate.full:
+                problem = (f"Auto capture folder is full ({gate.count}/{gate.max_images}). "
+                           "Raise the limit in Settings or move the images.")
+            if problem:
+                self._ctx.status.emit(problem)
+                self.autocapture_button.setChecked(False)
+                return
+            self._autocapture_gate = gate
+            self._ctx.status.emit(
+                f"Auto capture on: saving to {autocapture_images_dir(self._ctx.current_part_no)}")
+        elif self._autocapture_gate is not None:
+            self._ctx.status.emit(f"Auto capture off ({self._autocapture_gate.count} images).")
+            self._autocapture_gate = None
+        self._refresh_autocapture_button()
+
+    def _refresh_autocapture_button(self) -> None:
+        gate = self._autocapture_gate
+        if gate is not None:
+            self.autocapture_button.setText(f"Auto {gate.count}/{gate.max_images}")
+            self.autocapture_button.setToolTip(
+                "Saved — waiting for the part to leave" if gate.waiting else "Auto capture on")
+            self.autocapture_button.setIcon(make_icon("autocapture", "#1a1a1a"))
+            self.autocapture_button.setStyleSheet(
+                f"QPushButton {{ background: {gloss_gradient('#ffcf73', '#f0a020', '#c07a10')};"
+                " color: #1a1a1a; font-weight: 700; }")
+        else:
+            self.autocapture_button.setText("Auto")
+            self.autocapture_button.setToolTip("Auto capture: save frames that match a master")
+            self.autocapture_button.setIcon(make_icon("autocapture", "#e0e0e0"))
+            self.autocapture_button.setStyleSheet("")
+
+    def _match_masters(self, image: QImage, detections: list) -> None:
+        """Per frame while the job has masters: outline the nearest master
+        thumbnail, and run auto capture if it is on."""
+        crop = self._roi_crop(image)
+        frame_hash = image_hash(qimage_to_array(crop))
+        masters = self._ctx.masters
+        nearest, distance = AutoCaptureGate.nearest(frame_hash, masters)
+        threshold = self._ctx.settings["autocapture_threshold"]
+        index = next(i for i, m in enumerate(masters) if m is nearest)
+        self.master_strip.set_match(index, distance <= threshold)
+        if self._autocapture_gate is not None:
+            self._autocapture_step(crop, frame_hash)
+
+    def _autocapture_step(self, crop: QImage, frame_hash: int) -> None:
+        gate = self._autocapture_gate
+        now = time.monotonic()
+        waiting = gate.waiting
+        master = gate.check(frame_hash, self._ctx.masters, now)
+        if waiting and not gate.waiting:
+            self._refresh_autocapture_button()  # part left: tooltip back to armed
+        if master is None:
+            return
+        number = next(i for i, m in enumerate(self._ctx.masters) if m is master) + 1
+        images_dir = autocapture_images_dir(self._ctx.current_part_no)
+        try:
+            images_dir.mkdir(parents=True, exist_ok=True)
+            # No label file: boxes are drawn by hand in the Train tab.
+            if not crop.save(str(images_dir / f"{capture_stem()}_m{number}.jpg"), "JPG", 95):
+                raise OSError("image write failed")
+        except OSError as exc:
+            self._ctx.status.emit(f"Auto capture save failed: {exc}")
+            self.autocapture_button.setChecked(False)
+            return
+        gate.record_saved(frame_hash, now, master)
+        next_hint = " — remove part for next" if gate.waiting else ""
+        self._ctx.status.emit(f"Auto: master {number} · {gate.count}/{gate.max_images}{next_hint}")
+        if gate.full:
+            self.autocapture_button.setChecked(False)
+            self._ctx.status.emit(f"Auto capture full ({gate.max_images}).")
+        else:
+            self._refresh_autocapture_button()
 
     # --- Per-frame processing -------------------------------------------
 
@@ -518,22 +793,30 @@ class MonitorTab(QWidget):
         detections = self._ctx.filters.apply(detections)  # Use filtered for drawing and table
         self._current_frame_image = image
         self._current_frame_detections = detections
+        self._live = True
 
-        # One cycle = each time the held judgement becomes OK or NG.
-        raw_state = self._ctx.filters.judge(detections)
-        if self._latch.update(raw_state, self._ctx.settings["state_hold_ms"]):
-            self._count_cycle(raw_state)
-        state = self._latch.state
-        self._update_judgement_banner(state)
-        self._ctx.tower.update_state(state)
+        if not self._preview:
+            # One cycle = each time the held judgement becomes OK or NG.
+            raw_state = self._ctx.filters.judge(detections)
+            if self._latch.update(raw_state, self._ctx.settings["state_hold_ms"]):
+                self._count_cycle(raw_state)
+            state = self._latch.state
+            self._update_judgement_banner(state)
+            self._ctx.tower.update_state(state)
 
         pixmap = self._render_frame(image, detections)
         self._current_pixmap = pixmap
         self.video_label.setPixmap(pixmap)
         self._update_class_table(detections)
+        if self._ctx.masters:
+            self._match_masters(image, detections)
         if self._pending_ng_save:
             self._pending_ng_save = False
             self._save_ng_image(pixmap)
+        if self._on_first_frame:
+            pending, self._on_first_frame = self._on_first_frame, []
+            for then in pending:
+                then()
 
     def _render_frame(self, image: QImage, detections: list) -> QPixmap:
         """Frame with the ROI and detection boxes drawn on it (also what the

@@ -9,16 +9,19 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QListWidget,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
+from ..autocapture import autocapture_images_dir
 from ..context import AppContext
-from ..marking.classes import read_classes_file
+from ..marking.classes import read_classes_file, validate_class_name, write_classes_file
 from ..optional_deps import torch
 from ..paths import CAPTURES_IMAGES_DIR, IMAGE_EXTENSIONS
 from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
@@ -41,6 +44,7 @@ class TrainTab(QWidget):
         self._train_boxes: list = []
         self._train_selected_box_index: int = -1
         self._dataset_classes: Optional[list] = None
+        self._dataset_root: Optional[Path] = None
         self._training_worker: Optional[TrainingWorker] = None
 
         self.train_model_label = QLabel("No model selected")
@@ -75,6 +79,10 @@ class TrainTab(QWidget):
         self.train_draw_button.toggled.connect(self.train_image_widget.set_draw_mode)
         self.train_delete_button = QPushButton("Delete Box")
         self.train_delete_button.clicked.connect(self._on_train_delete)
+        self.add_class_button = QPushButton("+ Add Class")
+        self.add_class_button.clicked.connect(self._on_add_class)
+        self.rename_class_button = QPushButton("Rename")
+        self.rename_class_button.clicked.connect(self._on_rename_class)
 
         self.train_start_button = QPushButton("Start Training")
         self.train_start_button.setIcon(make_icon("play"))
@@ -138,6 +146,15 @@ class TrainTab(QWidget):
         correction_layout.addWidget(self.train_selected_label)
         correction_layout.addWidget(class_caption)
         correction_layout.addWidget(self.train_class_combo)
+        class_row = QHBoxLayout()
+        class_row.addWidget(self.add_class_button)
+        class_row.addWidget(self.rename_class_button)
+        correction_layout.addLayout(class_row)
+        classes_hint = QLabel("Classes are saved with this dataset (classes.txt).")
+        classes_hint.setObjectName("panelText")
+        classes_hint.setWordWrap(True)
+        classes_hint.setStyleSheet("font-size: 9pt; color: #4a525c;")
+        correction_layout.addWidget(classes_hint)
         correction_layout.addWidget(self.train_confirm_button)
         edit_row = QHBoxLayout()
         edit_row.addWidget(self.train_draw_button)
@@ -184,11 +201,84 @@ class TrainTab(QWidget):
             self.train_class_combo.addItem(class_name)
         self.train_class_combo.blockSignals(False)
 
+    # --- Class list (add / rename) ---------------------------------------
+
+    def _ensure_dataset(self) -> bool:
+        """Classes are saved with a dataset: pick one first if none is open."""
+        if self._dataset_root is None:
+            self.train_status_label.setText("Choose the dataset folder (its images folder).")
+            self._select_train_folder()
+        return self._dataset_root is not None
+
+    def _ask_class_name(self, title: str, text: str, others: list) -> Optional[str]:
+        """Asks until the name is valid against `others`; None if cancelled."""
+        while True:
+            name, ok = QInputDialog.getText(self, title, "Class name:", text=text)
+            if not ok:
+                return None
+            problem = validate_class_name(name, others)
+            if problem is None:
+                return name.strip()
+            self.train_status_label.setText(problem)
+            text = name
+
+    def _write_classes(self, names: list, select: str) -> None:
+        """Saves the class list to classes.txt and shows it everywhere. IDs
+        are positions, so existing label files keep their meaning."""
+        write_classes_file(self._dataset_root, names)
+        self._dataset_classes = names
+        self._populate_class_combo(names)
+        self.train_class_combo.setCurrentText(select)
+        for box in self._train_boxes:
+            if 0 <= box["cls_id"] < len(names):
+                box["class_name"] = names[box["cls_id"]]
+        if self._train_current_index >= 0:
+            self.train_image_widget.set_image(self.train_image_widget.pixmap(), self._train_boxes)
+            self.train_image_widget.set_selected_index(self._train_selected_box_index)
+            if self._train_selected_box_index >= 0:
+                box = self._train_boxes[self._train_selected_box_index]
+                self.train_selected_label.setText(f"Selected box: {box['class_name']}")
+
+    @Slot()
+    def _on_add_class(self) -> None:
+        if not self._ensure_dataset():
+            return
+        names = list(self._classes)  # model classes in ID order if no classes.txt yet
+        name = self._ask_class_name("Add Class", "", names)
+        if name is None:
+            return
+        self._write_classes(names + [name], select=name)
+        self.train_status_label.setText(
+            f'Added class "{name}" (id {len(names)}) — saved to classes.txt; retrain to use it.')
+
+    @Slot()
+    def _on_rename_class(self) -> None:
+        names = list(self._classes)
+        old = self.train_class_combo.currentText()
+        if old not in names:
+            self.train_status_label.setText("Add a class first.")
+            self._on_add_class()
+            return
+        if not self._ensure_dataset():
+            return
+        index = names.index(old)
+        name = self._ask_class_name("Rename Class", old, names[:index] + names[index + 1:])
+        if name is None or name == old:
+            return
+        names[index] = name
+        self._write_classes(names, select=name)
+        self.train_status_label.setText(f'Renamed "{old}" → "{name}" — labels unchanged.')
+
     # --- Dataset browsing and box correction ----------------------------
 
     @Slot()
     def _select_train_folder(self) -> None:
-        default_dir = str(CAPTURES_IMAGES_DIR) if CAPTURES_IMAGES_DIR.exists() else ""
+        # The job's auto captures first: they are what is waiting to be labelled.
+        auto_dir = autocapture_images_dir(self._ctx.current_part_no) if self._ctx.current_part_no else None
+        if auto_dir is not None and auto_dir.is_dir():
+            default_dir = str(auto_dir)
+        else:
+            default_dir = str(CAPTURES_IMAGES_DIR) if CAPTURES_IMAGES_DIR.exists() else ""
         folder = QFileDialog.getExistingDirectory(self, "Select Image Folder", default_dir)
         if folder:
             self.scan_train_folder(Path(folder))
@@ -199,6 +289,7 @@ class TrainTab(QWidget):
         self.train_folder_label.setText(str(Path(*images_dir.parts[-2:])))
         self.train_folder_label.setToolTip(str(images_dir))
 
+        self._dataset_root = images_dir.parent
         self._dataset_classes = read_classes_file(images_dir.parent)
         self._populate_class_combo(self._classes)
 
@@ -360,17 +451,39 @@ class TrainTab(QWidget):
     @Slot()
     def _start_training(self) -> None:
         ctx = self._ctx
-        if ctx.worker.isRunning():
-            self.train_status_label.setText("Stop the Monitor stream before starting training.")
-            return
         if self._training_worker is not None and self._training_worker.isRunning():
             self.train_status_label.setText("Training already in progress.")
             return
+        # Missing steps are done for the user (pick model / folder, stop the
+        # camera) rather than reported, then training carries on.
         if ctx.model_path is None:
-            self.train_status_label.setText("Load a model first.")
-            return
+            self.train_status_label.setText("Choose the model to train from.")
+            ctx.model_pick_requested.emit()
+            if ctx.model_path is None:
+                self.train_status_label.setText("Training needs a model (.pt) to start from.")
+                return
         if not any(label_path.exists() for _, label_path in self._train_pairs):
-            self.train_status_label.setText("Select a folder with labelled images first.")
+            self.train_status_label.setText("Choose a folder with labelled images.")
+            self._select_train_folder()
+            if not any(label_path.exists() for _, label_path in self._train_pairs):
+                self.train_status_label.setText(
+                    "No labelled images in that folder — draw boxes or pick another folder.")
+                return
+        if ctx.worker.isRunning():
+            answer = QMessageBox.question(
+                self, "Start Training",
+                "Training needs the GPU, so monitoring will stop.\n\nStop monitoring and start training?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+            if answer != QMessageBox.Yes:
+                return
+
+            def start_when_stopped() -> None:
+                ctx.worker.finished.disconnect(start_when_stopped)
+                self._start_training()
+
+            ctx.worker.finished.connect(start_when_stopped)
+            self.train_status_label.setText("Stopping monitoring...")
+            ctx.stop_stream_requested.emit()
             return
 
         images_dir = self._train_pairs[0][0].parent

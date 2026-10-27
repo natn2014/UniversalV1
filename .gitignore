@@ -8,5 +8,6 @@ app_settings.json
 part_configs/.last_part
 ng_logs/
 captures/
+_autocapture_/
 runs/
 .ui_assets/

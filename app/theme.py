@@ -283,6 +283,16 @@ QLabel#panelHeader {{
     font-weight: 700;
     padding: 6px 10px;
 }}
+QLabel#masterCaption {{
+    color: #1a1d22;
+    font-size: 9pt;
+}}
+QPushButton#masterEmpty {{
+    color: #4a525c;
+    background: transparent;
+    border: 1px dashed #8a939d;
+    border-radius: 3px;
+}}
 QFrame#sidePanel QTableWidget {{
     background-color: #d5d9de;
     alternate-background-color: #c8cdd3;
@@ -414,6 +424,27 @@ def make_icon(kind: str, color: str = "#ffffff") -> QIcon:
         painter.drawRoundedRect(QRectF(2.5, 6, 15, 10), 2, 2)
         painter.drawRect(QRectF(7, 3.5, 6, 2.5))
         painter.drawEllipse(QPointF(10, 11), 3, 3)
+    elif kind == "autocapture":
+        # Camera with a small "A" badge: captures on its own.
+        painter.setPen(stroke)
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(QRectF(1.5, 6, 12, 9), 2, 2)
+        painter.drawEllipse(QPointF(7.5, 10.5), 2.5, 2.5)
+        painter.drawLine(QPointF(15, 17), QPointF(16.75, 11))
+        painter.drawLine(QPointF(16.75, 11), QPointF(18.5, 17))
+        painter.drawLine(QPointF(15.6, 15), QPointF(17.9, 15))
+    elif kind == "master":
+        # Picture frame with a star: the reference image.
+        painter.setPen(stroke)
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(QRectF(2.5, 3.5, 15, 13), 1.5, 1.5)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(fill)
+        painter.drawPolygon(QPolygonF([
+            QPointF(10, 6), QPointF(11.2, 8.8), QPointF(14.2, 9), QPointF(11.9, 10.9),
+            QPointF(12.6, 13.9), QPointF(10, 12.3), QPointF(7.4, 13.9), QPointF(8.1, 10.9),
+            QPointF(5.8, 9), QPointF(8.8, 8.8),
+        ]))
     elif kind == "close":
         pen = QPen(fill, 2.4)
         pen.setCapStyle(Qt.RoundCap)

@@ -18,6 +18,9 @@ NO_PART_NAME = "No Part"
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp"}
 
 PART_CONFIGS_DIR = ROOT_DIR / "part_configs"
+# Auto capture (app/autocapture.py): dataset per part, master images per job.
+AUTOCAPTURE_DIR = ROOT_DIR / "_autocapture_"
+MASTERS_DIR = PART_CONFIGS_DIR / "masters"
 LAST_PART_FILE = PART_CONFIGS_DIR / ".last_part"
 APP_SETTINGS_FILE = ROOT_DIR / "app_settings.json"
 _SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")

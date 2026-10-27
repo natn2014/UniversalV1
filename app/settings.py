@@ -17,6 +17,14 @@ DEFAULT_APP_SETTINGS = {
     # OK/NG cycle counters, persisted so a kiosk restart doesn't lose them.
     "ok_count": 0,
     "ng_count": 0,
+    # Auto capture: stop at this many images per part, save when the frame
+    # is within this many bits (of 64) of a master, at most once per interval.
+    "autocapture_max_images": 200,
+    "autocapture_threshold": 10,
+    "autocapture_interval_ms": 1000,
+    # After a save, wait until no master matches (part removed) before the
+    # next one, so one part held in view is saved once, not every interval.
+    "autocapture_wait_clear": True,
 }
 
 

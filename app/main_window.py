@@ -42,6 +42,10 @@ class MainWindow(QWidget):
         self.monitor_tab.ng_saved.connect(self.log_tab.mark_dirty)
         self.log_tab.image_requested.connect(lambda path, caption: self.image_overlay.show_image(path, caption))
 
+        self.ctx.show_tab_requested.connect(self._show_tab)
+        self.ctx.stop_stream_requested.connect(self.monitor_tab.stop_stream)
+        self._resume_stream_after_scan = False
+
         self.tabs = QTabWidget()
         self.tabs.addTab(self.monitor_tab, "Monitor")
         self.tabs.addTab(self.settings_tab, "Settings")
@@ -103,14 +107,38 @@ class MainWindow(QWidget):
 
     # --- Barcode scanning -----------------------------------------------
 
+    @Slot(str)
+    def _show_tab(self, title: str) -> None:
+        for i in range(self.tabs.count()):
+            if self.tabs.tabText(i) == title:
+                self.tabs.setCurrentIndex(i)
+                return
+
     @Slot()
     def _open_barcode_scan_dialog(self) -> None:
-        if self.ctx.worker.isRunning():
-            self.ctx.status.emit("Stop the Monitor stream before scanning a barcode (camera is in use).")
+        if self._barcode_dialog is not None:
+            return
+        worker = self.ctx.worker
+        if worker.isRunning():
+            # The scanner needs the camera: stop monitoring, open the scanner
+            # once the camera is free, resume when the scanner closes.
+            self._resume_stream_after_scan = not self.monitor_tab.in_preview
+            self.ctx.status.emit("Pausing monitoring for the barcode scanner...")
+
+            def reopen() -> None:
+                worker.finished.disconnect(reopen)
+                self._open_barcode_scan_dialog()
+
+            worker.finished.connect(reopen)
+            self.monitor_tab.stop_stream()
             return
         index = self.ctx.camera_index
         if index is None:
-            self.ctx.status.emit("Select a valid camera.")
+            self.ctx.camera_scan_requested.emit()
+            index = self.ctx.camera_index
+        if index is None:
+            self.ctx.status.emit("No camera found — check the USB cable.")
+            self._resume_stream_after_scan = False
             return
 
         self._barcode_dialog = BarcodeScanDialog(int(index), parent=self)
@@ -121,6 +149,9 @@ class MainWindow(QWidget):
 
     def _on_barcode_dialog_finished(self) -> None:
         self._barcode_dialog = None
+        if self._resume_stream_after_scan:
+            self._resume_stream_after_scan = False
+            self.monitor_tab.start_stream()
 
     @Slot(str)
     def _on_part_load_requested(self, part_no: str) -> None:
