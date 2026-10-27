@@ -259,7 +259,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - With `mm_per_px = 0.1` → 4.0 mm.
   - A blank ROI gives not found.
 
-### [ ] T15 `EdgePresenceTool` (kind `edge_presence`)
+### [x] T15 `EdgePresenceTool` (kind `edge_presence`)
 - **IV4:** Edge Presence: is there an edge in the scan area?
 - **How it works:** take the profile and gradient. The value is the max |gradient| that matches the polarity; OK when `≥ low`, with `low=threshold` by default.
 - **Params:** `direction="x"`, `polarity="any"`, `smooth=1.0`, `pre=[]`.

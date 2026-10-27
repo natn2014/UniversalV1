@@ -74,3 +74,23 @@ class WidthTool(ScanTool):
         res.overlay = [self.edge_line(e1, patch, res.ok), self.edge_line(e2, patch, res.ok),
                        overlay_item("line", dim, res.ok, text)]
         return res
+
+
+@register("edge_presence")
+class EdgePresenceTool(ScanTool):
+    """Strength of the strongest edge of the wanted polarity; OK when it
+    reaches `low` (default 20 gray levels per px)."""
+
+    PARAMS = {"direction": "x", "polarity": "any", "smooth": 1.0}
+    DEFAULT_LOW = 20.0
+
+    def process(self, patch, origin):
+        g = gradient(self.scan(patch), self.smooth)
+        if len(g) == 0:
+            return self.fail("empty ROI")
+        signed = {"rising": g, "falling": -g}.get(self.polarity, np.abs(g))
+        i = int(np.argmax(signed))
+        value = max(float(signed[i]), 0.0)
+        res = self.result(value, extra={"position": i + 0.5})
+        res.overlay = [self.edge_line(i + 0.5, patch, res.ok, f"{value:.0f}")]
+        return res

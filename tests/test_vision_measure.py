@@ -3,7 +3,7 @@ import unittest
 import cv2
 import numpy as np
 
-from app.vision.measure import WidthTool
+from app.vision.measure import EdgePresenceTool, WidthTool
 
 
 def bar_frame(width=40, x=100, size=(100, 300), noise=0.0, seed=0):
@@ -56,6 +56,27 @@ class Width(unittest.TestCase):
     def test_polarity_requirements(self):
         self.assertAlmostEqual(WidthTool(polarity_1="rising", polarity_2="falling").run(bar_frame()).value, 40, delta=0.5)
         self.assertFalse(WidthTool(polarity_1="falling", polarity_2="rising").run(bar_frame()).ok)
+
+
+class EdgePresence(unittest.TestCase):
+    def test_step_is_ok(self):
+        res = EdgePresenceTool().run(bar_frame())
+        self.assertTrue(res.ok)
+        self.assertGreater(res.value, 20)
+
+    def test_flat_is_ng(self):
+        res = EdgePresenceTool().run(np.full((100, 300, 3), 90, np.uint8))
+        self.assertFalse(res.ok)
+        self.assertAlmostEqual(res.value, 0, delta=0.5)
+
+    def test_wrong_polarity_is_ng(self):
+        img = np.full((100, 300), 40, np.uint8)
+        img[:, 150:] = 200  # only a rising edge
+        self.assertTrue(EdgePresenceTool(polarity="rising").run(img).ok)
+        self.assertFalse(EdgePresenceTool(polarity="falling").run(img).ok)
+
+    def test_custom_low(self):
+        self.assertFalse(EdgePresenceTool(low=500).run(bar_frame()).ok)
 
 
 if __name__ == "__main__":

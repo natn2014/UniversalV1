@@ -24,8 +24,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T11 | Edge Pixels | done | 738afe1 |
 | T12 | Shading Uniformity | done | ab0dc26 |
 | T13 | Edge-profile core | done | 08fa916 |
-| T14 | Width | done | |
-| T15 | Edge Presence | todo | |
+| T14 | Width | done | b903d42 |
+| T15 | Edge Presence | done | |
 | T16 | Pitch | todo | |
 | T17 | Diameter | todo | |
 | T18 | mm calibration | todo | |
@@ -182,4 +182,10 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - Shared `ScanTool` base (scan, mm scaling via runtime `mm_per_px`, edge line overlay) for Width / Edge Presence / Pitch. The value is in mm only when the runner has set `mm_per_px`.
   - Pairing: `outer` = first edge matching `polarity_1` and last matching `polarity_2`; `strongest` = the two strongest edges by position, which must match both polarities; `first_rising_falling` as in the spec.
   - Overlay is two edge lines plus a dimension line labelled with the value (a `line` item).
+- Commit: b903d42
+
+### T15 Edge Presence: done  (2026-10-27)
+- Files: app/vision/measure.py, tests/test_vision_measure.py
+- Tests added: 4  ·  Suite: 195/195 passing
+- Decisions / deviations from the TODO: none. The default `low` is 20 (gray levels per px of smoothed gradient), matching Width's default threshold; there is no separate `threshold` param, `low` is the threshold.
 - Commit: pending
