@@ -226,7 +226,7 @@ Progress is logged in [develop_record.md](develop_record.md).
 
 ## Phase 3: Measurement
 
-### [ ] T13 `app/vision/edges.py`: edge-profile core
+### [x] T13 `app/vision/edges.py`: edge-profile core
 - **IV4:** The shared engine behind Width, Edge Presence and Pitch.
 - **How it works:**
   - `profile(gray_patch, direction="x")` gives the mean along the other axis, so a horizontal scan averages the rows into a 1-D array of length w.

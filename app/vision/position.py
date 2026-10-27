@@ -12,6 +12,7 @@ import cv2
 import numpy as np
 
 from ..roi import roi_to_pixels
+from .edges import find_edges
 from .base import Offset, Tool, ToolResult, overlay_item, register, rotate_points
 
 REFINE_PX = 4  # full-scale search window around the coarse hit
@@ -52,16 +53,12 @@ def _rotated(templ: np.ndarray, angle: float) -> np.ndarray:
 def _strongest_edge(profile: np.ndarray, sign: int = 0) -> Optional[Tuple[float, float, int]]:
     """(position, strength, sign) of the steepest step in a 1-D profile.
     sign 0 = either direction, +1 rising only, -1 falling only."""
-    p = cv2.GaussianBlur(profile.astype(np.float32).reshape(1, -1), (0, 0), 1.5).ravel()
-    g = np.gradient(p)
-    score = np.abs(g) if sign == 0 else g * sign
-    i = int(np.argmax(score))
-    if score[i] <= 0:
+    polarity = {1: "rising", -1: "falling"}.get(sign, "any")
+    edges = find_edges(profile, threshold=1e-6, polarity=polarity, min_distance=1, smooth=1.5)
+    if not edges:
         return None
-    pos = float(i)
-    if 0 < i < len(g) - 1:
-        pos += _parabola(abs(g[i - 1]), abs(g[i]), abs(g[i + 1]))
-    return pos, float(score[i]), 1 if g[i] > 0 else -1
+    pos, strength = max(edges, key=lambda e: abs(e[1]))
+    return pos, abs(strength), 1 if strength > 0 else -1
 
 
 @register("position")

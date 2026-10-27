@@ -22,8 +22,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T09 | Area (mono) | done | c74942d |
 | T10 | Brightness Average | done | 738afe1 |
 | T11 | Edge Pixels | done | 738afe1 |
-| T12 | Shading Uniformity | done | |
-| T13 | Edge-profile core | todo | |
+| T12 | Shading Uniformity | done | ab0dc26 |
+| T13 | Edge-profile core | done | |
 | T14 | Width | todo | |
 | T15 | Edge Presence | todo | |
 | T16 | Pitch | todo | |
@@ -163,4 +163,14 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - Files: app/vision/brightness.py, tests/test_vision_brightness.py
 - Tests added: 4  ·  Suite: 174/174 passing
 - Decisions / deviations from the TODO: none. The darkest and brightest cells are `mask_box` overlays labelled `min N` / `max N`; `extra` has `cells`, `argmin`, `argmax` as [row, col]. The ramp with `flat_field` (kernel 51) drops below 10.
+- Commit: ab0dc26
+
+### T13 Edge-profile core: done  (2026-10-27)
+- Files: app/vision/edges.py, app/vision/position.py (1-axis modes now use `find_edges`), tests/test_vision_edges.py
+- Tests added: 9  ·  Suite: 183/183 passing
+- Decisions / deviations from the TODO:
+  - Positions are in pixel-edge coordinates (a sharp step between pixel 39 and 40 is at 40.0), so the spec's "step at x = 40.0 gives 40 +- 0.2" holds. Widths and pitches are differences, so they are unaffected.
+  - `find_edges` returns `(position, signed strength)`: positive for rising, negative for falling (Width needs the sign). `threshold` applies to the magnitude. It has an extra `smooth=1.0` argument.
+  - A central-difference gradient merges two steps closer than about 3 px into one plateau, so the "2 px apart" case is merged by the gradient itself; the min_distance behaviour is tested with steps 4 px apart (kept at min_distance 3, merged at 6).
+  - Replaced T03's private edge finder in position.py with `find_edges` (the T03 note is now resolved).
 - Commit: pending
