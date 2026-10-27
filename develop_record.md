@@ -25,8 +25,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T12 | Shading Uniformity | done | ab0dc26 |
 | T13 | Edge-profile core | done | 08fa916 |
 | T14 | Width | done | b903d42 |
-| T15 | Edge Presence | done | |
-| T16 | Pitch | todo | |
+| T15 | Edge Presence | done | 78c14b9 |
+| T16 | Pitch | done | |
 | T17 | Diameter | todo | |
 | T18 | mm calibration | todo | |
 | T19 | OCR read | todo | |
@@ -188,4 +188,11 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - Files: app/vision/measure.py, tests/test_vision_measure.py
 - Tests added: 4  ·  Suite: 195/195 passing
 - Decisions / deviations from the TODO: none. The default `low` is 20 (gray levels per px of smoothed gradient), matching Width's default threshold; there is no separate `threshold` param, `low` is the threshold.
+- Commit: 78c14b9
+
+### T16 Pitch: done  (2026-10-27)
+- Files: app/vision/measure.py, tests/test_vision_measure.py
+- Tests added: 5  ·  Suite: 200/200 passing
+- Decisions / deviations from the TODO:
+  - `extra` has `count`, `mean`, `min`, `max` (the last three only with 2 or more edges, scaled to mm when calibrated) and `positions`. `count` is never scaled. A mean/min/max measure with fewer than 2 edges returns ok=False "not enough edges"; count with no edges is value 0.
 - Commit: pending

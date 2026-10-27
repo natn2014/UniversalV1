@@ -94,3 +94,25 @@ class EdgePresenceTool(ScanTool):
         res = self.result(value, extra={"position": i + 0.5})
         res.overlay = [self.edge_line(i + 0.5, patch, res.ok, f"{value:.0f}")]
         return res
+
+
+@register("pitch")
+class PitchTool(ScanTool):
+    """Number and spacing of repeated edges (pins, terminals). With the default
+    rising polarity each pin is counted once. `measure` picks the value."""
+
+    PARAMS = {"direction": "x", "polarity": "rising", "threshold": 20, "measure": "count", "smooth": 1.0}
+
+    def process(self, patch, origin):
+        edges = find_edges(self.scan(patch), self.threshold, self.polarity, smooth=self.smooth)
+        pos = [e[0] for e in edges]
+        gaps = np.diff(pos) if len(pos) > 1 else np.array([])
+        stats = {"count": float(len(pos))}
+        if len(gaps):
+            stats.update(mean=float(gaps.mean()) * self.scale(1), min=float(gaps.min()) * self.scale(1),
+                         max=float(gaps.max()) * self.scale(1))
+        if self.measure not in stats:
+            return self.fail("not enough edges")
+        res = self.result(stats[self.measure], text=f"{len(pos)} edges", extra={**stats, "positions": pos})
+        res.overlay = [self.edge_line(p, patch, res.ok) for p in pos]
+        return res

@@ -3,7 +3,7 @@ import unittest
 import cv2
 import numpy as np
 
-from app.vision.measure import EdgePresenceTool, WidthTool
+from app.vision.measure import EdgePresenceTool, PitchTool, WidthTool
 
 
 def bar_frame(width=40, x=100, size=(100, 300), noise=0.0, seed=0):
@@ -77,6 +77,43 @@ class EdgePresence(unittest.TestCase):
 
     def test_custom_low(self):
         self.assertFalse(EdgePresenceTool(low=500).run(bar_frame()).ok)
+
+
+def bars(n=8, pitch=20, skip=None, size=(60, 240)):
+    img = np.full(size, 30, np.uint8)
+    for i in range(n):
+        if i != skip:
+            img[:, 20 + i * pitch:20 + i * pitch + 10] = 200
+    return img
+
+
+class Pitch(unittest.TestCase):
+    def test_eight_bars(self):
+        res = PitchTool().run(bars())
+        self.assertEqual(res.value, 8)
+        self.assertAlmostEqual(res.extra["mean"], 20, delta=0.3)
+        self.assertEqual(len(res.overlay), 9)
+
+    def test_one_bar_missing(self):
+        res = PitchTool().run(bars(skip=3))
+        self.assertEqual(res.value, 7)
+        self.assertAlmostEqual(res.extra["max"], 40, delta=0.5)
+        self.assertAlmostEqual(res.extra["min"], 20, delta=0.5)
+
+    def test_measure_and_mm(self):
+        tool = PitchTool(measure="mean")
+        tool.mm_per_px = 0.5
+        self.assertAlmostEqual(tool.run(bars()).value, 10, delta=0.2)
+        self.assertAlmostEqual(PitchTool(measure="max").run(bars(skip=3)).value, 40, delta=0.5)
+
+    def test_count_limits(self):
+        self.assertTrue(PitchTool(low=8, high=8).run(bars()).ok)
+        self.assertFalse(PitchTool(low=8, high=8).run(bars(skip=3)).ok)
+
+    def test_too_few_edges(self):
+        res = PitchTool(measure="mean").run(np.full((60, 240), 90, np.uint8))
+        self.assertFalse(res.ok)
+        self.assertEqual(PitchTool().run(np.full((60, 240), 90, np.uint8)).value, 0)
 
 
 if __name__ == "__main__":

@@ -265,7 +265,7 @@ Progress is logged in [develop_record.md](develop_record.md).
 - **Params:** `direction="x"`, `polarity="any"`, `smooth=1.0`, `pre=[]`.
 - **Tests:** a step edge gives OK; a flat ROI gives NG; the wrong polarity gives NG.
 
-### [ ] T16 `PitchTool` (kind `pitch`)
+### [x] T16 `PitchTool` (kind `pitch`)
 - **IV4:** Pitch: the number and spacing of repeated edges, such as pins or terminals.
 - **How it works:**
   - Find the edges with the chosen polarity (default: rising, so each pin is counted once).
