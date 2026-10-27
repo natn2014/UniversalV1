@@ -153,7 +153,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - Teaching on a blue patch, then running, gives about 100% on the blue patch and about 0% on a red one.
   - With the frame 20% brighter, a taught range still gives ≥ 90% of the original value.
 
-### [ ] T07 `ColorAverageTool` (kind `color_average`)
+### [x] T07 `ColorAverageTool` (kind `color_average`)
 - **IV4:** Color Average: compares the mean color with the master.
 - **How it works:**
   - Convert the crop to Lab, as float, scaled to real L*a*b* (OpenCV 8-bit Lab: L × 100/255, a − 128, b − 128).

@@ -14,6 +14,10 @@ from ..roi import roi_to_pixels
 from .base import Offset, Tool, overlay_item, register
 from .preprocess import to_hsv
 
+
+def to_bgr(img: np.ndarray) -> np.ndarray:
+    return cv2.cvtColor(img, cv2.COLOR_GRAY2BGR) if img.ndim == 2 else img
+
 HSV_PARAMS = {"h_lo": 170, "h_hi": 10, "s_lo": 80, "s_hi": 255, "v_lo": 50, "v_hi": 255}
 MIN_HALF_WIDTH = {"h": 8.0, "s": 40.0, "v": 40.0}
 POINT_BOX = 9  # px side of the box sampled around a tapped point
@@ -100,4 +104,67 @@ class ColorAreaTool(HsvTool):
         res = self.result(value, overlay)
         for item in res.overlay:
             item["ok"] = res.ok
+        return res
+
+
+def delta_e_2000(lab1, lab2) -> float:
+    """CIEDE2000 colour difference between two L*a*b* triples (Sharma 2005)."""
+    L1, a1, b1 = (float(v) for v in lab1)
+    L2, a2, b2 = (float(v) for v in lab2)
+    c_bar = (math.hypot(a1, b1) + math.hypot(a2, b2)) / 2.0
+    g = 0.5 * (1 - math.sqrt(c_bar ** 7 / (c_bar ** 7 + 25.0 ** 7)))
+    a1p, a2p = (1 + g) * a1, (1 + g) * a2
+    c1p, c2p = math.hypot(a1p, b1), math.hypot(a2p, b2)
+    h1p = math.degrees(math.atan2(b1, a1p)) % 360 if c1p else 0.0
+    h2p = math.degrees(math.atan2(b2, a2p)) % 360 if c2p else 0.0
+    dL, dC = L2 - L1, c2p - c1p
+    if c1p * c2p == 0:
+        dh = 0.0
+    else:
+        dh = h2p - h1p
+        dh -= 360 * round(dh / 360)
+    dH = 2 * math.sqrt(c1p * c2p) * math.sin(math.radians(dh) / 2)
+    Lp, Cp = (L1 + L2) / 2.0, (c1p + c2p) / 2.0
+    if c1p * c2p == 0:
+        hp = h1p + h2p
+    elif abs(h1p - h2p) <= 180:
+        hp = (h1p + h2p) / 2.0
+    else:
+        hp = (h1p + h2p + (360 if h1p + h2p < 360 else -360)) / 2.0
+    t = (1 - 0.17 * math.cos(math.radians(hp - 30)) + 0.24 * math.cos(math.radians(2 * hp))
+         + 0.32 * math.cos(math.radians(3 * hp + 6)) - 0.20 * math.cos(math.radians(4 * hp - 63)))
+    d_theta = 30 * math.exp(-(((hp - 275) / 25.0) ** 2))
+    rc = 2 * math.sqrt(Cp ** 7 / (Cp ** 7 + 25.0 ** 7))
+    sl = 1 + 0.015 * (Lp - 50) ** 2 / math.sqrt(20 + (Lp - 50) ** 2)
+    sc, sh = 1 + 0.045 * Cp, 1 + 0.015 * Cp * t
+    rt = -math.sin(math.radians(2 * d_theta)) * rc
+    return math.sqrt((dL / sl) ** 2 + (dC / sc) ** 2 + (dH / sh) ** 2 + rt * (dC / sc) * (dH / sh))
+
+
+def mean_lab(bgr: np.ndarray) -> list:
+    """Mean colour of a BGR patch as real L*a*b* (OpenCV 8-bit Lab is L*255/100, a+128, b+128)."""
+    lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.mean(lab)[:3]
+    return [l * 100.0 / 255.0, a - 128.0, b - 128.0]
+
+
+@register("color_average")
+class ColorAverageTool(Tool):
+    """ΔE2000 between the ROI's mean color and the taught master color."""
+
+    PARAMS = {"ref_lab": None}
+    DEFAULT_HIGH = 5.0
+
+    def teach(self, frame: np.ndarray, offset: Optional[Offset] = None, **kw) -> None:
+        patch, _ = self.crop(frame, offset)
+        if patch.size:
+            self.ref_lab = mean_lab(to_bgr(self.prepared(patch)))
+
+    def process(self, patch, origin):
+        if self.ref_lab is None:
+            return self.fail("not taught")
+        lab = mean_lab(to_bgr(self.prepared(patch)))
+        de = delta_e_2000(self.ref_lab, lab)
+        res = self.result(de, extra={"lab": lab})
+        res.text = "L*a*b* " + " ".join(f"{v:.1f}" for v in lab)
         return res

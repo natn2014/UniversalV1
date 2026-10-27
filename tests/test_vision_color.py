@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 from app.vision.base import Offset
-from app.vision.color import ColorAreaTool
+from app.vision.color import ColorAreaTool, ColorAverageTool, delta_e_2000
 
 RED = (0, 0, 220)
 BLUE = (200, 40, 20)
@@ -92,6 +92,44 @@ class ColorArea(unittest.TestCase):
 
     def test_gray_input_does_not_raise(self):
         self.assertTrue(ColorAreaTool().run(np.zeros((100, 100), np.uint8)).value == 0)
+
+
+class ColorAverage(unittest.TestCase):
+    def test_sharma_pairs(self):
+        pairs = [
+            ((50.0, 2.6772, -79.7751), (50.0, 0.0, -82.7485), 2.0425),
+            ((50.0, 3.1571, -77.2803), (50.0, 0.0, -82.7485), 2.8615),
+            ((50.0, 2.8361, -74.0200), (50.0, 0.0, -82.7485), 3.4412),
+            ((50.0, 2.5, 0.0), (73.0, 25.0, -18.0), 27.1492),
+            ((60.2574, -34.0099, 36.2677), (60.4626, -34.1751, 39.4387), 1.2644),
+        ]
+        for lab1, lab2, expected in pairs:
+            self.assertAlmostEqual(delta_e_2000(lab1, lab2), expected, delta=0.01)
+            self.assertAlmostEqual(delta_e_2000(lab2, lab1), expected, delta=0.01)
+
+    def test_same_patch_is_near_zero(self):
+        img = frame_with((60, 120, 180))
+        t = ColorAverageTool()
+        t.teach(img)
+        res = t.run(img)
+        self.assertLess(res.value, 0.5)
+        self.assertTrue(res.ok)
+
+    def test_different_color_fails(self):
+        t = ColorAverageTool()
+        t.teach(frame_with((60, 120, 180)))
+        res = t.run(frame_with((180, 120, 60)))
+        self.assertGreater(res.value, 10)
+        self.assertFalse(res.ok)
+
+    def test_not_taught(self):
+        self.assertFalse(ColorAverageTool().run(frame_with(RED)).ok)
+
+    def test_ref_lab_is_json_safe(self):
+        import json
+        t = ColorAverageTool()
+        t.teach(frame_with(RED))
+        self.assertEqual(len(json.loads(json.dumps(t.to_dict()))["ref_lab"]), 3)
 
 
 if __name__ == "__main__":

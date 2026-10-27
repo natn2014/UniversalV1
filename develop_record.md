@@ -16,8 +16,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T03 | Position Adjustment | done | 51e92af |
 | T04 | Total judgement | done | d0cf1b0 |
 | T05 | Save tools in job | done | 05392cb |
-| T06 | Color Area | done | |
-| T07 | Color Average (ΔE2000) | todo | |
+| T06 | Color Area | done | cccfc85 |
+| T07 | Color Average (ΔE2000) | done | |
 | T08 | Color Prohibit | todo | |
 | T09 | Area (mono) | todo | |
 | T10 | Brightness Average | todo | |
@@ -119,4 +119,12 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - `open_px` is the opening kernel size in px (values below 2 do nothing).
   - `teach(frame, point=(x, y) | teach_roi=(fractions))`; default samples the tool's own ROI.
   - Brightness test uses a mid-brightness color (V about 120): the minimum V half-width of 40 would not cover +20% on V=220.
+- Commit: cccfc85
+
+### T07 Color Average: done  (2026-10-27)
+- Files: app/vision/color.py, tests/test_vision_color.py
+- Tests added: 5  ·  Suite: 154/154 passing
+- Decisions / deviations from the TODO:
+  - `delta_e_2000` is pure Python `math` on one pair (not vectorised): it is called once per frame on the mean color. Checked against 5 Sharma 2005 pairs (2 more than asked), in both argument orders, within 0.01.
+  - `result.text` shows the measured L*a*b*; `extra["lab"]` holds the floats.
 - Commit: pending
