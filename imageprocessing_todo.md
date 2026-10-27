@@ -99,7 +99,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - The 1-axis x mode finds a step edge shifted by 9 px.
 - **Done when:** the offset is accurate in the tests, and a frame at 1280×720 with a search area of about 400×300 px runs in under 5 ms with `angle_range=0`.
 
-### [ ] T04 `app/vision/total.py`: total judgement
+### [x] T04 `app/vision/total.py`: total judgement
 - **IV4:** The Total tool combines the tool results with AND/OR.
 - **How it works:**
   - `total_state(results: list[ToolResult], yolo_state: Optional[str], gate="AND", position_found=True) -> "GREEN"|"RED"|"YELLOW"`.

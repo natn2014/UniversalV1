@@ -13,8 +13,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 |---|---|---|---|
 | T01 | vision/base.py framework | done | b0a612c |
 | T02 | preprocess / shading correction | done | e6873c4 |
-| T03 | Position Adjustment | done | |
-| T04 | Total judgement | todo | |
+| T03 | Position Adjustment | done | 51e92af |
+| T04 | Total judgement | done | |
 | T05 | Save tools in job | todo | |
 | T06 | Color Area | todo | |
 | T07 | Color Average (ΔE2000) | todo | |
@@ -88,4 +88,12 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - The half-scale pyramid is used only when the template is at least 32 px per side; smaller templates are matched at full scale.
   - Angle convention: positive = counter-clockwise on screen, the same as `cv2.getRotationMatrix2D` and `rotate_points`.
   - The speed test allows 15 ms so a busy box does not make it flaky.
+- Commit: 51e92af
+
+### T04 Total judgement: done  (2026-10-27)
+- Files: app/vision/total.py, app/vision/__init__.py, tests/test_vision_total.py
+- Tests added: 7  ·  Suite: 129/129 passing
+- Decisions / deviations from the TODO:
+  - "Ignores disabled tools" is met by the runner (T24) not returning results for disabled tools; `total_state` itself has no notion of enabled.
+  - Results of kind `position` are left out of the AND/OR; they feed `position_found` instead (a lost part is YELLOW, not RED).
 - Commit: pending
