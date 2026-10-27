@@ -241,7 +241,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - Polarity filtering works.
   - Two edges 2 px apart with `min_distance=3` give 1 edge.
 
-### [ ] T14 `app/vision/measure.py` `WidthTool` (kind `width`)
+### [x] T14 `app/vision/measure.py` `WidthTool` (kind `width`)
 - **IV4:** Width: the distance between two edges.
 - **How it works:**
   - Apply `pre` to the crop and build the profile along `direction`.

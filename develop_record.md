@@ -23,8 +23,8 @@ entries go at the bottom. Do not edit old entries; add a correction entry instea
 | T10 | Brightness Average | done | 738afe1 |
 | T11 | Edge Pixels | done | 738afe1 |
 | T12 | Shading Uniformity | done | ab0dc26 |
-| T13 | Edge-profile core | done | |
-| T14 | Width | todo | |
+| T13 | Edge-profile core | done | 08fa916 |
+| T14 | Width | done | |
 | T15 | Edge Presence | todo | |
 | T16 | Pitch | todo | |
 | T17 | Diameter | todo | |
@@ -173,4 +173,13 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - `find_edges` returns `(position, signed strength)`: positive for rising, negative for falling (Width needs the sign). `threshold` applies to the magnitude. It has an extra `smooth=1.0` argument.
   - A central-difference gradient merges two steps closer than about 3 px into one plateau, so the "2 px apart" case is merged by the gradient itself; the min_distance behaviour is tested with steps 4 px apart (kept at min_distance 3, merged at 6).
   - Replaced T03's private edge finder in position.py with `find_edges` (the T03 note is now resolved).
+- Commit: 08fa916
+
+### T14 Width: done  (2026-10-27)
+- Files: app/vision/measure.py, app/vision/__init__.py, tests/test_vision_measure.py
+- Tests added: 8  ·  Suite: 191/191 passing
+- Decisions / deviations from the TODO:
+  - Shared `ScanTool` base (scan, mm scaling via runtime `mm_per_px`, edge line overlay) for Width / Edge Presence / Pitch. The value is in mm only when the runner has set `mm_per_px`.
+  - Pairing: `outer` = first edge matching `polarity_1` and last matching `polarity_2`; `strongest` = the two strongest edges by position, which must match both polarities; `first_rising_falling` as in the spec.
+  - Overlay is two edge lines plus a dimension line labelled with the value (a `line` item).
 - Commit: pending
