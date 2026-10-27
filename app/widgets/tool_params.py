@@ -3,6 +3,7 @@
 from typing import Dict, Optional
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -11,16 +12,19 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
     QScrollArea,
+    QScroller,
     QSizePolicy,
     QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
+from ..paths import ROOT_DIR
 from ..vision.base import Tool
 from .layout import bottom_bar, make_card, top_bar
 
@@ -43,14 +47,83 @@ CATEGORIES = [
     ("Pattern & Count", ["outline", "blob_count"]),
 ]
 HSV_KINDS = {"color_area", "color_prohibit", "blob_count"}
+# The case each tool suits, shown under its tile with an example picture
+# (drawn by tools/make_tool_thumbs.py).
+KIND_USES = {
+    "position": "Follow a part that moves or turns",
+    "color_area": "Right wire color is there",
+    "color_average": "Cap / LED / label is the taught color",
+    "color_prohibit": "No stain or foreign color",
+    "area": "Terminal or part present (bright / dark)",
+    "brightness": "LED on, lamp lit",
+    "edge_pixels": "Print or label present",
+    "shading": "Dent, scratch or uneven surface",
+    "width": "Strip length, wire or gap size",
+    "edge_presence": "Terminal fully inserted",
+    "pitch": "Pin spacing, bent pins",
+    "diameter": "Hole or ring size",
+    "ocr": "Read lot / date / part text",
+    "code": "Read QR or barcode label",
+    "outline": "Right part shape",
+    "blob_count": "Count terminals, find a missing one",
+}
+THUMBS_DIR = ROOT_DIR / "app" / "assets" / "tool_thumbs"
+THUMB_WIDTH, THUMB_HEIGHT = 192, 120
 
 
 def kind_title(kind: str) -> str:
     return KIND_LABELS.get(kind, kind).replace("\n", " ")
 
 
+def kind_thumbnail(kind: str) -> QPixmap:
+    """Example picture of the case the tool suits; null if it is missing."""
+    pixmap = QPixmap(str(THUMBS_DIR / f"{kind}.png"))
+    if pixmap.isNull():
+        return pixmap
+    return pixmap.scaled(THUMB_WIDTH, THUMB_HEIGHT, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+
+class ToolTile(QPushButton):
+    """Touch tile: example picture, tool name and what it is for."""
+
+    def __init__(self, kind: str, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("toolTile")
+        self.setAccessibleName(kind_title(kind))
+        self.setToolTip(KIND_USES.get(kind, ""))
+        self.picture = QLabel()
+        self.picture.setAlignment(Qt.AlignCenter)
+        self.picture.setFixedSize(THUMB_WIDTH, THUMB_HEIGHT)
+        pixmap = kind_thumbnail(kind)
+        if pixmap.isNull():
+            self.picture.hide()
+        else:
+            self.picture.setPixmap(pixmap)
+        title = QLabel(kind_title(kind))
+        title.setObjectName("toolTileTitle")
+        use = QLabel(KIND_USES.get(kind, ""))
+        use.setObjectName("toolTileUse")
+        use.setWordWrap(True)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(4)
+        picture_row = QHBoxLayout()
+        picture_row.addStretch(1)
+        picture_row.addWidget(self.picture)
+        picture_row.addStretch(1)
+        layout.addLayout(picture_row)
+        layout.addWidget(title)
+        layout.addWidget(use)
+        layout.addStretch(1)
+        for label in (self.picture, title, use):
+            label.setAttribute(Qt.WA_TransparentForMouseEvents)
+        self.setMinimumHeight(THUMB_HEIGHT + 90)
+        self.setMinimumWidth(THUMB_WIDTH + 18)
+
+
 class AddToolDialog(QDialog):
-    """A grid of touch tiles, one per tool kind, grouped by category."""
+    """A grid of touch tiles, one per tool kind, grouped by category. Each
+    tile shows an example of the case the tool suits."""
 
     COLUMNS = 4
 
@@ -58,7 +131,7 @@ class AddToolDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Add Tool")
         self.setModal(True)
-        self.resize(760, 560)
+        self.resize(4 * (THUMB_WIDTH + 34) + 60, 820)
         self.selected_kind: Optional[str] = None
         self.tiles: Dict[str, QPushButton] = {}
 
@@ -77,9 +150,7 @@ class AddToolDialog(QDialog):
             grid = QGridLayout()
             grid.setSpacing(8)
             for i, kind in enumerate(kinds):
-                tile = QPushButton(KIND_LABELS[kind])
-                tile.setObjectName("jobButton")
-                tile.setMinimumHeight(72)
+                tile = ToolTile(kind)
                 tile.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                 tile.clicked.connect(lambda _=False, k=kind: self._pick(k))
                 self.tiles[kind] = tile
@@ -95,6 +166,7 @@ class AddToolDialog(QDialog):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setWidget(body)
         scroll.viewport().setObjectName("clearBox")
+        QScroller.grabGesture(scroll.viewport(), QScroller.LeftMouseButtonGesture)  # drag to scroll on touch
 
         cancel = QPushButton("Cancel")
         cancel.setFixedHeight(44)

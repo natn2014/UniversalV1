@@ -259,6 +259,19 @@ QPushButton#jobButton {{
     font-weight: 700;
     min-height: 72px;
 }}
+QPushButton#toolTile {{
+    text-align: left;
+    padding: 0;
+}}
+QLabel#toolTileTitle {{
+    font-size: 14pt;
+    font-weight: 700;
+    color: #f0f2f4;
+}}
+QLabel#toolTileUse {{
+    font-size: 10pt;
+    color: #c4cad1;
+}}
 QLabel#dangerTitle {{
     color: #ff7a6b;
     font-size: 15pt;

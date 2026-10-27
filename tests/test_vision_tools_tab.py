@@ -20,7 +20,7 @@ import app.settings as settings_mod  # noqa: E402
 import app.tabs.tools_tab as tools_tab_mod  # noqa: E402
 from app.context import AppContext  # noqa: E402
 from app.tabs.tools_tab import ToolsTab  # noqa: E402
-from app.widgets.tool_params import CATEGORIES, AddToolDialog  # noqa: E402
+from app.widgets.tool_params import CATEGORIES, KIND_USES, THUMBS_DIR, AddToolDialog  # noqa: E402
 
 APP = QApplication.instance() or QApplication([])
 RED = (0, 0, 220)
@@ -237,6 +237,13 @@ class UiRules(ToolsTabTest):
         dialog.tiles["pitch"].click()
         self.assertEqual(dialog.selected_kind, "pitch")
         self.assertEqual(dialog.result(), QDialog.Accepted)
+
+    def test_every_tile_shows_an_example_and_its_use(self):
+        dialog = AddToolDialog()
+        for kind, tile in dialog.tiles.items():
+            self.assertTrue((THUMBS_DIR / f"{kind}.png").is_file(), kind)
+            self.assertFalse(tile.picture.pixmap().isNull(), kind)
+            self.assertTrue(KIND_USES.get(kind), kind)
 
     def test_every_registered_kind_is_offered(self):
         from app.vision.base import TOOL_KINDS

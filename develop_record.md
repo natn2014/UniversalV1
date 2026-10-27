@@ -353,4 +353,9 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - Each frame joins in the latest slow results, tagged `slow` and `age_ms`.
   - `part_epoch` goes up when Position goes from lost to found and when the tools change. A slow result only counts within its own epoch and while younger than 3 / hz + 2 × the last run time. Otherwise the tool reports `pending`, and the total judgement is STANDBY. The previous part's OCR can never pass a new part. Without a Position tool only the age limit applies; the Tools tab hints at this.
 - Decisions / deviations from the plan: none worth noting. `Tool.SLOW` is a class attribute, so tool kinds are not hard-coded in the runner. The Tools tab still runs every tool on its frozen snapshot synchronously (one frame, on a button press).
-- Commit: pending
+- Commit: 9397828
+
+### Add Tool thumbnails
+- What changed: each Add Tool tile shows an example picture of the case the tool suits (wire-harness scenes with the area in green and an OK / NG tag, as in the IV4 catalogue), the tool name, and a one-line "use for" text (`KIND_USES`). Drag scrolls the dialog on the touch screen (QScroller).
+- Pictures: drawn by `tools/make_tool_thumbs.py` into `app/assets/tool_thumbs/<kind>.png` (240 × 150). They are not photographs, so rerun the script after changing a scene.
+- Test: `test_every_tile_shows_an_example_and_its_use`.
