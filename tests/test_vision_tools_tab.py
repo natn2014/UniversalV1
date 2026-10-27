@@ -164,6 +164,16 @@ class AddTeachDelete(ToolsTabTest):
         self.tab.wider_button.click()
         self.assertEqual(tool.threshold, 155)
 
+    def test_pattern_search_asks_for_the_pattern_box_after_its_area(self):
+        self.tab.begin_add("pattern_search")
+        self.tab.view.roi_drawn.emit((0.1, 0.1, 0.9, 0.9))  # search area
+        self.assertEqual(self.tab._mode, "teach_box")
+        self.tab.view.roi_drawn.emit((0.15, 0.2, 0.48, 0.43))  # around the red patch
+        tool = self.tab.tools[0]
+        self.assertEqual(tool.kind, "pattern_search")
+        self.assertEqual(tool.template_roi, [0.15, 0.2, 0.48, 0.43])
+        self.assertEqual(tool.template.shape, (110, 211))
+
     def test_pick_button_follows_the_tool(self):
         self.tab.add_tool("brightness", (0.1, 0.1, 0.3, 0.3))
         self.assertFalse(self.tab.pick_color_button.isVisibleTo(self.tab))
@@ -297,7 +307,7 @@ class UiRules(ToolsTabTest):
     def test_add_dialog_has_a_tile_per_kind_and_returns_the_pick(self):
         dialog = AddToolDialog()
         kinds = [k for _, ks in CATEGORIES for k in ks]
-        self.assertEqual(len(kinds), 16)
+        self.assertEqual(len(kinds), 17)
         self.assertEqual(set(dialog.tiles), set(kinds))
         self.assertTrue(all(t.minimumHeight() >= 72 for t in dialog.tiles.values()))
         dialog.tiles["pitch"].click()

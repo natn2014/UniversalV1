@@ -54,7 +54,7 @@ from ..widgets.video_view import VideoView
 DEFAULT_ROI = (0.3, 0.3, 0.7, 0.7)
 # Kinds that cannot work before they are taught; they learn from their ROI
 # right after it is drawn when a frame is frozen.
-AUTO_TEACH = {"position", "color_area", "color_average", "outline"}
+AUTO_TEACH = {"position", "color_area", "color_average", "outline", "pattern_search"}
 SELECTED_COLOR = QColor("#f0a330")
 IDLE_COLOR = QColor("#9aa3ad")
 LIMIT_PERCENT = 10.0
@@ -688,6 +688,8 @@ class ToolsTab(QWidget):
             return
         if tool.kind == "position" and tool.mode == "2d":
             self._enter_mode("teach_box", "Drag the template box (a feature of the part) inside the search area")
+        elif tool.kind == "pattern_search":
+            self._enter_mode("teach_box", "Drag a box around one copy of the pattern, inside the search area")
         else:
             self.teach_selected()
 
@@ -763,6 +765,8 @@ class ToolsTab(QWidget):
         self._exit_mode()
         if mode == "add" and kind:
             self.add_tool(kind, roi)
+            if kind == "pattern_search":  # straight on: drag the pattern inside the new search area
+                self._on_teach_clicked()
         elif mode == "set_roi":
             self.set_roi_selected(roi)
         elif mode == "teach_box":

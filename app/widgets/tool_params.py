@@ -37,7 +37,7 @@ KIND_LABELS = {
     "area": "Area\n(mono)", "brightness": "Brightness\nAverage", "edge_pixels": "Edge\nPixels", "shading": "Shading\nUniformity",
     "width": "Width", "edge_presence": "Edge\nPresence", "pitch": "Pitch", "diameter": "Diameter",
     "ocr": "OCR\nText", "code": "Code\nQR / 1D",
-    "outline": "Outline", "blob_count": "Blob\nCount",
+    "outline": "Outline", "pattern_search": "Pattern\nSearch", "blob_count": "Blob\nCount",
 }
 CATEGORIES = [
     ("Position", ["position"]),
@@ -45,7 +45,7 @@ CATEGORIES = [
     ("Brightness", ["area", "brightness", "edge_pixels", "shading"]),
     ("Measure", ["width", "edge_presence", "pitch", "diameter"]),
     ("Text & Code", ["ocr", "code"]),
-    ("Pattern & Count", ["outline", "blob_count"]),
+    ("Pattern & Count", ["outline", "pattern_search", "blob_count"]),
 ]
 # The case each tool suits, shown under its tile with an example picture
 # (drawn by tools/make_tool_thumbs.py).
@@ -65,6 +65,7 @@ KIND_USES = {
     "ocr": "Read lot / date / part text",
     "code": "Read QR or barcode label",
     "outline": "Right part shape",
+    "pattern_search": "Find & count a mark at any angle",
     "blob_count": "Count terminals, find a missing one",
 }
 THUMBS_DIR = ROOT_DIR / "app" / "assets" / "tool_thumbs"

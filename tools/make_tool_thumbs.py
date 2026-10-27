@@ -251,6 +251,22 @@ def outline(img):
     tag(img, True)
 
 
+def pattern_search(img):
+    cv2.rectangle(img, (25, 35), (455, 270), (225, 225, 220), -1)
+    mark = np.full((70, 70), 225, np.uint8)  # a round "E" approval mark
+    cv2.circle(mark, (35, 35), 30, 40, 4, AA)
+    cv2.putText(mark, "E", (21, 49), FONT, 1.3, 40, 3, AA)
+    for i, (cx, cy, angle) in enumerate(((100, 120, 0), (250, 175, 35), (385, 110, -70)), 1):
+        m = cv2.getRotationMatrix2D((35, 35), angle, 1.0)
+        turned = cv2.warpAffine(mark, m, (70, 70), borderValue=225)
+        roi = img[cy - 35:cy + 35, cx - 35:cx + 35]
+        roi[:] = np.minimum(roi, turned[..., None])
+        edges = cv2.dilate(cv2.Canny(turned, 60, 150), np.ones((2, 2), np.uint8))
+        roi[edges > 0] = GREEN
+        label(img, f"{i}: {angle:+d}", (cx - 30, cy + 62), 0.6, GREEN)
+    tag(img, True, "OK 3 found")
+
+
 def blob_count(img):
     cv2.rectangle(img, (40, 50), (440, 260), (95, 95, 100), -1)
     missing = (3, 1)
@@ -273,7 +289,8 @@ SCENES = {
     "color_prohibit": color_prohibit, "area": area, "brightness": brightness,
     "edge_pixels": edge_pixels, "shading": shading, "width": width,
     "edge_presence": edge_presence, "pitch": pitch, "diameter": diameter,
-    "ocr": ocr, "code": code, "outline": outline, "blob_count": blob_count,
+    "ocr": ocr, "code": code, "outline": outline, "pattern_search": pattern_search,
+    "blob_count": blob_count,
 }
 
 

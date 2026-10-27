@@ -387,3 +387,25 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - Tools tab: Pick Color / Pick Gray opens a session with an Extraction card (− Narrower, + Wider, Clear, Done). Each tap adds to the range and is saved, and the yellow/red fill shows the result straight away. The session survives its own saves and ends on Done, on selecting another tool, or on Resume Live. Clear goes back to the range from before the first tap.
 - Not done: showing the hue in degrees (0–359°) like Keyence; the form still uses OpenCV's 0–179.
 - Tests: `EyedropperRange` (5), `GrayEyedropper` (3), and Tools tab tests for the multi-tap session, the gray pick, ending the session on a tool change, and the button label.
+
+### Pattern Search (ShapeTrax-style outline pattern tool)
+- Keyence's name for this is ShapeTrax (CV-X: ShapeTrax2, VS: ShapeTrax 3A), an edge-based shape search. No Keyence tool called "PatternTrax" was found. The existing Outline tool scores one part at a fixed angle; this tool finds and counts every copy of a taught pattern at any angle.
+- `app/vision/search.py`, kind `pattern_search`, in "Pattern & Count". The ROI is the search area and `template_roi` is the pattern dragged inside it. The value is the number of copies found (`DEFAULT_LOW = 1`); `extra["matches"]` holds x, y, angle and score for each copy.
+- How it works:
+  - Matching runs on edge strength (smoothed Sobel magnitude, with texture below `edge_min` set to zero), so lighting and background shade matter little.
+  - The pattern is padded to a square as wide as its diagonal, turned, and matched with a mask of its own footprint (masked TM_CCOEFF_NORMED). A 3 px border band of the template is left out of the mask, because the edge filter sees the crop's border there.
+  - Coarse pass: downscaled until the template is about 12 px, slightly blurred, at the coarsest angle step the pattern's size allows (at most 12°), with the angles matched in a 6-thread pool.
+  - Each candidate is refined at full scale over ± half a coarse step. Copies are kept above `min_score` (0.88) and when they don't overlap a better one, up to `max_count`.
+  - Each copy is drawn as the pattern's thin Canny edges, turned and placed where it was found (`region`, color "lines"), with "n: score% angle°" above it.
+- `SLOW = True`: it runs in the slow-tool thread (2 Hz), like OCR.
+- Bugs found and fixed while testing on `sample_mark.jpg` (386 × 208, a windshield marking):
+  - The zero padding was compared with the text around each copy, so a mark scored only 0.64 against itself. Fixed with the masked match.
+  - `roi_to_pixels` grows a box to its 32 px minimum, which moved small marks by about 11 px. The template box now uses exact pixels.
+  - Masked TM_CCORR_NORMED scores about 1.0 in empty background (0/0 on mostly-zero edge maps). Both passes now use TM_CCOEFF_NORMED; its infinite values on flat windows are set to 0 and scores are clamped to ±1.
+  - Downscaling the coarse pass to an 8 px template lost small and long patterns; 12 px is kept.
+- Sample results: E6 circle, TIS logo and the word TOYOTA found exactly once at 0°, 30°, 90°, 145° and −120° (image turned on a larger canvas), within 1–2 px and about 4° (score 0.92–0.99). The 15 × 19 px "SN" box is found at every angle, plus one look-alike at 0.88 at two angles. Tiny one-stroke marks ("//", "2") match many letter strokes; teach a distinctive pattern.
+- Time:
+  - Sample (441 × 441 canvas): 130–220 ms, and about 330–520 ms for the tiny SN box, which cannot be downscaled for the coarse pass.
+  - 1280 × 720 frame with a 640 × 432 search area and a ~100 px pattern: 94 ms at ±180°, 30 ms at ±30°, 15 ms at 0°.
+- Tools tab: after the search area is drawn, it asks straight away for a box around one copy of the pattern; Teach does the same later. Thumbnail `pattern_search.png`: three turned "E" marks found, OK 3.
+- Tests: `tests/test_vision_search.py` (12) on drawn marks, plus a Tools tab test for the area → pattern box flow.
