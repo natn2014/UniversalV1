@@ -191,7 +191,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - A white square covering 30% of a black ROI gives 30 ± 0.5% for both fixed and Otsu.
   - Dark polarity gives 70%.
 
-### [ ] T10 `BrightnessAverageTool` (kind `brightness`)
+### [x] T10 `BrightnessAverageTool` (kind `brightness`)
 - **IV4:** Brightness Average.
 - **How it works:** take the gray mean of the crop. `extra["std"]` holds the std-dev; when `use_std=True`, the value is the std-dev instead of the mean.
 - **Params:** `use_std=False`, `pre=[]`.
@@ -199,7 +199,7 @@ Progress is logged in [develop_record.md](develop_record.md).
   - A uniform 100 gray gives a mean of 100 and a std of 0.
   - A half-0/half-200 image gives a mean of 100 and a std of 100.
 
-### [ ] T11 `EdgePixelsTool` (kind `edge_pixels`)
+### [x] T11 `EdgePixelsTool` (kind `edge_pixels`)
 - **IV4:** Edge Pixels: counts the pixels on strong brightness edges (scratches, burrs, texture).
 - **How it works:**
   - Convert the crop to gray, apply `pre`, and blur with `GaussianBlur(3)`.

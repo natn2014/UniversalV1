@@ -33,3 +33,28 @@ class AreaTool(Tool):
         for item in res.overlay:
             item["ok"] = res.ok
         return res
+
+
+@register("brightness")
+class BrightnessAverageTool(Tool):
+    """Mean gray level of the ROI (or its standard deviation with `use_std`)."""
+
+    PARAMS = {"use_std": False}
+
+    def process(self, patch, origin):
+        mean, std = cv2.meanStdDev(self.gray(patch))
+        mean, std = float(mean[0][0]), float(std[0][0])
+        return self.result(std if self.use_std else mean, extra={"mean": mean, "std": std})
+
+
+@register("edge_pixels")
+class EdgePixelsTool(Tool):
+    """Number of Canny edge pixels in the ROI: scratches, burrs, texture."""
+
+    PARAMS = {"canny_lo": 50, "canny_hi": 150}
+
+    def process(self, patch, origin):
+        gray = cv2.GaussianBlur(self.gray(patch), (3, 3), 0)
+        edges = cv2.Canny(gray, self.canny_lo, self.canny_hi)
+        count = cv2.countNonZero(edges)
+        return self.result(count, extra={"density": count * 100.0 / edges.size})
