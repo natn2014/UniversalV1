@@ -427,3 +427,7 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
   - Hint text #9aa5b1 → #c4ccd5; disabled button text #7a838d → #949da7 (about 5:1); the Train classes note is 10 pt #2f353c.
 - Checked by rendering every tab and the catalog offscreen at 1920 × 1080 (the station's panel, `xrandr`) and 1024 × 768.
 - Tests: the catalog (a tap selects and fills the navigator, Add confirms, categories switch, double tap adds, fits 1024 × 768). 357 pass.
+
+### Same live-image size on Monitor and Tools
+- The Monitor side panel took its natural width (~290 px) and the Tools panel was fixed at 430 px, so the camera image was a different size in each tab (1606 vs 1434 px wide at 1920x1080; 710 vs 538 at 1024x768).
+- `app/widgets/layout.py` now holds `SIDE_PANEL_WIDTH = 400` and `VIDEO_MIN_SIZE = (520, 300)`, used by both tabs: the image is 1464x843 at 1920x1080 and 568x531 at 1024x768 in both, and the window still fits 1024 wide (minimum 996 px).

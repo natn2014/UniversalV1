@@ -42,7 +42,7 @@ from ..theme import (
     make_icon,
 )
 from ..vision.total import total_state
-from ..widgets.layout import bottom_bar, top_bar
+from ..widgets.layout import SIDE_PANEL_WIDTH, VIDEO_MIN_SIZE, bottom_bar, top_bar
 from ..widgets.master_dialog import MasterDialog
 from ..widgets.master_strip import MasterStrip
 from ..widgets.perspective_dialog import PerspectiveDialog
@@ -127,7 +127,7 @@ class MonitorTab(QWidget):
         ctx.model_path_changed.connect(self._refresh_monitor_info)
 
         self.video_label = VideoView()
-        self.video_label.setMinimumSize(640, 360)
+        self.video_label.setMinimumSize(*VIDEO_MIN_SIZE)
         self.video_label.roi_drawn.connect(self._on_roi_drawn)
 
         self.roi_button = QPushButton("Set ROI")
@@ -217,6 +217,7 @@ class MonitorTab(QWidget):
 
         side_panel = QFrame()
         side_panel.setObjectName("sidePanel")
+        side_panel.setFixedWidth(SIDE_PANEL_WIDTH)
         side_layout = QVBoxLayout(side_panel)
         side_layout.setContentsMargins(0, 0, 0, 0)
         side_layout.setSpacing(0)

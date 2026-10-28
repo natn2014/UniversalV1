@@ -41,7 +41,7 @@ from ..vision.base import Tool, ToolResult, create
 from ..vision.calibration import calibrate_from_width
 from ..vision.runner import run_tools
 from ..vision.total import total_state
-from ..widgets.layout import bottom_bar, make_card, top_bar
+from ..widgets.layout import SIDE_PANEL_WIDTH, VIDEO_MIN_SIZE, bottom_bar, make_card, top_bar
 from ..widgets.tool_overlay import draw_overlay, overlay_scale, tool_value_text
 from ..widgets.tool_params import (
     TOUCH_HEIGHT,
@@ -117,7 +117,7 @@ class ToolsTab(QWidget):
         self.total_pill.setFixedSize(130, 36)
 
         self.view = VideoView()
-        self.view.setMinimumSize(520, 300)
+        self.view.setMinimumSize(*VIDEO_MIN_SIZE)
         self.view.roi_drawn.connect(self._on_roi_drawn)
         self.view.point_picked.connect(self._on_point_picked)
 
@@ -262,7 +262,7 @@ class ToolsTab(QWidget):
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll.setWidget(right)
         scroll.viewport().setObjectName("clearBox")
-        scroll.setFixedWidth(430)
+        scroll.setFixedWidth(SIDE_PANEL_WIDTH)
 
         content = QHBoxLayout()
         content.addWidget(video_frame, 1)

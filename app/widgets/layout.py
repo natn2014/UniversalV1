@@ -1,5 +1,11 @@
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 
+# Width of the panel right of the live image. Shared by the Monitor and Tools
+# tabs so the camera image is the same size (and ROIs in the same place) in both.
+SIDE_PANEL_WIDTH = 400
+# Smallest live image, for both tabs; with the side panel it fits a 1024 screen.
+VIDEO_MIN_SIZE = (520, 300)
+
 
 def make_card(title: str):
     """Section card with a dark header strip (Keyence-style section bar)."""
