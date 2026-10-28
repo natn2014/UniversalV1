@@ -40,6 +40,7 @@ from ..theme import (
     action_button_qss,
     gloss_gradient,
     make_icon,
+    set_badge_title,
 )
 from ..vision.total import total_state
 from ..widgets.layout import SIDE_PANEL_WIDTH, VIDEO_MIN_SIZE, bottom_bar, top_bar
@@ -183,8 +184,9 @@ class MonitorTab(QWidget):
 
         # Rule-based vision tools (app/vision): one row per tool, hidden when
         # the job has none.
-        self.tool_header = QLabel("Tools")
+        self.tool_header = QLabel()
         self.tool_header.setObjectName("panelHeader")
+        set_badge_title(self.tool_header, "vision", "Image Tools")
         self.tool_table = QTableWidget(0, 3)
         self.tool_table.setHorizontalHeaderLabels(["Tool", "Value", "Result"])
         self.tool_table.verticalHeader().setVisible(False)
@@ -221,8 +223,9 @@ class MonitorTab(QWidget):
         side_layout = QVBoxLayout(side_panel)
         side_layout.setContentsMargins(0, 0, 0, 0)
         side_layout.setSpacing(0)
-        panel_header = QLabel("Detections")
+        panel_header = QLabel()
         panel_header.setObjectName("panelHeader")
+        set_badge_title(panel_header, "ai", "AI Detections")
         side_layout.addWidget(panel_header)
         side_layout.addWidget(self.table, 1)
         side_layout.addWidget(self.tool_header)

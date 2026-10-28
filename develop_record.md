@@ -431,3 +431,8 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 ### Same live-image size on Monitor and Tools
 - The Monitor side panel took its natural width (~290 px) and the Tools panel was fixed at 430 px, so the camera image was a different size in each tab (1606 vs 1434 px wide at 1920x1080; 710 vs 538 at 1024x768).
 - `app/widgets/layout.py` now holds `SIDE_PANEL_WIDTH = 400` and `VIDEO_MIN_SIZE = (520, 300)`, used by both tabs: the image is 1464x843 at 1920x1080 and 568x531 at 1024x768 in both, and the window still fits 1024 wide (minimum 996 px).
+
+### AI vs image-processing badges; Settings split into Machine / This Job
+- Two small SVG badges in `app/theme.py` (written to `.ui_assets/`): purple chip with "AI" for YOLO model settings and results, cyan magnifier for the image-processing tools. Helpers: `badge_icon`, `badge_title`, `set_badge_title`; `make_card(title, badge=...)`.
+- Used on: tab icons (Tools = image, Train = AI), Monitor side panel ("AI Detections" / "Image Tools"), Tools tab list header ("Image Tools"), Settings cards ("AI Model", "AI Detection Filters").
+- Settings now has two headed columns: **Machine** (Camera, Tower Light & Buzzer, Auto Capture; same for every job) and **This Job** (AI Model, AI Detection Filters; "Saved with job <part>", updated on part change). Nothing moved between tabs.

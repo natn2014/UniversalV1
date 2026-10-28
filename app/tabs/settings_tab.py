@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 from ..camera import RESOLUTION_CHOICES, find_cameras, parse_resolution
 from ..context import AppContext
 from ..optional_deps import BUZZER_OFF, BUZZER_PATTERN_NAMES
-from ..widgets.layout import make_card, row
+from ..widgets.layout import make_card, row, section_heading
 
 
 class SettingsTab(QWidget):
@@ -166,7 +166,7 @@ class SettingsTab(QWidget):
         self._build_layout()
 
     def _build_layout(self) -> None:
-        model_card, model_body = make_card("Model")
+        model_card, model_body = make_card("AI Model", badge="ai")
         model_body.addLayout(row(self.load_model_button, self.model_label))
         self.model_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
 
@@ -207,7 +207,7 @@ class SettingsTab(QWidget):
         autocapture_hint.setWordWrap(True)
         autocapture_body.addWidget(autocapture_hint)
 
-        filters_card, filters_body = make_card("Detection Filters")
+        filters_card, filters_body = make_card("AI Detection Filters", badge="ai")
         self.confidence_label.setStyleSheet("color: #ffcf73; font-weight: 700;")
         filters_body.addLayout(row(QLabel("Confidence threshold"), None, self.confidence_label))
         filters_body.addWidget(self.confidence_slider)
@@ -222,16 +222,25 @@ class SettingsTab(QWidget):
         filters_body.addWidget(QLabel("Classes to show:"))
         filters_body.addWidget(self.class_filters_scroll, 1)
 
+        # Left: this station, the same for every job. Right: saved with the
+        # job (the AI model and its filters), so it changes on Job Change.
+        machine_heading, _ = section_heading("Machine", "Same for every job")
         left_column = QVBoxLayout()
-        left_column.addWidget(model_card)
+        left_column.addWidget(machine_heading)
         left_column.addWidget(camera_card)
         left_column.addWidget(tower_card)
         left_column.addWidget(autocapture_card)
         left_column.addStretch(1)
 
+        job_heading, self.job_note = section_heading("This Job")
+        right_column = QVBoxLayout()
+        right_column.addWidget(job_heading)
+        right_column.addWidget(model_card)
+        right_column.addWidget(filters_card, 1)
+
         columns = QHBoxLayout()
         columns.addLayout(left_column, 1)
-        columns.addWidget(filters_card, 1)
+        columns.addLayout(right_column, 1)
 
         content = QWidget()
         content.setLayout(columns)
@@ -246,6 +255,13 @@ class SettingsTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(scroll)
+
+        self._ctx.part_changed.connect(self._refresh_job_note)
+        self._refresh_job_note()
+
+    def _refresh_job_note(self, *_args) -> None:
+        part = self._ctx.current_part_no
+        self.job_note.setText(f"Saved with job {part}" if part else "Saved with the job (no job loaded)")
 
     def _make_setting_spinbox(self, key: str, low: int, high: int, step: int, suffix: str) -> QSpinBox:
         """Spinbox bound to an app setting, saved on every change."""

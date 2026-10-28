@@ -36,7 +36,15 @@ from ..autocapture import qimage_to_array
 from ..context import AppContext
 from ..perspective import PerspectiveWarp
 from ..roi import normalize_roi, roi_to_pixels
-from ..theme import NG_RED, OK_GREEN, RUN_BUTTON_STYLES, STANDBY_YELLOW, action_button_qss, gloss_gradient
+from ..theme import (
+    NG_RED,
+    OK_GREEN,
+    RUN_BUTTON_STYLES,
+    STANDBY_YELLOW,
+    action_button_qss,
+    gloss_gradient,
+    set_badge_title,
+)
 from ..vision.base import Tool, ToolResult, create
 from ..vision.calibration import calibrate_from_width
 from ..vision.runner import run_tools
@@ -215,8 +223,9 @@ class ToolsTab(QWidget):
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(0)
-        header = QLabel("Tools")
+        header = QLabel()
         header.setObjectName("panelHeader")
+        set_badge_title(header, "vision", "Image Tools")
         list_layout.addWidget(header)
         list_layout.addWidget(self.table)
 

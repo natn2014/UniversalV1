@@ -1,5 +1,7 @@
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 
+from ..theme import set_badge_title
+
 # Width of the panel right of the live image. Shared by the Monitor and Tools
 # tabs so the camera image is the same size (and ROIs in the same place) in both.
 SIDE_PANEL_WIDTH = 400
@@ -7,8 +9,9 @@ SIDE_PANEL_WIDTH = 400
 VIDEO_MIN_SIZE = (520, 300)
 
 
-def make_card(title: str):
-    """Section card with a dark header strip (Keyence-style section bar)."""
+def make_card(title: str, badge: str = None):
+    """Section card with a dark header strip (Keyence-style section bar).
+    `badge` ("ai" / "vision") puts that small icon before the title."""
     card = QFrame()
     card.setObjectName("card")
     outer = QVBoxLayout(card)
@@ -16,6 +19,8 @@ def make_card(title: str):
     outer.setSpacing(0)
     header = QLabel(title)
     header.setObjectName("cardHeader")
+    if badge:
+        set_badge_title(header, badge, title)
     outer.addWidget(header)
     body = QVBoxLayout()
     body.setContentsMargins(12, 10, 12, 12)
@@ -51,3 +56,21 @@ def bottom_bar(margins=(6, 4, 6, 4)):
     layout = QHBoxLayout(bar)
     layout.setContentsMargins(*margins)
     return bar, layout
+
+
+def section_heading(title: str, note: str = ""):
+    """Big heading over a group of cards, with a grey note under it.
+    Returns (widget, note_label) so the note can be updated."""
+    box = QFrame()
+    box.setObjectName("clearBox")
+    layout = QVBoxLayout(box)
+    layout.setContentsMargins(4, 2, 4, 2)
+    layout.setSpacing(0)
+    heading = QLabel(title)
+    heading.setObjectName("sectionHeading")
+    note_label = QLabel(note)
+    note_label.setObjectName("hint")
+    note_label.setWordWrap(True)
+    layout.addWidget(heading)
+    layout.addWidget(note_label)
+    return box, note_label
