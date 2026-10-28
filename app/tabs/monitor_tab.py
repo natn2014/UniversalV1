@@ -48,6 +48,7 @@ from ..widgets.master_dialog import MasterDialog
 from ..widgets.master_strip import MasterStrip
 from ..widgets.perspective_dialog import PerspectiveDialog
 from ..widgets.tool_overlay import draw_label, draw_overlay, overlay_scale, tool_value_text, use_label_font
+from ..widgets.tool_params import kind_hint
 from ..widgets.video_view import VideoView
 from ..yolo_labels import pixel_box_to_yolo, write_yolo_label_file
 
@@ -204,6 +205,16 @@ class MonitorTab(QWidget):
         self._update_judgement_banner("YELLOW")
 
     def _build_layout(self) -> None:
+        for widget, hint in (
+            (self.capture_button, "Save the current image (and its AI boxes as labels) for training."),
+            (self.buzzer_toggle_button, "Turn the NG buzzer on or off."),
+            (self.top_view_button, "Straighten a camera that looks at the part at an angle (top-view correction)."),
+            (self.roi_button, "Drag a box on the image: AI detection only looks inside it."),
+            (self.roi_clear_button, "Remove the AI area box: detect on the whole image."),
+            (self.masters_button, "Choose the master images Auto Capture compares with."),
+            (self.run_button, "Start or stop the camera and the inspection."),
+        ):
+            widget.setToolTip(hint)
         # Layout follows the Keyence reference: info strip + judgement pill on
         # top, framed image with a light side panel, action bar at the bottom
         # with Run on the far right.
@@ -296,6 +307,7 @@ class MonitorTab(QWidget):
 
         self.counter_reset_button = QPushButton("Reset Count")
         self.counter_reset_button.setIcon(make_icon("refresh", "#e0e0e0"))
+        self.counter_reset_button.setToolTip("Set the OK and NG counters back to 0.")
         self.counter_reset_button.setObjectName("counterReset")
         self.counter_reset_button.clicked.connect(self.on_reset_counters_clicked)
 
@@ -960,6 +972,8 @@ class MonitorTab(QWidget):
             value = QTableWidgetItem(tool_value_text(result, mm))
             value.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             value.setToolTip(result.text)
-            self.tool_table.setItem(row, 0, QTableWidgetItem(result.name))
+            name = QTableWidgetItem(result.name)
+            name.setToolTip(kind_hint(result.kind))
+            self.tool_table.setItem(row, 0, name)
             self.tool_table.setItem(row, 1, value)
             self.tool_table.setItem(row, 2, verdict)

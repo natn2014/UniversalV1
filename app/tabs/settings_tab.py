@@ -23,7 +23,7 @@ from ..camera import RESOLUTION_CHOICES, find_cameras, parse_resolution
 from ..context import AppContext
 from ..optional_deps import BUZZER_OFF, BUZZER_PATTERN_NAMES
 from ..theme import make_icon
-from ..widgets.layout import make_card, row, section_heading
+from ..widgets.layout import make_card, row, section_heading, tip_label
 
 
 class SettingsTab(QWidget):
@@ -176,32 +176,32 @@ class SettingsTab(QWidget):
         self.model_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
 
         camera_card, camera_body = make_card("Camera", icon="camera")
-        camera_body.addLayout(row(QLabel("Camera:"), self.camera_combo, self.scan_button, None))
-        camera_body.addLayout(row(QLabel("Resolution:"), self.resolution_combo, None))
+        camera_body.addLayout(row(tip_label("Camera:", "Which camera to use. Tap Scan Cameras after plugging one in.", self.camera_combo), self.camera_combo, self.scan_button, None))
+        camera_body.addLayout(row(tip_label("Resolution:", "Image size asked from the camera. Higher = finer detail but slower; Actual shows what the camera gave.", self.resolution_combo), self.resolution_combo, None))
         camera_body.addWidget(self.resolution_actual_label)
 
         tower_card, tower_body = make_card("Tower Light & Buzzer", icon="tower")
         tower_body.addWidget(self.tower_status_label)
         tower_body.addWidget(self.buzzer_enabled_checkbox)
         tower_body.addLayout(row(
-            QLabel("NG alarm:"), self.buzzer_pattern_combo, None, self.buzzer_test_button))
+            tip_label("NG alarm:", "How the buzzer sounds while the result is NG.", self.buzzer_pattern_combo), self.buzzer_pattern_combo, None, self.buzzer_test_button))
         tower_body.addLayout(row(
             self.ok_beep_checkbox, None, self.ok_beep_duration_spinbox, self.ok_beep_test_button))
-        tower_body.addLayout(row(QLabel("State hold time:"), None, self.state_hold_spinbox))
+        tower_body.addLayout(row(tip_label("State hold time:", "The shown result (and tower light) stays at least this long before it may change, so it does not flicker. Each change counts one part. 0 = off.", self.state_hold_spinbox), None, self.state_hold_spinbox))
         hold_hint = QLabel("Minimum time between STANDBY / OK / NG changes (0 = off)")
         hold_hint.setObjectName("hint")
         hold_hint.setWordWrap(True)
         tower_body.addWidget(hold_hint)
-        tower_body.addLayout(row(QLabel("OCR / code rate:"), None, self.slow_tool_spinbox))
+        tower_body.addLayout(row(tip_label("OCR / code rate:", "How many times a second OCR and code-reader tools run. They run in the background, so the live view stays smooth; higher = faster result, more CPU.", self.slow_tool_spinbox), None, self.slow_tool_spinbox))
         slow_hint = QLabel("OCR and code tools run this often in the background; the live view keeps its full frame rate")
         slow_hint.setObjectName("hint")
         slow_hint.setWordWrap(True)
         tower_body.addWidget(slow_hint)
 
         autocapture_card, autocapture_body = make_card("Auto Capture", icon="autocapture")
-        autocapture_body.addLayout(row(QLabel("Max images per job:"), None, self.autocapture_max_spinbox))
-        autocapture_body.addLayout(row(QLabel("Match threshold:"), None, self.autocapture_threshold_spinbox))
-        autocapture_body.addLayout(row(QLabel("Min interval:"), None, self.autocapture_interval_spinbox))
+        autocapture_body.addLayout(row(tip_label("Max images per job:", "Auto Capture stops after saving this many images for the job.", self.autocapture_max_spinbox), None, self.autocapture_max_spinbox))
+        autocapture_body.addLayout(row(tip_label("Match threshold:", "How different from a master a frame may be and still be saved. 0 = identical; 8-12 is typical. Higher saves more varied frames.", self.autocapture_threshold_spinbox), None, self.autocapture_threshold_spinbox))
+        autocapture_body.addLayout(row(tip_label("Min interval:", "Shortest time between two saved images.", self.autocapture_interval_spinbox), None, self.autocapture_interval_spinbox))
         autocapture_body.addWidget(self.autocapture_wait_clear_checkbox)
         autocapture_hint = QLabel(
             "Saves a frame when it differs from a master by at most the threshold "
@@ -213,8 +213,26 @@ class SettingsTab(QWidget):
         autocapture_body.addWidget(autocapture_hint)
 
         filters_card, filters_body = make_card("AI Detection Filters", badge="ai")
+        for widget, hint in (
+            (self.max_detections_label, "Keep only this many detections (the most confident). 0 = all."),
+            (self.max_detections_spinbox, "Keep only this many detections (the most confident). 0 = all."),
+            (self.target_class_label, "OK needs these classes found: OR = either one, AND = both. -- None -- = not used."),
+            (self.target_class_combo_1, "First class that must be found for OK."),
+            (self.target_gate_combo, "OR: either class is enough.  AND: both must be found."),
+            (self.target_class_combo_2, "Second class that must be found for OK."),
+            (self.buzzer_enabled_checkbox, "Sound the buzzer on the tower light when the result is NG."),
+            (self.ok_beep_checkbox, "Short beep each time a part becomes OK; set its length on the right."),
+            (self.ok_beep_duration_spinbox, "Length of the OK beep."),
+            (self.autocapture_wait_clear_checkbox, "Save each part once: wait until the part has left before the next save. "
+                                                   "Turn off to shoot several angles of one part."),
+            (self.load_model_button, "Open a trained YOLO model (.pt) for this job."),
+            (self.scan_button, "Look again for connected cameras."),
+            (self.buzzer_test_button, "Play the NG alarm once."),
+            (self.ok_beep_test_button, "Play the OK beep once."),
+        ):
+            widget.setToolTip(hint)
         self.confidence_label.setStyleSheet("color: #ffcf73; font-weight: 700;")
-        filters_body.addLayout(row(QLabel("Confidence threshold"), None, self.confidence_label))
+        filters_body.addLayout(row(tip_label("Confidence threshold", "AI detections less sure than this are ignored. Raise it if wrong things are found; lower it if real ones are missed.", self.confidence_slider, self.confidence_label), None, self.confidence_label))
         filters_body.addWidget(self.confidence_slider)
         filters_body.addSpacing(6)
         self.max_detections_spinbox.setFixedWidth(120)
@@ -224,7 +242,7 @@ class SettingsTab(QWidget):
         filters_body.addLayout(row(
             self.target_class_combo_1, self.target_gate_combo, self.target_class_combo_2))
         filters_body.addSpacing(6)
-        filters_body.addWidget(QLabel("Classes to show:"))
+        filters_body.addWidget(tip_label("Classes to show:", "Only the ticked classes are drawn and counted. None ticked = all classes."))
         filters_body.addWidget(self.class_filters_scroll, 1)
 
         # Left: this station, the same for every job. Right: saved with the

@@ -444,3 +444,10 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - Buttons: Settings (Load model, Scan Cameras, Test), Tools (Teach, Draw ROI, Pick Color, Delete, Gate, Calibrate, Set from current, Clear, Done, Snapshot / Resume Live, Add Tool), Monitor (Clear ROI, Reset Count), Job Change (Remove Job, Scan Barcode), Train (Select Folder, Add Class, Rename, Confirm, Draw, Delete), Log (Refresh), and the dialogs (Add / Cancel / Delete / Remove / Save / Close, Set from live, Reset Corners).
 - Same meaning everywhere: trash = delete, X = cancel / clear, check = confirm, plus = add, refresh = reload / reset. Train's box buttons are now "Draw" / "Delete" (under the "Box Editing" header) so they fit with icons.
 - Window minimum width 1016 px, still fits 1024x768.
+
+### Hover hints
+- Every tool parameter has a hint (`PARAM_HINTS` in `app/widgets/tool_params.py`, `(kind, key)` entries override plain keys); `ToolParamsForm` puts it on the row's label and its control. A check confirms every visible parameter of every tool kind has one.
+- Tool names: `kind_hint(kind)` = what the tool does + "Good for: ..." on catalog tiles and the Name / Kind cells of the Tools and Monitor tables.
+- Buttons and controls: Tools tab (Teach, Draw ROI, Pick Color, Wider / Narrower, Gate, Calibrate, Low / High, Enabled, Follow position, Snapshot, Add Tool...), Monitor bottom bar, Settings labels via `tip_label(text, hint, *controls)`.
+- `QToolTip` styled light cream on an orange border, 11pt, for contrast on the dark theme. `HintWrapper` (installed app-wide in `main()`) re-shows plain-text tooltips as rich text so Qt word-wraps them, including table cells.
+- Hover needs a mouse: on the touch screen Qt shows no tooltips.

@@ -57,6 +57,7 @@ from ..widgets.tool_params import (
     AddToolDialog,
     DeleteToolDialog,
     ToolParamsForm,
+    kind_hint,
     kind_title,
 )
 from ..widgets.video_view import VideoView
@@ -206,6 +207,28 @@ class ToolsTab(QWidget):
         self.hint_label = QLabel()
         self.hint_label.setObjectName("hint")
         self.hint_label.setWordWrap(True)
+        for widget, hint in (
+            (self.teach_button, "Learn the good part from the current image (color, master pattern, reference)."),
+            (self.roi_button, "Drag a box on the image to set where the selected tool looks."),
+            (self.pick_color_button, "Eyedropper: tap the image to choose the color or gray level to count."),
+            (self.narrow_button, "Accept fewer shades around the picked color / gray."),
+            (self.wider_button, "Accept more shades around the picked color / gray."),
+            (self.clear_pick_button, "Forget the taps and start picking again."),
+            (self.done_pick_button, "Keep the picked range and leave the eyedropper."),
+            (self.delete_button, "Remove the selected tool from this job."),
+            (self.gate_button, "AND: every tool must be OK for the part to be OK.  OR: one OK tool is enough."),
+            (self.calibrate_button, "Turn pixels into mm: measure a part of known width with a Width tool."),
+            (self.percent_button, f"Set Low / High to the current value ±{LIMIT_PERCENT:.0f}%."),
+            (self.enabled_check, "Off: the tool is skipped and does not affect OK / NG."),
+            (self.follow_check, "Move this tool's area with the Position Adjust tool, so it stays on the part."),
+            (self.low_check, "OK needs the value at or above Low. Untick for no lower limit."),
+            (self.low_spin, "OK needs the value at or above Low. Untick for no lower limit."),
+            (self.high_check, "OK needs the value at or below High. Untick for no upper limit."),
+            (self.high_spin, "OK needs the value at or below High. Untick for no upper limit."),
+            (self.snapshot_button, "Freeze the image to set tools up calmly; tap again to go back to live."),
+            (self.add_button, "Open the tool catalog and add a tool to this job."),
+        ):
+            widget.setToolTip(hint)
 
     def _limit_widgets(self, caption: str, handler):
         check = QCheckBox(caption)
@@ -468,8 +491,11 @@ class ToolsTab(QWidget):
         self.table.blockSignals(True)
         self.table.setRowCount(len(self.tools))
         for row, tool in enumerate(self.tools):
-            self.table.setItem(row, 0, QTableWidgetItem(tool.name))
-            self.table.setItem(row, 1, QTableWidgetItem(kind_title(tool.kind)))
+            hint = kind_hint(tool.kind)
+            for col, text in ((0, tool.name), (1, kind_title(tool.kind))):
+                item = QTableWidgetItem(text)
+                item.setToolTip(hint)
+                self.table.setItem(row, col, item)
             self.table.setItem(row, 2, QTableWidgetItem("—"))
             self.table.setItem(row, 3, QTableWidgetItem("—"))
         if self.tools:

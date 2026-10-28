@@ -1,7 +1,9 @@
+import html
 import math
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
+from PySide6.QtWidgets import QAbstractItemView, QToolTip
 
 from .paths import ROOT_DIR
 
@@ -300,6 +302,13 @@ QLabel#cardHeader {{
     padding: 6px 12px;
     border-top-left-radius: 4px;
     border-top-right-radius: 4px;
+}}
+QToolTip {{
+    background-color: #fdf6d8;
+    color: #1a1d22;
+    border: 1px solid #f0a330;
+    padding: 6px 8px;
+    font-size: 11pt;
 }}
 QLabel#sectionHeading {{
     color: #ffffff;
@@ -808,3 +817,22 @@ def action_button_qss(top: str, mid: str, bottom: str) -> str:
         f"QPushButton:pressed {{ background: {gloss_gradient(bottom, mid, top)}; }}"
         f"QPushButton:disabled {{ background: #2a2f36; color: #949da7; }}"
     )
+
+
+class HintWrapper(QObject):
+    """App-wide event filter: Qt shows plain-text tooltips on one line, so a
+    long hover hint ran off the screen. Re-shows each one as rich text, which
+    Qt word-wraps. Covers widgets and table / list cells."""
+
+    def eventFilter(self, obj, event) -> bool:
+        if event.type() != QEvent.ToolTip or not hasattr(obj, "toolTip"):
+            return False
+        text = obj.toolTip()
+        view = obj.parent()
+        if isinstance(view, QAbstractItemView) and obj is view.viewport():
+            index = view.indexAt(event.pos())
+            text = index.data(Qt.ToolTipRole) if index.isValid() else ""
+        if not text or text.lstrip().startswith("<"):  # empty, or already rich text
+            return False
+        QToolTip.showText(event.globalPos(), "<p>" + html.escape(text).replace("\n", "<br>") + "</p>", obj)
+        return True

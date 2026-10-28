@@ -12,7 +12,7 @@ from .tabs.monitor_tab import MonitorTab
 from .tabs.settings_tab import SettingsTab
 from .tabs.tools_tab import ToolsTab
 from .tabs.train_tab import TrainTab
-from .theme import DARK_INDUSTRIAL_QSS, badge_icon, make_icon
+from .theme import DARK_INDUSTRIAL_QSS, HintWrapper, badge_icon, make_icon
 from .widgets.barcode_scan import BarcodeScanDialog
 from .widgets.image_viewer import ImageOverlay
 
@@ -226,6 +226,8 @@ class MainWindow(QWidget):
 def main() -> None:
     app = QApplication(sys.argv)
     app.setStyleSheet(DARK_INDUSTRIAL_QSS)
+    hints = HintWrapper(app)
+    app.installEventFilter(hints)
     window = MainWindow()
     window.resize(1050, 720)
     window.showFullScreen()

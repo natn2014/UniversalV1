@@ -171,7 +171,7 @@ class ToolTile(CatalogTile):
     def __init__(self, kind: str, parent=None) -> None:
         super().__init__(kind, kind_title(kind), TILE_THUMB, parent)
         self.kind = kind
-        self.setToolTip(KIND_USES.get(kind, ""))
+        self.setToolTip(kind_hint(kind))
 
 
 class AddToolDialog(QDialog):
@@ -432,6 +432,86 @@ CHOICES = {
 }
 
 
+# Hover hints for each parameter: what it does and which way to turn it.
+# (kind, key) entries win over plain key entries.
+_HSV = "Taught by Teach or the eyedropper; widen it with Wider instead of typing."
+PARAM_HINTS = {
+    "mode": "How the tool works; see the choices.",
+    ("position", "mode"): "2d: find the feature anywhere (x, y, angle).  x / y: follow an edge "
+                          "along one direction only (faster, for parts that slide).",
+    ("outline", "mode"): "template: compare edges with the taught master (tolerates a small shift).  "
+                         "shape: compare the outline's shape only (ignores turn and size).",
+    "angle_range": "Search this many degrees each way from the taught angle. 0 = no turning; "
+                   "180 = any angle (slower).",
+    "angle_step": "Angle step of the search, in degrees. Smaller = more exact but slower.",
+    "min_score": "How alike (0-1) a match must be to count. Raise it if wrong spots are found; "
+                 "lower it if the real part is missed.",
+    "pyramid": "Search a smaller copy first, then refine. Much faster; turn off only for tiny features.",
+    "h_lo": "Hue range start (0-179). " + _HSV,
+    "h_hi": "Hue range end (0-179); smaller than the start means the range wraps through red. " + _HSV,
+    "s_lo": "Lowest saturation (0 = gray, 255 = vivid). " + _HSV,
+    "s_hi": "Highest saturation. " + _HSV,
+    "v_lo": "Lowest brightness (0 = black). " + _HSV,
+    "v_hi": "Highest brightness (255 = white). " + _HSV,
+    "k": "How wide Teach makes the color range around the sample (in standard deviations). "
+         "Bigger = accepts more shades.",
+    "open_px": "Removes specks smaller than this many pixels before counting. 0 = off.",
+    "min_blob_px": "A wrong-color spot must be at least this many pixels to make it NG.",
+    "method": "fixed: use the threshold below.  otsu: pick the threshold from each image "
+              "(good when the light changes).",
+    "threshold": "Gray level (0-255) that splits dark from bright. Use Pick Gray to set it by tapping.",
+    ("width", "threshold"): "How strong (gray-level jump) an edge must be to count. Lower it for faint edges.",
+    ("pitch", "threshold"): "How strong (gray-level jump) an edge must be to count. Lower it for faint edges.",
+    "polarity": "Which edges count: rising = dark to bright, falling = bright to dark, any = both.",
+    ("area", "polarity"): "bright: count pixels brighter than the threshold.  dark: count darker ones.",
+    ("blob_count", "polarity"): "bright: count bright blobs on a dark background.  dark: the opposite.",
+    "polarity_1": "First edge: rising = dark to bright, falling = bright to dark, any = both.",
+    "polarity_2": "Second edge: rising = dark to bright, falling = bright to dark, any = both.",
+    "use_std": "Off: average brightness.  On: how uneven the brightness is (standard deviation).",
+    "canny_lo": "Weak-edge limit. Lower = more faint edges are kept (and more noise).",
+    "canny_hi": "Strong-edge limit. Lower = more edges start; keep it about 2-3x the weak limit.",
+    "grid_x": "Number of cells across. The result is the difference between the brightest and darkest cell.",
+    "grid_y": "Number of cells down.",
+    "direction": "Measure across the ROI (x = left to right) or down it (y = top to bottom).",
+    "edge_pair": "Which two edges make the width: outer = first and last, strongest = the two "
+                 "strongest, first_rising_falling = first rising then the next falling.",
+    "smooth": "Blur along the profile (pixels) before finding edges. Raise it on noisy or rough surfaces.",
+    "measure": "count: number of edges.  mean / min / max: the gap between neighbouring edges.",
+    "psm": "Tesseract layout mode: 7 = one line, 6 = a block of lines, 8 = one word, 13 = raw line.",
+    "whitelist": "Only these characters can be read, e.g. 0123456789/ . Empty = any.",
+    "char_height_px": "Height of the characters in pixels, to scale them for reading. 0 = estimate it.",
+    "expected": "The text must be exactly this. {date} stands for today's date. Empty = no check.",
+    "pattern": "The text must match this regular expression, e.g. LOT\\d{4}. {date} = today's date. "
+               "Empty = no check.",
+    "char_count": "Number of characters (spaces ignored) the text must have. 0 = no check.",
+    "check_orientation": "Also read the text turned 180° and report \"upside down\" when that fits better.",
+    "date_format": "How {date} is written, e.g. %d/%m/%y = 28/10/26, %Y%m%d = 20261028.",
+    "symbology": "Code type to read. any = try all (slower).",
+    "use_job_part_no": "The code must equal the loaded job's part number.",
+    "margin_px": "How far (pixels) the part may shift from the taught place and still be checked.",
+    "max_count": "Stop after this many copies are found.",
+    "edge_min": "Edges weaker than this are ignored. Raise it to ignore texture and dirt.",
+    "overlap": "Two finds overlapping more than this (0-1) are counted once.",
+    "source": "gray: blobs by brightness.  color: blobs by the taught color range.",
+    "area_min": "Blobs smaller than this (pixels) are not counted.",
+    "area_max": "Blobs larger than this (pixels) are not counted.",
+    "aspect_min": "Lowest width / height of a blob to count it. 0 = no limit.",
+    "aspect_max": "Highest width / height of a blob to count it.",
+    "circ_min": "How round a blob must be (0-1, 1 = circle). 0 = any shape.",
+}
+
+
+def param_hint(kind: str, key: str) -> str:
+    return PARAM_HINTS.get((kind, key)) or PARAM_HINTS.get(key, "")
+
+
+def kind_hint(kind: str) -> str:
+    """Hover text for a tool kind: what it measures and when to use it."""
+    use = KIND_USES.get(kind, "")
+    parts = [KIND_HELP.get(kind, ""), f"Good for: {use}" if use else ""]
+    return "\n\n".join(p for p in parts if p)
+
+
 def _title(key: str) -> str:
     return key.replace("_", " ").capitalize()
 
@@ -464,7 +544,11 @@ class ToolParamsForm(QWidget):
                 continue
             widget.setMinimumHeight(TOUCH_HEIGHT)
             self.widgets[key] = widget
-            self._layout.addRow(_title(key), widget)
+            label = QLabel(_title(key))
+            hint = param_hint(tool.kind, key)
+            label.setToolTip(hint)
+            widget.setToolTip(hint)
+            self._layout.addRow(label, widget)
         self._tool = tool
 
     def _make_widget(self, tool: Tool, key: str, value) -> Optional[QWidget]:

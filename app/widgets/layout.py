@@ -78,3 +78,12 @@ def section_heading(title: str, note: str = ""):
     layout.addWidget(heading)
     layout.addWidget(note_label)
     return box, note_label
+
+
+def tip_label(text: str, hint: str, *widgets) -> QLabel:
+    """Label with a hover hint; `widgets` (its controls) get the same hint."""
+    label = QLabel(text)
+    label.setToolTip(hint)
+    for widget in widgets:
+        widget.setToolTip(hint)
+    return label
