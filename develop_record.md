@@ -436,3 +436,11 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - Two small SVG badges in `app/theme.py` (written to `.ui_assets/`): purple chip with "AI" for YOLO model settings and results, cyan magnifier for the image-processing tools. Helpers: `badge_icon`, `badge_title`, `set_badge_title`; `make_card(title, badge=...)`.
 - Used on: tab icons (Tools = image, Train = AI), Monitor side panel ("AI Detections" / "Image Tools"), Tools tab list header ("Image Tools"), Settings cards ("AI Model", "AI Detection Filters").
 - Settings now has two headed columns: **Machine** (Camera, Tower Light & Buzzer, Auto Capture; same for every job) and **This Job** (AI Model, AI Detection Filters; "Saved with job <part>", updated on part change). Nothing moved between tabs.
+
+### Icons across the UI
+- `make_icon` gained 20 outline icons on the same 20x20 grid (monitor, gear, swap, list, folder, refresh, trash, plus, check, pencil, eyedropper, ruler, gate, target, barcode, sliders, range, save, tower, snapshot). `icon_file` / `icon_title` put one in a rich-text header; `make_card(title, icon=...)`.
+- Tabs: Monitor, Settings, Job Change, Log get icons (Tools / Train keep their image / AI badges).
+- Card headers: Camera, Tower Light & Buzzer, Auto Capture, Saved Jobs, Limits, Parameters.
+- Buttons: Settings (Load model, Scan Cameras, Test), Tools (Teach, Draw ROI, Pick Color, Delete, Gate, Calibrate, Set from current, Clear, Done, Snapshot / Resume Live, Add Tool), Monitor (Clear ROI, Reset Count), Job Change (Remove Job, Scan Barcode), Train (Select Folder, Add Class, Rename, Confirm, Draw, Delete), Log (Refresh), and the dialogs (Add / Cancel / Delete / Remove / Save / Close, Set from live, Reset Corners).
+- Same meaning everywhere: trash = delete, X = cancel / clear, check = confirm, plus = add, refresh = reload / reset. Train's box buttons are now "Draw" / "Delete" (under the "Box Editing" header) so they fit with icons.
+- Window minimum width 1016 px, still fits 1024x768.

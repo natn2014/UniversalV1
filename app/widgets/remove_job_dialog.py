@@ -2,7 +2,7 @@ from typing import Callable, Optional
 
 from PySide6.QtWidgets import QComboBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout
 
-from ..theme import RUN_BUTTON_STYLES, action_button_qss
+from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
 
 
 class RemoveJobDialog(QDialog):
@@ -58,8 +58,10 @@ class RemoveJobDialog(QDialog):
         card_layout.addStretch(1)
 
         self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setIcon(make_icon("close", "#e0e0e0"))
         self.cancel_button.clicked.connect(self.reject)
         self.remove_button = QPushButton("Remove")
+        self.remove_button.setIcon(make_icon("trash", "#ffffff"))
         self.remove_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["stop"]))
         self.remove_button.clicked.connect(self.accept)
         for button in (self.cancel_button, self.remove_button):

@@ -1,6 +1,7 @@
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 
-from ..theme import set_badge_title
+from ..theme import icon_title, set_badge_title
 
 # Width of the panel right of the live image. Shared by the Monitor and Tools
 # tabs so the camera image is the same size (and ROIs in the same place) in both.
@@ -9,9 +10,9 @@ SIDE_PANEL_WIDTH = 400
 VIDEO_MIN_SIZE = (520, 300)
 
 
-def make_card(title: str, badge: str = None):
+def make_card(title: str, badge: str = None, icon: str = None):
     """Section card with a dark header strip (Keyence-style section bar).
-    `badge` ("ai" / "vision") puts that small icon before the title."""
+    `badge` ("ai" / "vision") or `icon` (a make_icon kind) goes before the title."""
     card = QFrame()
     card.setObjectName("card")
     outer = QVBoxLayout(card)
@@ -21,6 +22,9 @@ def make_card(title: str, badge: str = None):
     header.setObjectName("cardHeader")
     if badge:
         set_badge_title(header, badge, title)
+    elif icon:
+        header.setTextFormat(Qt.RichText)
+        header.setText(icon_title(icon, title))
     outer.addWidget(header)
     body = QVBoxLayout()
     body.setContentsMargins(12, 10, 12, 12)

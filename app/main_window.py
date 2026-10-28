@@ -12,7 +12,7 @@ from .tabs.monitor_tab import MonitorTab
 from .tabs.settings_tab import SettingsTab
 from .tabs.tools_tab import ToolsTab
 from .tabs.train_tab import TrainTab
-from .theme import DARK_INDUSTRIAL_QSS, badge_icon
+from .theme import DARK_INDUSTRIAL_QSS, badge_icon, make_icon
 from .widgets.barcode_scan import BarcodeScanDialog
 from .widgets.image_viewer import ImageOverlay
 
@@ -58,6 +58,9 @@ class MainWindow(QWidget):
         # Same badges as the panel headers: image-processing tools vs AI.
         self.tabs.setTabIcon(self.tabs.indexOf(self.tools_tab), badge_icon("vision"))
         self.tabs.setTabIcon(self.tabs.indexOf(self.train_tab), badge_icon("ai"))
+        for tab, kind in ((self.monitor_tab, "monitor"), (self.settings_tab, "gear"),
+                          (self.job_change_tab, "swap"), (self.log_tab, "list")):
+            self.tabs.setTabIcon(self.tabs.indexOf(tab), make_icon(kind, "#e0e0e0"))
         self.tabs.currentChanged.connect(self._on_tab_changed)
         self._tools_started_camera = False
         self.image_overlay = ImageOverlay(self)

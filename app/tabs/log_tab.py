@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollA
 
 from ..ng_log import collect_ng_log, full_image_for_thumb, ng_stamp_text
 from ..paths import NG_THUMB_SIZE, NG_THUMBS_PER_PART
+from ..theme import make_icon
 
 
 class LogTab(QWidget):
@@ -29,6 +30,7 @@ class LogTab(QWidget):
 
         self.ng_log_summary_label = QLabel()
         refresh_button = QPushButton("Refresh")
+        refresh_button.setIcon(make_icon("refresh", "#e0e0e0"))
         refresh_button.clicked.connect(self.refresh)
         open_row = QHBoxLayout()
         open_row.addWidget(self.ng_log_summary_label)

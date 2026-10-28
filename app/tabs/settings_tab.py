@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from ..camera import RESOLUTION_CHOICES, find_cameras, parse_resolution
 from ..context import AppContext
 from ..optional_deps import BUZZER_OFF, BUZZER_PATTERN_NAMES
+from ..theme import make_icon
 from ..widgets.layout import make_card, row, section_heading
 
 
@@ -36,6 +37,7 @@ class SettingsTab(QWidget):
 
         self.model_label = QLabel("No model selected")
         self.load_model_button = QPushButton("Load .pt Model")
+        self.load_model_button.setIcon(make_icon("folder", "#e0e0e0"))
         self.load_model_button.clicked.connect(self.load_model)
         ctx.model_pick_requested.connect(self.load_model)
         ctx.model_path_changed.connect(lambda path: self.model_label.setText(path.name))
@@ -44,6 +46,7 @@ class SettingsTab(QWidget):
         self.camera_combo = QComboBox()
         self.camera_combo.currentIndexChanged.connect(self._on_camera_changed)
         self.scan_button = QPushButton("Scan Cameras")
+        self.scan_button.setIcon(make_icon("refresh", "#e0e0e0"))
         self.scan_button.clicked.connect(self.scan_cameras)
 
         self.resolution_combo = QComboBox()
@@ -75,6 +78,7 @@ class SettingsTab(QWidget):
             lambda _: tower.set_buzzer_pattern(self.buzzer_pattern_combo.currentData()))
 
         self.buzzer_test_button = QPushButton("Test")
+        self.buzzer_test_button.setIcon(make_icon("speaker_on", "#e0e0e0"))
         self.buzzer_test_button.clicked.connect(tower.test_alarm)
 
         self.ok_beep_checkbox = QCheckBox("Beep on OK")
@@ -91,6 +95,7 @@ class SettingsTab(QWidget):
         self.ok_beep_duration_spinbox.valueChanged.connect(tower.set_ok_beep_ms)
 
         self.ok_beep_test_button = QPushButton("Test")
+        self.ok_beep_test_button.setIcon(make_icon("speaker_on", "#e0e0e0"))
         self.ok_beep_test_button.clicked.connect(tower.test_ok_beep)
 
         self.state_hold_spinbox = QSpinBox()
@@ -170,12 +175,12 @@ class SettingsTab(QWidget):
         model_body.addLayout(row(self.load_model_button, self.model_label))
         self.model_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
 
-        camera_card, camera_body = make_card("Camera")
+        camera_card, camera_body = make_card("Camera", icon="camera")
         camera_body.addLayout(row(QLabel("Camera:"), self.camera_combo, self.scan_button, None))
         camera_body.addLayout(row(QLabel("Resolution:"), self.resolution_combo, None))
         camera_body.addWidget(self.resolution_actual_label)
 
-        tower_card, tower_body = make_card("Tower Light & Buzzer")
+        tower_card, tower_body = make_card("Tower Light & Buzzer", icon="tower")
         tower_body.addWidget(self.tower_status_label)
         tower_body.addWidget(self.buzzer_enabled_checkbox)
         tower_body.addLayout(row(
@@ -193,7 +198,7 @@ class SettingsTab(QWidget):
         slow_hint.setWordWrap(True)
         tower_body.addWidget(slow_hint)
 
-        autocapture_card, autocapture_body = make_card("Auto Capture")
+        autocapture_card, autocapture_body = make_card("Auto Capture", icon="autocapture")
         autocapture_body.addLayout(row(QLabel("Max images per job:"), None, self.autocapture_max_spinbox))
         autocapture_body.addLayout(row(QLabel("Match threshold:"), None, self.autocapture_threshold_spinbox))
         autocapture_body.addLayout(row(QLabel("Min interval:"), None, self.autocapture_interval_spinbox))

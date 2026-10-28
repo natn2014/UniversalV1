@@ -43,6 +43,7 @@ from ..theme import (
     STANDBY_YELLOW,
     action_button_qss,
     gloss_gradient,
+    make_icon,
     set_badge_title,
 )
 from ..vision.base import Tool, ToolResult, create
@@ -144,9 +145,12 @@ class ToolsTab(QWidget):
         self.table.currentCellChanged.connect(lambda row, *_: self._on_selected(row))
 
         self.teach_button = self._button("Teach", self._on_teach_clicked)
+        self.teach_button.setIcon(make_icon("target", "#e0e0e0"))
         self.roi_button = self._button("Draw ROI", self._on_draw_roi_clicked)
+        self.roi_button.setIcon(make_icon("roi", "#e0e0e0"))
         self.roi_button.setCheckable(True)
         self.pick_color_button = self._button("Pick Color", self._on_pick_color_clicked)
+        self.pick_color_button.setIcon(make_icon("eyedropper", "#e0e0e0"))
         self.pick_color_button.setCheckable(True)
         self.pick_card, pick_body = make_card("Color Extraction")
         self.pick_header = self.pick_card.findChild(QLabel, "cardHeader")
@@ -155,7 +159,9 @@ class ToolsTab(QWidget):
         self.narrow_button = self._button("−  Narrower", lambda: self.widen_selected(-1))
         self.wider_button = self._button("+  Wider", lambda: self.widen_selected(1))
         self.clear_pick_button = self._button("Clear", self.clear_pick)
+        self.clear_pick_button.setIcon(make_icon("close", "#e0e0e0"))
         self.done_pick_button = self._button("Done", self._exit_mode)
+        self.done_pick_button.setIcon(make_icon("check", "#e0e0e0"))
         self.done_pick_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["start"]))
         pick_grid = QGridLayout()
         pick_grid.setSpacing(8)
@@ -167,9 +173,12 @@ class ToolsTab(QWidget):
         pick_body.addLayout(pick_grid)
         self.pick_card.hide()
         self.delete_button = self._button("Delete", self._on_delete_clicked)
+        self.delete_button.setIcon(make_icon("trash", "#ffffff"))
         self.delete_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["stop"]))
         self.gate_button = self._button("", self._on_gate_clicked)
+        self.gate_button.setIcon(make_icon("gate", "#e0e0e0"))
         self.calibrate_button = self._button("Calibrate mm", self._on_calibrate_clicked)
+        self.calibrate_button.setIcon(make_icon("ruler", "#e0e0e0"))
 
         self.live_label = QLabel("—")
         self.live_label.setObjectName("currentPart")
@@ -178,6 +187,7 @@ class ToolsTab(QWidget):
         self.low_check, self.low_spin = self._limit_widgets("Low", self._on_limit_changed)
         self.high_check, self.high_spin = self._limit_widgets("High", self._on_limit_changed)
         self.percent_button = self._button(f"Set from current ±{LIMIT_PERCENT:.0f}%", self._on_percent_clicked)
+        self.percent_button.setIcon(make_icon("range", "#e0e0e0"))
         self.enabled_check = QCheckBox("Enabled")
         self.follow_check = QCheckBox("Follow position")
         for check in (self.enabled_check, self.follow_check):
@@ -187,8 +197,10 @@ class ToolsTab(QWidget):
         self.form.changed.connect(self._on_params_changed)
 
         self.snapshot_button = self._button("Snapshot", self.toggle_snapshot, height=44)
+        self.snapshot_button.setIcon(make_icon("snapshot", "#e0e0e0"))
         self.snapshot_button.setMinimumWidth(150)
         self.add_button = self._button("Add Tool", self._on_add_clicked, height=44)
+        self.add_button.setIcon(make_icon("plus", "#ffffff"))
         self.add_button.setMinimumWidth(170)
         self.add_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["start"]))
         self.hint_label = QLabel()
@@ -238,7 +250,7 @@ class ToolsTab(QWidget):
         buttons.addWidget(self.gate_button, 2, 0)
         buttons.addWidget(self.calibrate_button, 2, 1)
 
-        limits_card, limits_body = make_card("Limits (OK range)")
+        limits_card, limits_body = make_card("Limits (OK range)", icon="range")
         limits_body.addWidget(self.live_label)
         for check, spin in ((self.low_check, self.low_spin), (self.high_check, self.high_spin)):
             limit_row = QHBoxLayout()
@@ -247,7 +259,7 @@ class ToolsTab(QWidget):
             limits_body.addLayout(limit_row)
         limits_body.addWidget(self.percent_button)
 
-        params_card, params_body = make_card("Parameters")
+        params_card, params_body = make_card("Parameters", icon="sliders")
         flag_row = QHBoxLayout()
         flag_row.addWidget(self.enabled_check)
         flag_row.addWidget(self.follow_check)
@@ -311,6 +323,7 @@ class ToolsTab(QWidget):
         None goes back to the live stream."""
         self._frame = frame
         self.snapshot_button.setText("Resume Live" if frame is not None else "Snapshot")
+        self.snapshot_button.setIcon(make_icon("play", "#ffffff") if frame is not None else make_icon("snapshot", "#e0e0e0"))
         self.snapshot_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["start"]) if frame is not None else "")
         self._refresh_all()
 

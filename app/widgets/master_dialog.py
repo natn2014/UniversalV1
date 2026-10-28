@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..autocapture import MAX_MASTERS, Master, hamming, image_hash, qimage_to_array, save_master
-from ..theme import RUN_BUTTON_STYLES, action_button_qss
+from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
 
 THUMB_W, THUMB_H = 220, 150
 GRID_COLUMNS = 3
@@ -40,7 +40,9 @@ class _MasterCard(QFrame):
         self.thumb.setFixedSize(THUMB_W, THUMB_H)
         self.thumb.setAlignment(Qt.AlignCenter)
         self.grab_button = QPushButton("Set from live")
+        self.grab_button.setIcon(make_icon("camera", "#e0e0e0"))
         self.remove_button = QPushButton("Remove")
+        self.remove_button.setIcon(make_icon("trash", "#ffffff"))
         self.remove_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["stop"]))
         for button in (self.grab_button, self.remove_button):
             button.setFixedHeight(40)
@@ -153,10 +155,13 @@ class MasterDialog(QDialog):
         hint.setWordWrap(True)
 
         self.add_button = QPushButton("Add Master")
+        self.add_button.setIcon(make_icon("plus", "#e0e0e0"))
         self.add_button.clicked.connect(self._add_from_live)
         self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setIcon(make_icon("close", "#e0e0e0"))
         self.cancel_button.clicked.connect(self.reject)
         self.save_button = QPushButton("Save")
+        self.save_button.setIcon(make_icon("save", "#ffffff"))
         self.save_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["start"]))
         self.save_button.clicked.connect(self._save)
         for button in (self.add_button, self.cancel_button, self.save_button):

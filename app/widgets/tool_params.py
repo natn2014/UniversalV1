@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..paths import ROOT_DIR
-from ..theme import RUN_BUTTON_STYLES, action_button_qss
+from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
 from ..vision.base import Tool
 from .layout import bottom_bar, make_card, top_bar
 
@@ -285,9 +285,11 @@ class AddToolDialog(QDialog):
         tip.setWordWrap(True)
         tip.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.add_button = QPushButton("Add")
+        self.add_button.setIcon(make_icon("plus", "#ffffff"))
         self.add_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["start"]))
         self.add_button.clicked.connect(lambda: self._add(self.selected_kind))
         self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setIcon(make_icon("close", "#e0e0e0"))
         self.cancel_button.clicked.connect(self.reject)
         for button in (self.add_button, self.cancel_button):
             button.setFixedHeight(48)
@@ -392,6 +394,7 @@ class DeleteToolDialog(QDialog):
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.clicked.connect(self.reject)
         self.delete_button = QPushButton("Delete")
+        self.delete_button.setIcon(make_icon("trash", "#ffffff"))
         self.delete_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["stop"]))
         self.delete_button.setAutoDefault(False)
         self.delete_button.clicked.connect(self.accept)

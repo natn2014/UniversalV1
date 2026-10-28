@@ -1,5 +1,7 @@
+import math
+
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap, QPolygonF
+from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 
 from .paths import ROOT_DIR
 
@@ -551,6 +553,141 @@ QLabel#judgementBanner {{
 """
 
 
+def _draw_line_icon(painter: QPainter, kind: str, fill: QColor, stroke: QPen) -> None:
+    """The rest of the make_icon set: outline icons on the same 20x20 grid."""
+    P = QPointF
+    painter.setPen(stroke)
+    painter.setBrush(Qt.NoBrush)
+
+    def lines(*points):
+        painter.drawPolyline(QPolygonF([P(x, y) for x, y in points]))
+
+    def dot(x, y, r):
+        painter.save()
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(fill)
+        painter.drawEllipse(P(x, y), r, r)
+        painter.restore()
+
+    if kind == "monitor":
+        painter.drawRoundedRect(QRectF(2.5, 3.5, 15, 10.5), 1.5, 1.5)
+        lines((10, 14), (10, 16.5))
+        lines((6.5, 16.5), (13.5, 16.5))
+    elif kind == "gear":
+        outer = []
+        for i in range(8):
+            a = i * math.pi / 4
+            for da, r in ((-0.22, 5.2), (-0.14, 7.6), (0.14, 7.6), (0.22, 5.2)):
+                outer.append(P(10 + r * math.cos(a + da), 10 + r * math.sin(a + da)))
+        painter.drawPolygon(QPolygonF(outer))
+        painter.drawEllipse(P(10, 10), 2.3, 2.3)
+    elif kind == "swap":  # Job Change: one job out, another in
+        lines((3.5, 7), (16, 7))
+        lines((12.5, 3.5), (16, 7), (12.5, 10.5))
+        lines((16.5, 13), (4, 13))
+        lines((7.5, 9.5), (4, 13), (7.5, 16.5))
+    elif kind == "list":
+        for y in (5, 10, 15):
+            dot(4, y, 1.4)
+            lines((7.5, y), (16.5, y))
+    elif kind == "folder":
+        painter.drawPolygon(QPolygonF([P(2.5, 4.5), P(8, 4.5), P(9.5, 6.5), P(17.5, 6.5),
+                                       P(17.5, 15.5), P(2.5, 15.5)]))
+    elif kind == "refresh":
+        painter.drawArc(QRectF(4, 4, 12, 12), 70 * 16, 290 * 16)
+        lines((9.2, 1.8), (12, 4.2), (9.4, 6.6))
+    elif kind == "trash":
+        lines((3.5, 5.5), (16.5, 5.5))
+        lines((8, 5.5), (8, 3), (12, 3), (12, 5.5))
+        lines((5, 5.5), (6, 17), (14, 17), (15, 5.5))
+        lines((8.5, 8.5), (8.5, 14))
+        lines((11.5, 8.5), (11.5, 14))
+    elif kind == "plus":
+        pen = QPen(stroke)
+        pen.setWidthF(2.4)
+        painter.setPen(pen)
+        lines((10, 3.5), (10, 16.5))
+        lines((3.5, 10), (16.5, 10))
+    elif kind == "check":
+        pen = QPen(stroke)
+        pen.setWidthF(2.4)
+        pen.setJoinStyle(Qt.RoundJoin)
+        painter.setPen(pen)
+        lines((3.5, 10.5), (8, 15), (16.5, 5))
+    elif kind == "pencil":
+        painter.drawPolygon(QPolygonF([P(3.5, 16.5), P(4.3, 12.8), P(13.2, 3.9), P(16.1, 6.8),
+                                       P(7.2, 15.7)]))
+        lines((11.4, 5.7), (14.3, 8.6))
+    elif kind == "eyedropper":
+        lines((4, 16), (11.5, 8.5))
+        lines((9.5, 6.5), (13.5, 10.5))
+        dot(14.6, 5.4, 3)
+        dot(3.6, 16.4, 1.2)
+    elif kind == "ruler":
+        painter.drawPolygon(QPolygonF([P(2, 12.5), P(12.5, 2), P(18, 7.5), P(7.5, 18)]))
+        for i, t in enumerate((0.2, 0.35, 0.5, 0.65, 0.8)):
+            x, y = 2 + 10.5 * t, 12.5 - 10.5 * t
+            n = 3 if i % 2 == 0 else 1.8
+            lines((x, y), (x + n * 0.707, y + n * 0.707))
+    elif kind == "gate":  # AND gate: two inputs, one result
+        path = QPainterPath(P(6.5, 4))
+        path.lineTo(10, 4)
+        path.arcTo(QRectF(4, 4, 12, 12), 90, -180)
+        path.lineTo(6.5, 16)
+        path.closeSubpath()
+        painter.drawPath(path)
+        lines((2, 7.5), (6.5, 7.5))
+        lines((2, 12.5), (6.5, 12.5))
+        lines((16, 10), (18.5, 10))
+    elif kind == "target":  # Teach: learn from what is under the cross
+        painter.drawEllipse(P(10, 10), 5.5, 5.5)
+        for x1, y1, x2, y2 in ((10, 1.5, 10, 5.5), (10, 14.5, 10, 18.5), (1.5, 10, 5.5, 10), (14.5, 10, 18.5, 10)):
+            lines((x1, y1), (x2, y2))
+        dot(10, 10, 2)
+    elif kind == "barcode":
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(fill)
+        for x, w in ((2.5, 1.6), (5, 0.8), (6.8, 1.8), (9.6, 0.8), (11.4, 1.6), (14, 0.8), (15.8, 1.7)):
+            painter.drawRect(QRectF(x, 4, w, 12))
+    elif kind == "sliders":
+        for y, knob in ((5, 7), (10, 13), (15, 9)):
+            lines((3, y), (17, y))
+            dot(knob, y, 2.2)
+    elif kind == "range":  # OK limits: low | <-> | high
+        lines((3.5, 4.5), (3.5, 15.5))
+        lines((16.5, 4.5), (16.5, 15.5))
+        lines((6.5, 10), (13.5, 10))
+        lines((9, 7.5), (6.5, 10), (9, 12.5))
+        lines((11, 7.5), (13.5, 10), (11, 12.5))
+    elif kind == "save":
+        painter.drawPolygon(QPolygonF([P(3, 3), P(14, 3), P(17, 6), P(17, 17), P(3, 17)]))
+        painter.drawRect(QRectF(6.5, 3, 6, 4))
+        painter.drawRect(QRectF(6, 11, 8, 6))
+    elif kind == "tower":  # stack light on a pole
+        for y in (2.5, 6.5, 10.5):
+            painter.drawRect(QRectF(6.5, y, 7, 4))
+        lines((10, 14.5), (10, 17.5))
+        lines((6, 17.5), (14, 17.5))
+    elif kind == "snapshot":  # frozen frame: picture with a pause mark
+        painter.drawRoundedRect(QRectF(2.5, 4, 15, 12), 1.5, 1.5)
+        lines((8.5, 7.5), (8.5, 12.5))
+        lines((11.5, 7.5), (11.5, 12.5))
+
+
+def icon_file(kind: str, color: str = "#e0e0e0") -> str:
+    """make_icon() saved as a PNG in .ui_assets, for rich-text headers."""
+    path = UI_ASSETS_DIR / f"icon_{kind}_{color.lstrip('#')}.png"
+    if not path.exists():
+        make_icon(kind, color).pixmap(40, 40).save(str(path))
+    return path.as_posix()
+
+
+def icon_title(kind: str, text: str, color: str = "#7fd0ff", size: int = 18) -> str:
+    """Rich text: a make_icon() icon in front of a header's text."""
+    return (f'<img src="{icon_file(kind, color)}" width="{size}" height="{size}" '
+            f'style="vertical-align: middle">&nbsp;&nbsp;{text}')
+
+
 def make_icon(kind: str, color: str = "#ffffff") -> QIcon:
     """Small vector icons drawn in code, so no image files or emoji fonts are
     needed on the Jetson. Drawn on a 20x20 grid at 2x for crisp edges."""
@@ -636,6 +773,8 @@ def make_icon(kind: str, color: str = "#ffffff") -> QIcon:
         else:
             painter.drawLine(QPointF(13, 7.5), QPointF(18, 12.5))
             painter.drawLine(QPointF(18, 7.5), QPointF(13, 12.5))
+    else:
+        _draw_line_icon(painter, kind, fill, stroke)
 
     painter.end()
     pixmap.setDevicePixelRatio(scale)

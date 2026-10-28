@@ -138,6 +138,7 @@ class MonitorTab(QWidget):
         self.roi_button.setCheckable(True)
         self.roi_button.toggled.connect(self._on_roi_button_toggled)
         self.roi_clear_button = QPushButton("Clear ROI")
+        self.roi_clear_button.setIcon(make_icon("close", "#e0e0e0"))
         self.roi_clear_button.setFixedHeight(TOOLBAR_HEIGHT)
         self.roi_clear_button.clicked.connect(lambda: self._ctx.set_roi(None, save_to_job=True))
         ctx.roi_changed.connect(self._on_roi_changed)
@@ -294,6 +295,7 @@ class MonitorTab(QWidget):
             "NG", "#e0685a", "#b83225", "#ff5a4a")
 
         self.counter_reset_button = QPushButton("Reset Count")
+        self.counter_reset_button.setIcon(make_icon("refresh", "#e0e0e0"))
         self.counter_reset_button.setObjectName("counterReset")
         self.counter_reset_button.clicked.connect(self.on_reset_counters_clicked)
 

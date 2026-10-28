@@ -152,10 +152,13 @@ class PerspectiveDialog(QDialog):
         self.size_label.setWordWrap(True)
 
         self.remove_button = QPushButton("Remove Top View")
+        self.remove_button.setIcon(make_icon("trash", "#e0e0e0"))
         self.remove_button.clicked.connect(self._on_remove)
         self.reset_button = QPushButton("Reset Corners")
+        self.reset_button.setIcon(make_icon("refresh", "#e0e0e0"))
         self.reset_button.clicked.connect(lambda: self.editor.set_points(self._default_points()))
         self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setIcon(make_icon("close", "#e0e0e0"))
         self.cancel_button.clicked.connect(self.reject)
         self.apply_button = QPushButton("Apply")
         self.apply_button.setIcon(make_icon("play"))

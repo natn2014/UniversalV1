@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 
 from .. import jobs
 from ..context import AppContext
-from ..theme import RUN_BUTTON_STYLES, action_button_qss
+from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
 from ..widgets.layout import bottom_bar, make_card, top_bar
 from ..widgets.remove_job_dialog import RemoveJobDialog
 
@@ -35,10 +35,12 @@ class JobChangeTab(QWidget):
 
         self.part_config_label = QLabel("No part scanned")
         self.remove_job_button = QPushButton("Remove Job...")
+        self.remove_job_button.setIcon(make_icon("trash", "#e0e0e0"))
         self.remove_job_button.setFixedHeight(44)
         self.remove_job_button.clicked.connect(self._on_remove_job_clicked)
 
         self.scan_barcode_button = QPushButton("Scan Barcode...")
+        self.scan_barcode_button.setIcon(make_icon("barcode", "#e0e0e0"))
         self.scan_barcode_button.setFixedHeight(44)
         self.scan_barcode_button.setMinimumWidth(200)
         self.scan_barcode_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["start"]))
@@ -57,7 +59,7 @@ class JobChangeTab(QWidget):
         top_layout.addWidget(self.part_config_label)
         top_layout.addStretch(1)
 
-        jobs_card, jobs_body = make_card("Saved Jobs")
+        jobs_card, jobs_body = make_card("Saved Jobs", icon="folder")
         self.job_buttons_layout = QGridLayout()
         self.job_buttons_layout.setSpacing(10)
         grid_widget = QWidget()

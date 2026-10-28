@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, Q
 from ..barcode import decode_scanned_text
 from ..camera import CAMERA_BACKEND
 from ..optional_deps import zbar_decode
-from ..theme import RUN_BUTTON_STYLES, action_button_qss
+from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
 
 
 class BarcodeWorker(QThread):
@@ -127,15 +127,18 @@ class BarcodeScanDialog(QDialog):
         self.manual_field = QLineEdit()
         self.manual_field.setPlaceholderText("Or type part number manually")
         self.manual_load_button = QPushButton("Load")
+        self.manual_load_button.setIcon(make_icon("folder", "#ffffff"))
         self.manual_load_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["start"]))
         self.manual_load_button.clicked.connect(self._on_manual_load)
         self.manual_save_button = QPushButton("Save")
+        self.manual_save_button.setIcon(make_icon("save", "#e0e0e0"))
         self.manual_save_button.clicked.connect(self._on_manual_save)
         for button in (self.manual_load_button, self.manual_save_button):
             button.setFixedHeight(40)
             button.setMinimumWidth(96)
 
         self.close_button = QPushButton("Close")
+        self.close_button.setIcon(make_icon("close", "#e0e0e0"))
         self.close_button.setFixedHeight(44)
         self.close_button.setMinimumWidth(140)
         self.close_button.clicked.connect(self.reject)
