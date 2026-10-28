@@ -1,15 +1,18 @@
-from typing import Optional
+from typing import Callable, Optional
 
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from ..roi import normalize_roi
+from .tool_overlay import ScreenPainter
 
 
 class VideoView(QWidget):
-    """Live frame scaled to fit. In ROI mode, dragging on the image draws a
-    new detection area, emitted as fractions of the frame (x1, y1, x2, y2)."""
+    """Live frame scaled to fit. Boxes and labels are painted over it here,
+    at screen size (see set_frame), not burned into the frame. In ROI mode,
+    dragging on the image draws a new detection area, emitted as fractions of
+    the frame (x1, y1, x2, y2)."""
 
     roi_drawn = Signal(tuple)
     point_picked = Signal(tuple)  # (x, y) as fractions of the frame, in point mode
@@ -17,6 +20,7 @@ class VideoView(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._pixmap: Optional[QPixmap] = None
+        self._overlay: Optional[Callable] = None
         self._image_rect = QRectF()
         self._roi_mode = False
         self._drag_start: Optional[QPointF] = None  # fractions of the frame
@@ -26,7 +30,13 @@ class VideoView(QWidget):
         self._point_mode = False
 
     def setPixmap(self, pixmap: QPixmap) -> None:
+        self.set_frame(pixmap)
+
+    def set_frame(self, pixmap: QPixmap, overlay: Optional[Callable] = None) -> None:
+        """`overlay(painter)` draws in frame pixels, after the frame is drawn;
+        use the tool_overlay helpers so lines and text keep screen size."""
         self._pixmap = pixmap
+        self._overlay = overlay
         self.update()
 
     def pixmap(self) -> Optional[QPixmap]:
@@ -50,7 +60,7 @@ class VideoView(QWidget):
         self.setCursor(Qt.CrossCursor if enabled or self._roi_mode else Qt.ArrowCursor)
 
     def paintEvent(self, event) -> None:
-        painter = QPainter(self)
+        painter = ScreenPainter(self)
         painter.fillRect(self.rect(), QColor("#0b0d10"))
         if self._pixmap is None or self._pixmap.isNull():
             self._draw_overlay(painter)
@@ -61,6 +71,13 @@ class VideoView(QWidget):
         self._image_rect = QRectF((self.width() - w) / 2, (self.height() - h) / 2, w, h)
         painter.setRenderHint(QPainter.SmoothPixmapTransform)
         painter.drawPixmap(self._image_rect, self._pixmap, QRectF(self._pixmap.rect()))
+        if self._overlay is not None:
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.begin_frame(self._image_rect, scale)
+            try:
+                self._overlay(painter)
+            finally:
+                painter.end_frame()
 
         if self._roi_mode:
             painter.setPen(QColor("#ffd54f"))

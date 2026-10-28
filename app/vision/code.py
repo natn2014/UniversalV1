@@ -82,5 +82,5 @@ class CodeTool(Tool):
         if poly:
             res.overlay.append(overlay_item("poly", poly, res.ok, text))
         else:
-            res.overlay.append(overlay_item("text", [2, 14], res.ok, text))
+            res.overlay.append({**overlay_item("text", [0, 0], res.ok, text), "place": "inside"})
         return res

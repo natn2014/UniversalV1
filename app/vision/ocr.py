@@ -171,5 +171,5 @@ class OcrTool(Tool):
         except RuntimeError as exc:
             return self.fail(str(exc))
         res = self.result(conf, text=text, extra={"conf": conf, "reason": reason}, ok=ok)
-        res.overlay = [overlay_item("text", [2, 14], res.ok, text)]
+        res.overlay = [{**overlay_item("text", [0, 0], res.ok, text), "place": "inside"}]  # top-left of the ROI
         return res

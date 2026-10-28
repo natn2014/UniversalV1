@@ -3,8 +3,8 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from PySide6.QtCore import QRect, QSize, Qt, Signal, Slot
-from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
+from PySide6.QtCore import QRect, QRectF, QSize, Qt, Signal, Slot
+from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -47,7 +47,7 @@ from ..widgets.layout import SIDE_PANEL_WIDTH, VIDEO_MIN_SIZE, bottom_bar, top_b
 from ..widgets.master_dialog import MasterDialog
 from ..widgets.master_strip import MasterStrip
 from ..widgets.perspective_dialog import PerspectiveDialog
-from ..widgets.tool_overlay import draw_label, draw_overlay, overlay_scale, tool_value_text, use_label_font
+from ..widgets.tool_overlay import draw_label, draw_overlay, overlay_pen, tool_value_text
 from ..widgets.tool_params import kind_hint
 from ..widgets.video_view import VideoView
 from ..yolo_labels import pixel_box_to_yolo, write_yolo_label_file
@@ -66,7 +66,6 @@ class MonitorTab(QWidget):
         self._ctx = ctx
         self._class_counts = {}
         self._class_colors = {}
-        self._current_pixmap = None
         self._current_frame_image: Optional[QImage] = None
         self._current_frame_detections: list = []
         self._current_tool_results: list = []
@@ -490,7 +489,7 @@ class MonitorTab(QWidget):
         # While stopped, redraw the last frame so the new area shows at once.
         if not self._ctx.worker.isRunning() and self._current_frame_image is not None:
             self._current_frame_detections = []
-            self.video_label.setPixmap(self._render_frame(self._current_frame_image, []))
+            self._show_frame(self._current_frame_image, [])
 
     def _roi_pixels(self, image: QImage) -> Optional[tuple]:
         roi = self._ctx.filters.roi
@@ -507,13 +506,10 @@ class MonitorTab(QWidget):
         for rect in (QRect(0, 0, w, y1), QRect(0, y2, w, h - y2),
                      QRect(0, y1, x1, y2 - y1), QRect(x2, y1, w - x2, y2 - y1)):
             painter.fillRect(rect, shade)
-        pen = QPen(QColor("#ffd54f"))
-        pen.setWidth(max(2, round(2 * overlay_scale(painter))))
-        pen.setStyle(Qt.DashLine)
-        painter.setPen(pen)
+        painter.setPen(overlay_pen(painter, "#ffd54f", 2, Qt.DashLine))
+        painter.setBrush(Qt.NoBrush)
         painter.drawRect(x1, y1, x2 - x1, y2 - y1)
-        use_label_font(painter)
-        draw_label(painter, x1 + 4, y1 + painter.fontMetrics().ascent() + 4, "ROI", "#ffd54f")
+        draw_label(painter, x1, y1, "ROI", "#ffd54f", "inside")
 
     # --- Stream control -------------------------------------------------
 
@@ -854,16 +850,14 @@ class MonitorTab(QWidget):
             self._update_judgement_banner(state)
             self._ctx.tower.update_state(state)
 
-        pixmap = self._render_frame(image, detections, tool_results)
-        self._current_pixmap = pixmap
-        self.video_label.setPixmap(pixmap)
+        self._show_frame(image, detections, tool_results)
         self._update_class_table(detections)
         self._update_tool_table(tool_results)
         if self._ctx.masters:
             self._match_masters(image, detections)
         if self._pending_ng_save:
             self._pending_ng_save = False
-            self._save_ng_image(pixmap)
+            self._save_ng_image(self._render_frame(image, detections, tool_results))
         if self._on_first_frame:
             pending, self._on_first_frame = self._on_first_frame, []
             for then in pending:
@@ -881,34 +875,38 @@ class MonitorTab(QWidget):
         return total_state(tool_results, yolo_state, self._ctx.tools_gate, position_found)
 
     def _render_frame(self, image: QImage, detections: list, tool_results: Optional[list] = None) -> QPixmap:
-        """Frame with the ROI, tool overlays and detection boxes drawn on it
-        (also what the NG log saves)."""
+        """Frame with the overlay burned in: what the NG log saves."""
         pixmap = QPixmap.fromImage(image)
         painter = QPainter(pixmap)
+        self._paint_overlay(painter, image, detections, tool_results)
+        painter.end()
+        return pixmap
+
+    def _show_frame(self, image: QImage, detections: list, tool_results: Optional[list] = None) -> None:
+        """Live view: the plain frame, with the overlay painted over it at screen size."""
+        self.video_label.set_frame(
+            QPixmap.fromImage(image),
+            lambda painter: self._paint_overlay(painter, image, detections, tool_results))
+
+    def _paint_overlay(self, painter: QPainter, image: QImage, detections: list,
+                       tool_results: Optional[list] = None) -> None:
+        """ROI, tool overlays and detection boxes, in frame pixels."""
         self._draw_roi(painter, image)
         for result in tool_results or []:
             draw_overlay(painter, result.overlay)
-        if detections:
-            # Assign colors to each detection based on class name
-            for det in detections:
-                class_name = det.get("class_name", "unknown")
-                if class_name not in self._class_colors:
-                    hue = (len(self._class_colors) * 37) % 360
-                    self._class_colors[class_name] = QColor.fromHsv(hue, 200, 255)
-                det["color"] = self._class_colors[class_name]
-
-            pen = QPen()
-            pen.setWidth(max(2, round(2 * overlay_scale(painter))))
-            use_label_font(painter)
-            for det in detections:
-                color = det.get("color", Qt.green)
-                pen.setColor(color)
-                painter.setPen(pen)
-                x1, y1, x2, y2 = det["x1"], det["y1"], det["x2"], det["y2"]
-                painter.drawRect(x1, y1, x2 - x1, y2 - y1)
-                draw_label(painter, x1, y1 - 6, det["label"], color)
-        painter.end()
-        return pixmap
+        for det in detections:
+            # Each class keeps its own color.
+            class_name = det.get("class_name", "unknown")
+            if class_name not in self._class_colors:
+                hue = (len(self._class_colors) * 37) % 360
+                self._class_colors[class_name] = QColor.fromHsv(hue, 200, 255)
+            color = self._class_colors[class_name]
+            det["color"] = color
+            painter.setPen(overlay_pen(painter, color))
+            painter.setBrush(Qt.NoBrush)
+            x1, y1, x2, y2 = det["x1"], det["y1"], det["x2"], det["y2"]
+            painter.drawRect(QRectF(x1, y1, x2 - x1, y2 - y1))
+            draw_label(painter, x1, y1, det["label"], color)
 
     def _save_ng_image(self, pixmap: QPixmap) -> None:
         try:

@@ -184,3 +184,24 @@ class MonitorTools(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ScreenOverlay(unittest.TestCase):
+    """The live view paints labels at screen size, not burned into the frame."""
+
+    def chip_rows(self, frame_w):
+        from PySide6.QtGui import QPixmap
+        from app.widgets.tool_overlay import draw_label
+        from app.widgets.video_view import VideoView
+        view = VideoView()
+        view.resize(640, 360)
+        frame = QPixmap(frame_w, frame_w * 9 // 16)
+        frame.fill(QColor("#ffffff"))
+        view.set_frame(frame, lambda p: draw_label(p, 0, 0, "OCR Text1", "#ffffff", "inside"))
+        img = view.grab().toImage()
+        return sum(1 for y in range(img.height()) if img.pixelColor(6, y).lightness() < 100)
+
+    def test_label_height_does_not_follow_the_frame_size(self):
+        small, big = self.chip_rows(640), self.chip_rows(2560)
+        self.assertGreater(small, 10)
+        self.assertEqual(small, big)

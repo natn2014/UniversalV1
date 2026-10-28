@@ -451,3 +451,9 @@ Status values: `todo` · `in-progress` · `done` · `blocked` (give the reason i
 - Buttons and controls: Tools tab (Teach, Draw ROI, Pick Color, Wider / Narrower, Gate, Calibrate, Low / High, Enabled, Follow position, Snapshot, Add Tool...), Monitor bottom bar, Settings labels via `tip_label(text, hint, *controls)`.
 - `QToolTip` styled light cream on an orange border, 11pt, for contrast on the dark theme. `HintWrapper` (installed app-wide in `main()`) re-shows plain-text tooltips as rich text so Qt word-wraps them, including table cells.
 - Hover needs a mouse: on the touch screen Qt shows no tooltips.
+
+### Overlays painted on screen, not into the frame
+- Before: boxes and labels were painted (QPainter) into the camera frame at its own resolution, and the frame was then shrunk to fit the view, like cv2 drawing would. Text and line size followed the camera resolution, text was resampled (soft), and OCR text sat at a fixed 14 frame px, hitting the box edge.
+- Now `VideoView.set_frame(pixmap, overlay)` paints the frame, then calls `overlay(painter)` with a `ScreenPainter` scaled to frame pixels. `overlay_pen` gives fixed-width (cosmetic) lines, `draw_label` maps its point to the screen and draws the chip unscaled at `SCREEN_FONT_PX` (15 px), elided to the image width. Same size and sharp at any camera resolution (test: `ScreenOverlay`).
+- Monitor: `_show_frame` (live, screen-painted) vs `_render_frame` (burned in, only for the NG log image, sized as before); both use `_paint_overlay`. Tools tab: `_paint_overlay`. The live view no longer re-renders a full-size pixmap every frame.
+- Text items take `place`: "above" (default; Pattern Search), "inside" (OCR / code text at the ROI's top-left, under the tool name), "center" (Blob Count numbers).

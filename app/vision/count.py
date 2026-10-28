@@ -74,7 +74,7 @@ class BlobCountTool(GrayPick, HsvTool):
             blobs.append({"x": x, "y": y, "w": w, "h": h, "area": area, "circularity": circ})
             keep[i] = 255
             label = str(len(blobs))
-            labels_overlay.append(overlay_item("text", [x + w // 2 - 4 * len(label), y + h // 2 + 5], True, label))
+            labels_overlay.append({**overlay_item("text", [x + w / 2, y + h / 2], True, label), "place": "center"})
         # Only the blobs that passed the filters are filled, so a merged or
         # split blob shows up; the number sits on each one.
         overlay = ([region_item(keep[labels])] if blobs else []) + labels_overlay

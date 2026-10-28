@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Tuple
 import cv2
 import numpy as np
 from PySide6.QtCore import Qt, QTimer, Slot
-from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPen, QPixmap
+from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -51,7 +51,7 @@ from ..vision.calibration import calibrate_from_width
 from ..vision.runner import run_tools
 from ..vision.total import total_state
 from ..widgets.layout import SIDE_PANEL_WIDTH, VIDEO_MIN_SIZE, bottom_bar, make_card, top_bar
-from ..widgets.tool_overlay import draw_overlay, overlay_scale, tool_value_text
+from ..widgets.tool_overlay import draw_overlay, overlay_pen, tool_value_text
 from ..widgets.tool_params import (
     TOUCH_HEIGHT,
     AddToolDialog,
@@ -623,21 +623,22 @@ class ToolsTab(QWidget):
         else:
             self.view.setPixmap(QPixmap())
             return
-        painter = QPainter(pixmap)
+        self.view.set_frame(pixmap, lambda painter: self._paint_overlay(painter, w, h))
+
+    def _paint_overlay(self, painter: QPainter, w: int, h: int) -> None:
+        """Results, then each tool's area (orange = selected), in frame pixels;
+        the view paints them at screen size."""
         for res in self._results.values():
             draw_overlay(painter, res.overlay)
         selected = self.selected_tool()
-        scale = overlay_scale(painter)
+        painter.setBrush(Qt.NoBrush)
         for tool in self.tools:
             x1, y1, x2, y2 = roi_to_pixels(tool.roi, w, h)
-            is_sel = tool is selected
-            pen = QPen(SELECTED_COLOR if is_sel else IDLE_COLOR)
-            pen.setWidth(round((3 if is_sel else 1.5) * scale))
-            pen.setStyle(Qt.SolidLine if is_sel else Qt.DashLine)
-            painter.setPen(pen)
+            if tool is selected:
+                painter.setPen(overlay_pen(painter, SELECTED_COLOR, 3))
+            else:
+                painter.setPen(overlay_pen(painter, IDLE_COLOR, 1.5, Qt.DashLine))
             painter.drawRect(x1, y1, x2 - x1, y2 - y1)  # the result overlay names each tool
-        painter.end()
-        self.view.setPixmap(pixmap)
 
     # --- Edits ----------------------------------------------------------
 
