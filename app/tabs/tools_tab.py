@@ -520,6 +520,7 @@ class ToolsTab(QWidget):
                        self.enabled_check, self.follow_check):
             widget.setEnabled(has)
         self._update_pick_button(tool)
+        self._show_live_value()
         if not (self._mode == "pick" and tool is not None and tool is self._pick_tool):
             self._exit_mode()  # a pick session survives its own saves, not a change of tool
         self._render()
@@ -577,11 +578,14 @@ class ToolsTab(QWidget):
                 verdict.setForeground(QBrush(QColor("#ffffff")))
             self.table.setItem(row, 2, value)
             self.table.setItem(row, 3, verdict)
+        self._show_live_value()
+        self._update_total(results)
+
+    def _show_live_value(self) -> None:
         tool = self.selected_tool()
         res = self._results.get(tool.name) if tool else None
         self.live_label.setText("Live value: —" if res is None else f"Live value: {tool_value_text(res, bool(self._ctx.mm_per_px))}"
                                 + (f"   {res.text}" if res.text and res.kind not in ("ocr", "code") else ""))
-        self._update_total(results)
 
     def _update_total(self, results: List[ToolResult]) -> None:
         if not results:

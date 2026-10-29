@@ -42,11 +42,17 @@ def _per_channel(fn: Callable[[np.ndarray], np.ndarray]) -> Callable[..., np.nda
 
 
 @_per_channel
-def flat_field(gray: np.ndarray, kernel: int = 51) -> np.ndarray:
+def flat_field(gray: np.ndarray, kernel: int = 51, ignore_dark: bool = False) -> np.ndarray:
     """Divides out the slow brightness gradient (uneven lighting, shading)
-    and restores the mean level."""
+    and restores the mean level. `ignore_dark` closes away dark print before
+    measuring the background, so a dense line of text does not lighten its
+    own surroundings (used for OCR)."""
     k = _odd(kernel)
-    bg = cv2.GaussianBlur(gray, (k, k), 0).astype(np.float32)
+    src = gray
+    if ignore_dark:
+        se = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (_odd(max(3, k // 3)),) * 2)
+        src = cv2.morphologyEx(gray, cv2.MORPH_CLOSE, se)
+    bg = cv2.GaussianBlur(src, (k, k), 0).astype(np.float32)
     out = gray.astype(np.float32) / np.maximum(bg, 1.0) * float(bg.mean())
     return np.clip(out, 0, 255).astype(np.uint8)
 

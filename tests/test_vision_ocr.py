@@ -6,7 +6,7 @@ import numpy as np
 
 from app.optional_deps import TESSERACT
 from app.vision import ocr
-from app.vision.ocr import OcrTool, estimate_skew, prepare_for_ocr, verify
+from app.vision.ocr import OcrTool, clean_binary, estimate_skew, prepare_for_ocr, verify
 from app.vision.preprocess import apply_chain, to_gray
 
 
@@ -56,6 +56,43 @@ class Prepare(unittest.TestCase):
 
     def test_blank_does_not_raise(self):
         prepare_for_ocr(np.full((50, 50), 100, np.uint8))
+
+    def test_white_margin_round_the_text(self):
+        out = pipeline(label())
+        m = ocr.PAD_PX
+        self.assertTrue((out[:m] == 255).all() and (out[-m:] == 255).all())
+        self.assertTrue((out[:, :m] == 255).all() and (out[:, -m:] == 255).all())
+
+
+class Clean(unittest.TestCase):
+    def binary(self):
+        b = np.full((60, 300), 255, np.uint8)
+        cv2.putText(b, "AB-12", (20, 45), cv2.FONT_HERSHEY_SIMPLEX, 1.2, 0, 3)
+        return np.where(b < 128, 0, 255).astype(np.uint8)  # putText smooths the edges
+
+    def test_drops_specks_and_cut_off_neighbours_keeps_hyphen(self):
+        b = self.binary()
+        self.assertTrue((clean_binary(b) == b).all())  # every character stays, the hyphen too
+        noisy = b.copy()
+        noisy[5, 250] = noisy[50, 260] = 0  # specks
+        noisy[0:6, 100:160] = 0             # bottom of the line above
+        self.assertTrue((clean_binary(noisy) == b).all())
+
+
+@unittest.skipUnless(TESSERACT, "tesseract not installed")
+class SyntheticMark(unittest.TestCase):
+    """Every line of the synthetic glass mark (tools/make_synthetic_mark.py)."""
+
+    def test_reads_every_line(self):
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+        from make_synthetic_mark import make
+        img, truth = make()
+        for line in truth["lines"]:
+            x1, y1, x2, y2 = line["box_px"]
+            res = OcrTool(expected=line["text"]).run(img[y1 - 10:y2 + 10, x1 - 10:x2 + 10])
+            self.assertTrue(res.ok, f"{line['key']}: read {res.text!r}, conf {res.value:.0f}")
 
 
 class FakeEngine:
@@ -171,6 +208,7 @@ class WithTesseract(unittest.TestCase):
         self.assertEqual(res.text.strip(), "LOT 2026")
         self.assertGreater(res.value, 60)
         self.assertTrue(res.ok)
+        self.assertEqual(res.overlay[0]["label"], f"{res.name}: LOT 2026")  # read text in the name chip
 
     def test_reads_tilted_label(self):
         self.assertEqual(OcrTool(psm=7).run(label(angle=4.0)).text.strip(), "LOT 2026")

@@ -59,6 +59,7 @@ class CodeTool(Tool):
     PARAMS = {"symbology": "any", "expected": "", "pattern": "", "use_job_part_no": False}
     DEFAULT_LOW = 1.0
     SLOW = True
+    READ_IN_LABEL = True
 
     def process(self, patch, origin):
         found = read_code(np.ascontiguousarray(self.gray(patch)), self.symbology)
@@ -80,7 +81,5 @@ class CodeTool(Tool):
                 reason = "bad pattern"
         res = self.result(1, text=text, extra={"reason": reason, "symbology": kind, "raw": raw}, ok=not reason)
         if poly:
-            res.overlay.append(overlay_item("poly", poly, res.ok, text))
-        else:
-            res.overlay.append({**overlay_item("text", [0, 0], res.ok, text), "place": "inside"})
+            res.overlay.append(overlay_item("poly", poly, res.ok))
         return res

@@ -14,12 +14,13 @@ from typing import Optional, Protocol, Tuple
 import cv2
 import numpy as np
 
-from .base import Tool, overlay_item, register
+from .base import Tool, register
 
 TARGET_CHAR_PX = 32
 MAX_SCALE = 4.0
 MAX_DESKEW_DEG = 15.0
-DEFAULT_OCR_PRE = [{"op": "flat_field", "kernel": 51}, {"op": "clahe", "clip": 2.0, "tiles": 8}]
+PAD_PX = 20  # white margin round the text; Tesseract misreads glyphs that touch the edge
+DEFAULT_OCR_PRE = [{"op": "flat_field", "kernel": 51, "ignore_dark": True}, {"op": "clahe", "clip": 2.0, "tiles": 8}]
 
 
 class OcrEngine(Protocol):
@@ -96,8 +97,31 @@ def deskew(binary: np.ndarray) -> np.ndarray:
     return _binarize_dark_on_light(out)
 
 
+def clean_binary(binary: np.ndarray) -> np.ndarray:
+    """Drops what is not a character of this line: pieces of the lines above /
+    below cut by the ROI edge, and specks. Short wide marks (hyphens) stay."""
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(255 - binary, connectivity=8)
+    h = binary.shape[0]
+    keep = []
+    for i in range(1, n):
+        _, y, _, bh, _ = stats[i][:5]
+        if (y == 0 or y + bh >= h) and bh < 0.6 * h:
+            continue  # cut off by the top / bottom edge
+        keep.append(i)
+    if not keep:
+        return binary
+    med = float(np.median([stats[i][cv2.CC_STAT_HEIGHT] for i in keep]))
+    out = np.full_like(binary, 255)
+    for i in keep:
+        _, _, bw, bh, area = stats[i][:5]
+        if bh >= 0.5 * med or area >= 0.3 * med * med or (bw >= 0.25 * med and bw >= 1.5 * bh):
+            out[labels == i] = 0
+    return out
+
+
 def prepare_for_ocr(gray: np.ndarray, char_height_px: float = 0) -> np.ndarray:
-    """Scale up small print, binarize dark-on-light, straighten a tilted line.
+    """Scale up small print, binarize dark-on-light, drop specks and cut-off
+    neighbours, straighten a tilted line, add a white margin.
     `gray` has already been through the tool's `pre` chain."""
     binary = _binarize_dark_on_light(gray)
     height = char_height_px or estimate_char_height(binary)
@@ -105,7 +129,8 @@ def prepare_for_ocr(gray: np.ndarray, char_height_px: float = 0) -> np.ndarray:
         scale = min(TARGET_CHAR_PX / height, MAX_SCALE)
         gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
         binary = _binarize_dark_on_light(gray)
-    return deskew(binary)
+    binary = clean_binary(deskew(clean_binary(binary)))
+    return cv2.copyMakeBorder(binary, PAD_PX, PAD_PX, PAD_PX, PAD_PX, cv2.BORDER_CONSTANT, value=255)
 
 
 def _with_date(template: str, date_format: str, now: Optional[datetime], escape: bool) -> str:
@@ -144,6 +169,7 @@ class OcrTool(Tool):
     DEFAULT_PRE = DEFAULT_OCR_PRE
     DEFAULT_LOW = 60.0
     SLOW = True
+    READ_IN_LABEL = True
     engine: Optional[OcrEngine] = None  # set to override (tests, another engine)
 
     def prepare(self, patch: np.ndarray) -> np.ndarray:
@@ -170,6 +196,4 @@ class OcrTool(Tool):
                     text, ok, reason = "upside down", False, "upside down"
         except RuntimeError as exc:
             return self.fail(str(exc))
-        res = self.result(conf, text=text, extra={"conf": conf, "reason": reason}, ok=ok)
-        res.overlay = [{**overlay_item("text", [0, 0], res.ok, text), "place": "inside"}]  # top-left of the ROI
-        return res
+        return self.result(conf, text=text, extra={"conf": conf, "reason": reason}, ok=ok)

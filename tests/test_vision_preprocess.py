@@ -24,6 +24,16 @@ class FlatField(unittest.TestCase):
         contrast = out[20:100, 150:250].mean() - out[145:155, 195:205].mean()
         self.assertGreater(contrast, 40)
 
+    def test_ignore_dark_keeps_background_next_to_dense_print_flat(self):
+        img = np.full((80, 400), 200, np.uint8)
+        for x in range(20, 380, 9):
+            img[25:55, x:x + 5] = 40  # 5 px strokes close together, like a line of bold text
+        plain = pp.flat_field(img, 51)
+        ignored = pp.flat_field(img, 51, ignore_dark=True)
+        # Plain: the band darkens the blur, so the paper next to it is lifted.
+        self.assertGreater(int(plain[20, 200]) - int(plain[2, 200]), 15)
+        self.assertLess(abs(int(ignored[20, 200]) - int(ignored[2, 200])), 5)
+
     def test_bgr_and_dtype(self):
         _, img = ramp_with_square()
         out = pp.flat_field(cv2.merge([img] * 3), 31)

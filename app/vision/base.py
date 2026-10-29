@@ -108,6 +108,9 @@ class Tool:
     # Too slow for every frame (OCR, code reading): the camera worker runs
     # these in their own thread at a few Hz (vision.slow_runner).
     SLOW = False
+    # The read text goes in the name chip ("Lot: A123") rather than a chip of
+    # its own, which would cover the print or the next line's tool (OCR, code).
+    READ_IN_LABEL = False
 
     # Set by the runner for each frame; never saved.
     mm_per_px: Optional[float] = None
@@ -186,7 +189,8 @@ class Tool:
         result = self.process(patch, origin)
         x0, y0 = origin
         h, w = patch.shape[:2]
-        frame_box = overlay_item("rect", [x0, y0, x0 + w, y0 + h], result.ok, self.name)
+        label = f"{self.name}: {result.text}" if self.READ_IN_LABEL and result.text else self.name
+        frame_box = overlay_item("rect", [x0, y0, x0 + w, y0 + h], result.ok, label)
         result.overlay = [frame_box] + shift_overlay(result.overlay, x0, y0)
         return result
 

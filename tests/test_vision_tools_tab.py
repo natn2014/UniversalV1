@@ -20,6 +20,7 @@ import app.settings as settings_mod  # noqa: E402
 import app.tabs.tools_tab as tools_tab_mod  # noqa: E402
 from app.context import AppContext  # noqa: E402
 from app.tabs.tools_tab import ToolsTab  # noqa: E402
+from app.widgets.tool_overlay import tool_value_text  # noqa: E402
 from app.widgets.tool_params import CATEGORIES, KIND_USES, THUMBS_DIR, AddToolDialog  # noqa: E402
 
 APP = QApplication.instance() or QApplication([])
@@ -211,6 +212,13 @@ class AddTeachDelete(ToolsTabTest):
         self.tab.view.roi_drawn.emit((0.4, 0.4, 0.6, 0.6))
         self.assertEqual(tool.roi, (0.4, 0.4, 0.6, 0.6))
         self.assertEqual(self.saved_tools()[0]["roi"], [0.4, 0.4, 0.6, 0.6])
+
+    def test_live_value_follows_the_selected_row(self):
+        self.tab.add_tool("area", (0.15, 0.2, 0.47, 0.42))
+        self.tab.add_tool("width", (0.3, 0.6, 0.4, 0.8))
+        self.tab.table.selectRow(0)
+        first = self.tab._results[self.tab.tools[0].name]
+        self.assertIn(tool_value_text(first, False), self.tab.live_label.text())
 
 
 class LimitsParamsCalibration(ToolsTabTest):
