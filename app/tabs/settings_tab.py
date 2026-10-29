@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QSizePolicy,
@@ -168,6 +169,21 @@ class SettingsTab(QWidget):
         self.class_filters_scroll.setWidget(self.class_filters_container)
         self.class_filters_scroll.setMinimumHeight(200)
 
+        # Required marks: the classes a part of this job must show (NG if one is missing).
+        self.required_container = QWidget()
+        self.required_layout = QVBoxLayout(self.required_container)
+        self.required_scroll = QScrollArea()
+        self.required_scroll.setWidgetResizable(True)
+        self.required_scroll.setWidget(self.required_container)
+        self.required_scroll.setMinimumHeight(140)
+        self.required_teach_button = QPushButton("Set from current part")
+        self.required_teach_button.setIcon(make_icon("target"))
+        self.required_teach_button.setToolTip(
+            "With a good part on the Monitor, tick exactly the marks the AI finds on it now.")
+        self.required_teach_button.clicked.connect(self.teach_required_marks)
+        self.required_count_label = QLabel()
+        self.required_count_label.setObjectName("hint")
+
         self._build_layout()
 
     def _build_layout(self) -> None:
@@ -245,6 +261,15 @@ class SettingsTab(QWidget):
         filters_body.addWidget(tip_label("Classes to show:", "Only the ticked classes are drawn and counted. None ticked = all classes."))
         filters_body.addWidget(self.class_filters_scroll, 1)
 
+        required_card, required_body = make_card("Required Marks", badge="ai")
+        required_hint = QLabel("NG when a ticked mark is not found on the part. None ticked = not used "
+                               "(Target Classes decide).")
+        required_hint.setObjectName("hint")
+        required_hint.setWordWrap(True)
+        required_body.addLayout(row(self.required_teach_button, None, self.required_count_label))
+        required_body.addWidget(required_hint)
+        required_body.addWidget(self.required_scroll, 1)
+
         # Left: this station, the same for every job. Right: saved with the
         # job (the AI model and its filters), so it changes on Job Change.
         machine_heading, _ = section_heading("Machine", "Same for every job")
@@ -260,6 +285,7 @@ class SettingsTab(QWidget):
         right_column.addWidget(job_heading)
         right_column.addWidget(model_card)
         right_column.addWidget(filters_card, 1)
+        right_column.addWidget(required_card, 1)
 
         columns = QHBoxLayout()
         columns.addLayout(left_column, 1)
@@ -405,6 +431,59 @@ class SettingsTab(QWidget):
         filters.target_class_1 = None
         filters.target_class_2 = None
 
+        # Required marks: same classes, none ticked until taught or chosen.
+        while self.required_layout.count() > 0:
+            item = self.required_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        filters.required_classes.clear()
+        for class_name in sorted(model_classes):
+            checkbox = QCheckBox(class_name)
+            checkbox.toggled.connect(lambda checked, cn=class_name: self._toggle_required(cn, checked))
+            self.required_layout.addWidget(checkbox)
+        self.required_layout.addStretch(1)
+        self._refresh_required_count()
+
+    def _required_checkboxes(self) -> list:
+        return [w for w in (self.required_layout.itemAt(i).widget() for i in range(self.required_layout.count()))
+                if isinstance(w, QCheckBox)]
+
+    def _toggle_required(self, class_name: str, checked: bool) -> None:
+        if checked:
+            self._ctx.filters.required_classes.add(class_name)
+        else:
+            self._ctx.filters.required_classes.discard(class_name)
+        self._refresh_required_count()
+
+    def _refresh_required_count(self) -> None:
+        n = len(self._ctx.filters.required_classes)
+        self.required_count_label.setText(f"{n} required" if n else "not used")
+
+    def set_required_marks(self, classes) -> None:
+        """Ticks exactly `classes` (unknown names are ignored)."""
+        wanted = set(classes)
+        for checkbox in self._required_checkboxes():
+            checkbox.setChecked(checkbox.text() in wanted)
+
+    def teach_required_marks(self) -> None:
+        """Required marks = the classes the AI finds on the part now."""
+        detections = self._ctx.last_detections
+        found = sorted({d.get("class_name") for d in detections or []} & set(self._ctx.model_classes))
+        if not found:
+            QMessageBox.information(
+                self, "Set Required Marks",
+                "No AI marks found yet. Start the camera on the Monitor tab with a good part in view, "
+                "then tap this again.")
+            return
+        answer = QMessageBox.question(
+            self, "Set Required Marks",
+            f"Require these {len(found)} marks for this job?\n\n{', '.join(found)}\n\n"
+            "A part missing any of them will be NG.",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+        if answer == QMessageBox.Yes:
+            self.set_required_marks(found)
+            self._ctx.status.emit(f"Required marks set: {', '.join(found)}.")
+
     def _toggle_class_filter(self, class_name: str, checked: bool) -> None:
         if checked:
             self._ctx.filters.selected_classes.add(class_name)
@@ -446,6 +525,7 @@ class SettingsTab(QWidget):
             "target_class_2": filters.target_class_2,
             "target_gate": filters.target_gate,
             "selected_classes": sorted(filters.selected_classes),
+            "required_classes": sorted(filters.required_classes),
             "perspective": filters.perspective,
             "roi": list(filters.roi) if filters.roi else None,
             "autocapture_masters": ctx.master_entries(),
@@ -491,5 +571,6 @@ class SettingsTab(QWidget):
             widget = self.class_filters_layout.itemAt(i).widget()
             if isinstance(widget, QCheckBox):
                 widget.setChecked(widget.text() in selected)
+        self.set_required_marks(config.get("required_classes", []))  # older jobs: none
 
         return model_ok

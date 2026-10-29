@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -120,6 +121,14 @@ class MonitorTab(QWidget):
         self.judgement_banner.setAlignment(Qt.AlignCenter)
         self.judgement_banner.setFixedSize(130, 36)
 
+        # Required marks the AI did not find (Settings > Required Marks).
+        self.missing_label = QLabel()
+        self.missing_label.setObjectName("missingMarks")
+        self.missing_label.setStyleSheet(f"color: {QColor(NG_RED).lighter(150).name()}; font-weight: 800;")
+        self.missing_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.missing_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.missing_label.setToolTip("Marks this job requires that the AI did not find on the part.")
+
         self.monitor_info_label = QLabel()
         self.monitor_info_label.setObjectName("monitorInfo")
         self.monitor_info_label.setTextFormat(Qt.RichText)
@@ -219,7 +228,7 @@ class MonitorTab(QWidget):
         # with Run on the far right.
         top, top_layout = top_bar()
         top_layout.addWidget(self.monitor_info_label)
-        top_layout.addStretch(1)
+        top_layout.addWidget(self.missing_label, 1)
         top_layout.addWidget(self.judgement_banner)
 
         video_frame = QFrame()
@@ -839,7 +848,10 @@ class MonitorTab(QWidget):
         self._current_frame_image = image
         self._current_frame_detections = detections
         self._current_tool_results = tool_results
+        self._ctx.last_detections = detections
         self._live = True
+        missing = self._ctx.filters.missing(detections)
+        self.missing_label.setText(f"Missing: {', '.join(missing)}" if missing else "")
 
         if not self._preview:
             # One cycle = each time the held judgement becomes OK or NG.

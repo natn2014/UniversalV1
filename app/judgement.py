@@ -2,7 +2,7 @@
 
 import time
 from dataclasses import dataclass, field
-from typing import Optional, Set
+from typing import List, Optional, Set
 
 from .roi import Roi
 
@@ -17,6 +17,9 @@ class DetectionFilters:
     target_class_2: Optional[str] = None
     target_gate: str = "OR"
     selected_classes: Set[str] = field(default_factory=set)
+    # Marks the job's part must carry (Settings > Required Marks): when set,
+    # OK = every one detected, NG = any missing; the target classes are not used.
+    required_classes: Set[str] = field(default_factory=set)
     roi: Optional[Roi] = None  # detection area; None = whole frame
     perspective: Optional[list] = None  # top-view corners; None = camera view as is
 
@@ -33,8 +36,19 @@ class DetectionFilters:
             filtered = filtered[: self.max_detections]
         return filtered
 
+    def missing(self, filtered_detections: list) -> List[str]:
+        """Required classes not among the detections (none when nothing is detected: no part)."""
+        if not filtered_detections:
+            return []
+        present = {d.get("class_name") for d in filtered_detections}
+        return sorted(self.required_classes - present)
+
     def judge(self, filtered_detections: list) -> str:
         present_classes = {d.get("class_name") for d in filtered_detections}
+        if self.required_classes:
+            if not filtered_detections:
+                return "YELLOW"
+            return "RED" if self.missing(filtered_detections) else "GREEN"
         targets = [c for c in (self.target_class_1, self.target_class_2) if c]
         if targets:
             if self.target_gate == "AND":

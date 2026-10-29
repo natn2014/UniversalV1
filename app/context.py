@@ -52,6 +52,9 @@ class AppContext(QObject):
         self.tools: list = []  # rule-based vision tools (app/vision)
         self.tools_gate: str = "AND"
         self.mm_per_px: Optional[float] = None  # job-level calibration
+        # The Monitor's latest filtered AI detections (None = no frame yet), so
+        # Settings can teach the required marks from a good part.
+        self.last_detections: Optional[list] = None
 
     @property
     def model_path(self) -> Optional[Path]:

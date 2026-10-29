@@ -21,6 +21,25 @@ ELEMENT_CLASSES = [
     "date_code",   # digit + dots, or the XYG digit pyramid
     "class_mark",  # glass class mark (//, II, V-VI ...)
 ]
+# Standard-mark model: one class per approval / standard mark, so the
+# detector alone tells which standards a windshield carries (and a job can
+# require some of them). The order is the class id: append, never reorder.
+# tools/make_synthetic_mark.py --dataset draws training images for it.
+STANDARD_CLASSES = [
+    "e_mark",       # ECE R43: circle with E<n> and the 43R-00xxxx approval number
+    "dot",          # US DOT / FMVSS 205: DOT-### M###
+    "as_class",     # ANSI Z26.1 item: AS1 / AS2 / AS3
+    "ccc_mark",     # China CCC oval with its E000xxx factory code
+    "tis_mark",     # Thai TIS emblem with TIS ####-####
+    "sni_mark",     # Indonesia SNI with the maker code
+    "inmetro",      # Brazil INMETRO
+    "asnzs",        # Australia / New Zealand AS/NZS 2080
+    "bis_isi",      # India ISI mark with IS 2553 and CM/L licence
+    "laminated",    # glass type text
+    "glass_class",  # light-transmission class: //, II, V, V-VI
+    "date_code",    # digit + dots
+    "logo_acme", "logo_nova", "logo_orion",  # made-up makers; rename to the line's brands
+]
 # Elements whose crops go to the char model.
 TEXT_ELEMENTS = ("e_mark", "text_line", "date_code", "class_mark")
 
