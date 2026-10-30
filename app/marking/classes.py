@@ -37,8 +37,11 @@ STANDARD_CLASSES = [
     "bis_isi",      # India ISI mark with IS 2553 and CM/L licence
     "laminated",    # glass type text
     "glass_class",  # light-transmission class: //, II, V, V-VI
-    "date_code",    # digit + dots
-    "logo_acme", "logo_nova", "logo_orion",  # made-up makers; rename to the line's brands
+    "date_code",    # date rows (1 2 4 8) or digit + dots
+    "logo_toyota", "logo_honda", "logo_nissan",  # car brand (both Honda H styles)
+    "logo_agc",     # glass maker: AGC AUTOMOTIVE
+    "lamisafe",     # AGC laminated glass name
+    "temperlite",   # AGC tempered glass name
 ]
 # Elements whose crops go to the char model.
 TEXT_ELEMENTS = ("e_mark", "text_line", "date_code", "class_mark")

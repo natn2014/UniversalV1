@@ -282,8 +282,27 @@ def mark_as(pen):
     return pen.text(f"AS{int(pen.rng.integers(1, 4))}")
 
 
+def _ccc_logo(pen, h: int = 44) -> np.ndarray:
+    """CCC-like logo: three cascading C arcs (open to the right) in an oval."""
+    k = 4
+    H, W = h * k, int(h * 1.45) * k
+    c = np.full((H, W), 255, np.uint8)
+    t = max(k, int(H * pen.rng.uniform(0.035, 0.05)))
+    cv2.ellipse(c, (W // 2, H // 2), (W // 2 - t, H // 2 - t), 0, 0, 360, 0, t, cv2.LINE_AA)
+    r, d = int(H * 0.24), int(H * 0.16)
+    stroke = max(k, int(H * pen.rng.uniform(0.035, 0.05)))
+    x0 = W // 2 - d
+    for i in range(3):
+        start = 55 if i == 2 else 75
+        cv2.ellipse(c, (x0 + i * d, H // 2), (r, int(r * 1.05)), 0, start, 360 - start, 0, stroke, cv2.LINE_AA)
+    return cv2.resize(c, (W // k, H // k), interpolation=cv2.INTER_AREA)
+
+
 def mark_ccc(pen):
-    return _hcat([_framed(pen.text("CCC", 0.9), "ellipse", pen.thick, 4), pen.text(f"E000{pen.digits(3)}")], 10)
+    code = pen.text(f"E000{pen.digits(3)}")
+    if pen.rng.random() < 0.2:  # older drawing: the letters in an oval
+        return _hcat([_framed(pen.text("CCC", 0.9), "ellipse", pen.thick, 4), code], 10)
+    return _hcat([_ccc_logo(pen, int(code.shape[0] * pen.rng.uniform(1.8, 2.6))), code], int(pen.rng.integers(8, 20)))
 
 
 def mark_tis(pen):
@@ -294,18 +313,15 @@ def mark_tis(pen):
 
 
 def mark_sni(pen):
-    """SNI logo: heavy condensed letters with a bar above and below; sometimes
-    the older boxed form, sometimes with a maker code beside it."""
-    code = f"{'ABCDEFGHJKLMNPRSTUVWXY'[pen.rng.integers(22)]}{pen.rng.integers(1, 10)}"
+    """SNI logo: heavy condensed letters with a bar above and below, sometimes
+    the older boxed form. The maker code beside it is not part of the box."""
     if pen.rng.random() < 0.2:
-        logo = _framed(pen.text("SNI", 0.9), "box", pen.thick, 4)
-    else:
-        letters = pen.bold("SNI", pen.rng.uniform(1.2, 1.6), narrow=pen.rng.uniform(0.6, 0.8))
-        h, w = letters.shape
-        bar = max(2, int(h * pen.rng.uniform(0.12, 0.18)))
-        rule = np.zeros((bar, w), np.uint8)
-        logo = _vcat([rule, letters, rule], max(2, int(h * 0.12)))
-    return _hcat([pen.text(code), logo], 10) if pen.rng.random() < 0.4 else logo
+        return _framed(pen.text("SNI", 0.9), "box", pen.thick, 4)
+    letters = pen.bold("SNI", pen.rng.uniform(1.2, 1.6), narrow=pen.rng.uniform(0.6, 0.8))
+    h, w = letters.shape
+    bar = max(2, int(h * pen.rng.uniform(0.12, 0.18)))
+    rule = np.zeros((bar, w), np.uint8)
+    return _vcat([rule, letters, rule], max(2, int(h * 0.12)))
 
 
 def mark_inmetro(pen):
@@ -354,47 +370,102 @@ def mark_date(pen):
     return _date_rows(pen) if pen.rng.random() < 0.6 else _date_dots(pen)
 
 
-def logo_acme(pen):
-    word = pen.text("ACME", 1.6, pen.thick + 2)
-    w = word.shape[1]
-    swoosh = np.full((14, w), 255, np.uint8)
-    cv2.ellipse(swoosh, (w // 2, -10), (w // 2 - 2, 20), 0, 20, 160, 0, 3, cv2.LINE_AA)
-    return _vcat([word, swoosh], 2)
+def _spaced(pen, text: str, scale: float = 1.0, bold: bool = False, track: float = 0.18) -> np.ndarray:
+    """Letter-spaced capitals (AGC AUTOMOTIVE, LAMISAFE)."""
+    draw = pen.bold if bold else pen.text
+    h = int(BASE_CHAR_PX * scale)
+    words = []
+    for word in text.split(" "):
+        words.append(_hcat([draw(ch, scale) for ch in word], max(1, int(h * track))))
+    return _hcat(words, int(h * (0.6 + track)))
 
 
-def logo_nova(pen):
-    word = pen.text("NOVA", 1.3, pen.thick + 1)
-    h = word.shape[0]
-    star = np.full((h, h), 255, np.uint8)
-    pts = [(h / 2 + (h / 2 - 2) * math.cos(math.radians(a)), h / 2 + (h / 2 - 2) * math.sin(math.radians(a)))
-           for a in range(-90, 270, 72)]
-    cv2.fillPoly(star, [np.int32([pts[i % 5] for i in (0, 2, 4, 1, 3)])], 0, cv2.LINE_AA)
-    return _hcat([star, word], 6)
+def _stretch(img: np.ndarray, fx: float) -> np.ndarray:
+    return cv2.resize(img, (max(1, int(img.shape[1] * fx)), img.shape[0]), interpolation=cv2.INTER_AREA)
 
 
-def logo_orion(pen):
-    word = pen.text("ORION", 1.2, pen.thick + 1)
-    h = word.shape[0]
-    belt = np.full((h, h), 255, np.uint8)
-    cv2.circle(belt, (h // 2, h // 2), h // 2 - 2, 0, 2, cv2.LINE_AA)
-    for i in range(3):
-        cv2.circle(belt, (h // 4 + i * h // 4, h // 4 + i * h // 4), max(2, h // 10), 0, -1, cv2.LINE_AA)
-    return _hcat([belt, word], 6)
+def logo_toyota(pen):
+    word = pen.bold("TOYOTA", pen.rng.uniform(1.4, 1.9))
+    heavy = cv2.erode(word, np.ones((1, max(2, word.shape[0] // 9)), np.uint8))  # extra-heavy strokes
+    return _trim(_stretch(heavy, pen.rng.uniform(1.0, 1.2)))
+
+
+def logo_nissan(pen):
+    return _stretch(_spaced(pen, "NISSAN", pen.rng.uniform(1.3, 1.7), bold=True, track=0.08), pen.rng.uniform(1.1, 1.35))
+
+
+def _honda_solid(h: int) -> np.ndarray:
+    """Newer Honda-style H: legs flared at the top, a low crossbar with a curved top."""
+    k = 4
+    H, W = h * k, int(h * 1.35) * k
+    c = np.full((H, W), 255, np.uint8)
+    def P(pts):
+        return np.int32([(x * W, y * H) for x, y in pts])
+    left = [(0.0, 0.0), (0.24, 0.0), (0.30, 1.0), (0.12, 1.0)]
+    cv2.fillPoly(c, [P(left)], 0, cv2.LINE_AA)
+    cv2.fillPoly(c, [P([(1 - x, y) for x, y in left])], 0, cv2.LINE_AA)
+    top = [(x, 0.64 - 0.10 * ((x - 0.5) / 0.25) ** 2) for x in np.linspace(0.25, 0.75, 21)]
+    cv2.fillPoly(c, [P(top + [(0.76, 0.84), (0.24, 0.84)])], 0, cv2.LINE_AA)
+    return cv2.resize(c, (W // k, H // k), interpolation=cv2.INTER_AREA)
+
+
+def _rounded_fill(c: np.ndarray, x1: int, y1: int, x2: int, y2: int, r: int, value: int) -> None:
+    cv2.rectangle(c, (x1 + r, y1), (x2 - r, y2), value, -1)
+    cv2.rectangle(c, (x1, y1 + r), (x2, y2 - r), value, -1)
+    for cx, cy in ((x1 + r, y1 + r), (x2 - r, y1 + r), (x1 + r, y2 - r), (x2 - r, y2 - r)):
+        cv2.circle(c, (cx, cy), r, value, -1, cv2.LINE_AA)
+
+
+def _honda_classic(h: int) -> np.ndarray:
+    """Classic Honda-style H: legs widening upward inside a rounded square."""
+    k = 4
+    H, W = h * k, int(h * 1.25) * k
+    c = np.full((H, W), 255, np.uint8)
+    t, r = int(H * 0.07), int(H * 0.25)
+    _rounded_fill(c, 0, 0, W - 1, H - 1, r, 0)
+    _rounded_fill(c, t, t, W - 1 - t, H - 1 - t, r - t, 255)
+    def P(pts):
+        return np.int32([(x * W, y * H) for x, y in pts])
+    leg = [(0.20, 0.18), (0.40, 0.18), (0.36, 0.84), (0.27, 0.84)]
+    cv2.fillPoly(c, [P(leg)], 0, cv2.LINE_AA)
+    cv2.fillPoly(c, [P([(1 - x, y) for x, y in leg])], 0, cv2.LINE_AA)
+    cv2.fillPoly(c, [P([(0.36, 0.56), (0.64, 0.56), (0.64, 0.66), (0.36, 0.66)])], 0, cv2.LINE_AA)
+    return cv2.resize(c, (W // k, H // k), interpolation=cv2.INTER_AREA)
+
+
+def logo_honda(pen):
+    h = int(BASE_CHAR_PX * pen.rng.uniform(1.8, 2.8))
+    return _trim(_honda_solid(h) if pen.rng.random() < 0.45 else _honda_classic(h))
+
+
+def logo_agc(pen):
+    return _spaced(pen, "AGC AUTOMOTIVE", pen.rng.uniform(0.9, 1.2), bold=pen.rng.random() < 0.4, track=pen.rng.uniform(0.0, 0.12))
+
+
+def mark_lamisafe(pen):
+    return _spaced(pen, "LAMISAFE", pen.rng.uniform(0.9, 1.2), bold=pen.rng.random() < 0.4, track=pen.rng.uniform(0.0, 0.1))
+
+
+def mark_temperlite(pen):
+    return _spaced(pen, "TEMPERLITE", pen.rng.uniform(0.9, 1.2), bold=pen.rng.random() < 0.4, track=pen.rng.uniform(0.0, 0.1))
 
 
 MARKS: Dict[str, Callable[[Pen], np.ndarray]] = {
     "e_mark": mark_e, "dot": mark_dot, "as_class": mark_as, "ccc_mark": mark_ccc,
     "tis_mark": mark_tis, "sni_mark": mark_sni, "inmetro": mark_inmetro, "asnzs": mark_asnzs,
     "bis_isi": mark_bis, "laminated": mark_laminated, "glass_class": mark_glass_class,
-    "date_code": mark_date, "logo_acme": logo_acme, "logo_nova": logo_nova, "logo_orion": logo_orion,
+    "date_code": mark_date, "logo_toyota": logo_toyota, "logo_honda": logo_honda, "logo_nissan": logo_nissan,
+    "logo_agc": logo_agc, "lamisafe": mark_lamisafe, "temperlite": mark_temperlite,
 }
 assert set(MARKS) == set(STANDARD_CLASSES)
 LOGOS = [c for c in STANDARD_CLASSES if c.startswith("logo_")]
+BRANDS = [c for c in LOGOS if c != "logo_agc"]  # car brand: at most one per marking
+GLASS_NAMES = ("lamisafe", "temperlite")      # at most one per marking
 
 
 # --- Unlabelled print: other things on a marking the model must ignore ----
 
-EXTRA_WORDS = ["TEMPERLITE", "TEMPERED", "SECURIT", "SAFETY GLASS", "TOUGHENED", "MADE IN THAILAND",
+EXTRA_WORDS = ["TEMPERED", "SECURIT", "SAFETY GLASS", "TOUGHENED", "MADE IN THAILAND",
                "MADE IN CHINA", "SOLAR", "ACOUSTIC", "PRIVACY"]
 
 
@@ -442,9 +513,13 @@ def pick_marks(rng: np.random.Generator) -> List[str]:
     if rng.random() < BACKGROUND_SHARE:
         return []
     while True:
-        marks = [LOGOS[rng.integers(len(LOGOS))]] if rng.random() < 0.95 else []
+        marks = [BRANDS[rng.integers(len(BRANDS))]] if rng.random() < 0.9 else []
+        if rng.random() < 0.6:
+            marks.append("logo_agc")
+        if rng.random() < 0.5:
+            marks.append(GLASS_NAMES[rng.integers(2)])
         for c in STANDARD_CLASSES:
-            if c in LOGOS:
+            if c in LOGOS or c in GLASS_NAMES:
                 continue
             if rng.random() < (0.9 if c == "e_mark" else rng.uniform(0.5, 0.75)):
                 marks.append(c)
@@ -455,12 +530,12 @@ def pick_marks(rng: np.random.Generator) -> List[str]:
 def _layout(canvases: List[Tuple[str, np.ndarray]], rng: np.random.Generator, max_w: int):
     """Rows of marks (logo first, the rest shuffled); returns the block and
     each mark's (x1, y1, x2, y2) in it."""
-    order = [c for c in canvases if c[0] in LOGOS] + [canvases[i] for i in rng.permutation(len(canvases))
-                                                     if canvases[i][0] not in LOGOS]
+    order = [c for c in canvases if c[0] in BRANDS] + [canvases[i] for i in rng.permutation(len(canvases))
+                                                      if canvases[i][0] not in BRANDS]
     rows, row, width = [], [], 0
     for item in order:
         w = item[1].shape[1]
-        if row and (width + w > max_w or item[0] in LOGOS or row[0][0] in LOGOS):
+        if row and (width + w > max_w or item[0] in BRANDS or row[0][0] in BRANDS):
             rows.append(row)
             row, width = [], 0
         row.append(item)
@@ -484,6 +559,117 @@ def _layout(canvases: List[Tuple[str, np.ndarray]], rng: np.random.Generator, ma
             x += w + gap_x
         y += rh + gap_y
     return block, boxes
+
+
+# --- AGC marking layout ---------------------------------------------------
+# The order of a real AGC Automotive marking: car brand, AGC AUTOMOTIVE,
+# [// or V] E-mark, DOT line or M-code, [// or V] TIS emblem with L / T and
+# 11T, LAMISAFE / TEMPERLITE, [TIS number line], code + SNI next to the
+# 1 2 4 8 date rows, lot code. Parts are left out at random.
+
+AGC_SHARE = 0.7          # marked images in the AGC layout; the rest use _layout
+Row = Tuple[np.ndarray, List[Tuple[str, Tuple[int, int, int, int]]]]
+_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+
+
+def _row(items: List[Tuple[str, np.ndarray]], gaps) -> Row:
+    """Items side by side, centred vertically; `gaps` is one gap or one per joint."""
+    gaps = list(gaps) if isinstance(gaps, (list, tuple)) else [gaps] * len(items)
+    h = max(c.shape[0] for _, c in items)
+    w = sum(c.shape[1] for _, c in items) + sum(gaps[:len(items) - 1])
+    out = np.full((h, w), 255, np.uint8)
+    boxes, x = [], 0
+    for i, (key, c) in enumerate(items):
+        y = (h - c.shape[0]) // 2
+        out[y:y + c.shape[0], x:x + c.shape[1]] = c
+        boxes.append((key, (x, y, x + c.shape[1], y + c.shape[0])))
+        x += c.shape[1] + (gaps[i] if i < len(gaps) else 0)
+    return out, boxes
+
+
+def _stack(rows: List[Row], align: str, gap: int) -> Row:
+    w = max(r[0].shape[1] for r in rows)
+    h = sum(r[0].shape[0] for r in rows) + gap * (len(rows) - 1)
+    out = np.full((h, w), 255, np.uint8)
+    boxes, y = [], 0
+    for canvas, row_boxes in rows:
+        rh, rw = canvas.shape
+        x = {"right": w - rw, "center": (w - rw) // 2}.get(align, 0)
+        out[y:y + rh, x:x + rw] = np.minimum(out[y:y + rh, x:x + rw], canvas)
+        boxes += [(k, (x1 + x, y1 + y, x2 + x, y2 + y)) for k, (x1, y1, x2, y2) in row_boxes]
+        y += rh + gap
+    return out, boxes
+
+
+def _dashed_frame(block: np.ndarray, boxes, rng: np.random.Generator) -> Row:
+    """A light dashed rectangle round the print, as on the drawings (unlabelled)."""
+    m = int(BASE_CHAR_PX * rng.uniform(0.4, 1.0))
+    out = cv2.copyMakeBorder(block, m, m, m, m, cv2.BORDER_CONSTANT, value=255)
+    h, w = out.shape
+    dash, t, ink = int(BASE_CHAR_PX * rng.uniform(0.8, 1.6)), max(1, int(rng.integers(1, 3))), int(rng.uniform(90, 170))
+    for i in range(0, w, 2 * dash):                      # top and bottom edges
+        for y in (0, h - 1):
+            cv2.line(out, (i, y), (min(w - 1, i + dash), y), ink, t)
+    for i in range(0, h, 2 * dash):                      # left and right edges
+        for x in (0, w - 1):
+            cv2.line(out, (x, i), (x, min(h - 1, i + dash)), ink, t)
+    return out, [(k, (x1 + m, y1 + m, x2 + m, y2 + m)) for k, (x1, y1, x2, y2) in boxes]
+
+
+def agc_layout(pen: Pen, rng: np.random.Generator) -> Row:
+    """One AGC-style marking: (block, [(class or EXTRA, box)])."""
+    gap = int(BASE_CHAR_PX * rng.uniform(0.3, 0.9))
+    prefix = str(rng.choice(["//", "V"], p=[0.75, 0.25]))
+    tempered = rng.random() < 0.35
+    rows: List[Row] = []
+    if rng.random() < 0.7:
+        brand = str(rng.choice(BRANDS, p=[0.4, 0.4, 0.2]))
+        rows.append(_row([(brand, MARKS[brand](pen))], 0))
+    if rng.random() < 0.92:
+        rows.append(_row([("logo_agc", logo_agc(pen))], 0))
+    if rng.random() < 0.95:
+        e = [("e_mark", mark_e(pen))]
+        rows.append(_row(([("glass_class", pen.text(prefix))] if rng.random() < 0.8 else []) + e, gap))
+    if rng.random() < 0.45:
+        rows.append(_row([("dot", pen.text(f"DOT-{pen.digits(3)} M{pen.digits(3)}")),
+                          ("as_class", pen.text(f"AS{int(rng.integers(1, 4))}"))], gap))
+    elif rng.random() < 0.7:
+        rows.append(_row([(EXTRA, pen.text(f"M{pen.digits(int(rng.integers(3, 5)))}{'E' if rng.random() < 0.3 else ''}"))], 0))
+    has_tis = rng.random() < 0.92
+    number = f"TIS {pen.digits(4) if rng.random() < 0.3 else '2602-2556'}"
+    letter = (EXTRA, pen.bold("T" if tempered else "L"))
+    plant = (EXTRA, pen.text("THA 11T" if rng.random() < 0.4 else "11T"))
+    number_line = None
+    if has_tis:
+        words = pen.text(number)
+        emblem = _emblem(pen, int(words.shape[0] * rng.uniform(2.2, 3.2)))
+        lead = [("glass_class", pen.text(prefix))] if rng.random() < 0.8 else []
+        if rng.random() < 0.5:   # number beside the emblem, letter and plant code below
+            rows.append(_row(lead + [("tis_mark", _hcat([emblem, words], gap))], gap))
+            rows.append(_row([letter, plant], int(BASE_CHAR_PX * rng.uniform(3, 8))))
+        else:                    # emblem with the letter; the number on its own line further down
+            rows.append(_row(lead + [("tis_mark", emblem), letter, plant], [gap, gap // 2, int(BASE_CHAR_PX * rng.uniform(3, 8))]))
+            number_line = _row([("tis_mark", pen.text(number + (" (2013)" if rng.random() < 0.7 else "")))], 0)
+    if rng.random() < 0.85:
+        name = "temperlite" if tempered else "lamisafe"
+        rows.append(_row([(name, MARKS[name](pen))], 0))
+    if number_line:
+        rows.append(number_line)
+    low: List[Tuple[str, np.ndarray]] = []
+    if rng.random() < 0.85:
+        low.append((EXTRA, pen.bold(f"{_LETTERS[rng.integers(24)] if rng.random() < 0.5 else rng.integers(0, 10)}{rng.integers(0, 10)}", 1.3)))
+    if rng.random() < 0.65:
+        low.append(("sni_mark", mark_sni(pen)))
+    if rng.random() < 0.92:
+        low.append(("date_code", _date_rows(pen)))
+    if low:
+        rows.append(_row(low, [gap // 2] * (len(low) - 2) + [int(BASE_CHAR_PX * rng.uniform(1.5, 4))] if len(low) > 1 else 0))
+    if rng.random() < 0.6:
+        rows.append(_row([(EXTRA, pen.bold(_LETTERS[rng.integers(24)] + _LETTERS[rng.integers(24)], 1.6))], 0))
+    if not rows:
+        rows.append(_row([("e_mark", mark_e(pen))], 0))
+    block, boxes = _stack(rows, "right" if rng.random() < 0.7 else "center", int(BASE_CHAR_PX * rng.uniform(0.25, 0.7)))
+    return _dashed_frame(block, boxes, rng) if rng.random() < 0.3 else (block, boxes)
 
 
 def _glass_bg(rng: np.random.Generator, w: int, h: int) -> np.ndarray:
@@ -513,11 +699,16 @@ def make_dataset_image(rng: np.random.Generator, size: Tuple[int, int] = (1280, 
     boxes: List[Tuple[str, Tuple[float, float, float, float]]] = []
     layer = np.full((h, w), 255, np.uint8)
     pen = Pen(rng)
-    canvases = [(m, MARKS[m](pen)) for m in marks]
-    if rng.random() < EXTRA_SHARE:
-        canvases += [(EXTRA, extra_print(pen)) for _ in range(int(rng.integers(1, 5)))]
-    if canvases:
-        block, block_boxes = _layout(canvases, rng, max_w=int(rng.uniform(450, 800)))
+    block = None
+    if marks and rng.random() < AGC_SHARE:
+        block, block_boxes = agc_layout(pen, rng)
+    else:
+        canvases = [(m, MARKS[m](pen)) for m in marks]
+        if rng.random() < EXTRA_SHARE:
+            canvases += [(EXTRA, extra_print(pen)) for _ in range(int(rng.integers(1, 5)))]
+        if canvases:
+            block, block_boxes = _layout(canvases, rng, max_w=int(rng.uniform(450, 800)))
+    if block is not None:
         scale = rng.uniform(12, 40) / BASE_CHAR_PX
         scale = min(scale, 0.85 * w / block.shape[1], 0.85 * h / block.shape[0])
         block = cv2.resize(block, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)

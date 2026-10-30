@@ -67,12 +67,53 @@ class Dataset(unittest.TestCase):
             name = f"labels/mark_{i:04d}.txt"
             self.assertEqual((other / name).read_text(), (self.root / name).read_text())
 
+    def test_every_class_is_drawn(self):
+        root = Path(self.tmp.name) / "all"
+        truth = make_dataset(root, 60, seed=2, size=(640, 360))
+        seen = {c for t in truth for c in t["present"]}
+        self.assertEqual(seen, set(STANDARD_CLASSES))
+
+    def test_agc_layout_order(self):
+        import numpy as np
+        import make_synthetic_mark as g
+        for seed in range(20):
+            rng = np.random.default_rng(seed)
+            _, boxes = g.agc_layout(g.Pen(rng), rng)
+            top = {}
+            for k, (x1, y1, x2, y2) in boxes:
+                top.setdefault(k, y1)
+            if "logo_agc" in top and "e_mark" in top:
+                self.assertLess(top["logo_agc"], top["e_mark"])
+            if "e_mark" in top and "date_code" in top:
+                self.assertLess(top["e_mark"], top["date_code"])
+
     def test_background_images_have_an_empty_label_file(self):
         with mock.patch("make_synthetic_mark.BACKGROUND_SHARE", 1.0):
             root = Path(self.tmp.name) / "bg"
             truth = make_dataset(root, 2, seed=3, size=(320, 180))
         self.assertEqual([t["present"] for t in truth], [[], []])
         self.assertEqual((root / "labels" / "mark_0001.txt").read_text(), "")
+
+
+class Prelabel(unittest.TestCase):
+    def test_writes_model_boxes_and_classes(self):
+        from types import SimpleNamespace
+        from prelabel_marks import prelabel
+        box = SimpleNamespace(cls=1, xyxy=[SimpleNamespace(tolist=lambda: [10.0, 20.0, 30.0, 60.0])])
+        model = SimpleNamespace(names={0: "e_mark", 1: "dot"},
+                                predict=lambda *a, **k: [SimpleNamespace(orig_shape=(100, 200), boxes=[box])])
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "images").mkdir()
+            for name in ("a.png", "b.png", "notes.txt"):
+                (root / "images" / name).write_bytes(b"")
+            (root / "labels").mkdir()
+            (root / "labels" / "b.txt").write_text("0 0.5 0.5 0.1 0.1\n")
+            self.assertEqual(prelabel(model, root), {"a": 1})
+            self.assertEqual(read_classes_file(root), ["e_mark", "dot"])
+            self.assertEqual(read_yolo_label_file(root / "labels" / "a.txt"),
+                             [{"cls_id": 1, "cx": 0.1, "cy": 0.4, "w": 0.1, "h": 0.4}])
+            self.assertEqual((root / "labels" / "b.txt").read_text(), "0 0.5 0.5 0.1 0.1\n")  # kept
 
 
 class Judge(unittest.TestCase):
