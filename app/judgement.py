@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass, field
 from typing import List, Optional, Set
 
+from .marking.layout import check_layout
 from .roi import Roi
 
 
@@ -20,6 +21,8 @@ class DetectionFilters:
     # Marks the job's part must carry (Settings > Required Marks): when set,
     # OK = every one detected, NG = any missing; the target classes are not used.
     required_classes: Set[str] = field(default_factory=set)
+    # Mark inspection: warn (no NG) when marks are out of the usual AGC layout.
+    check_layout: bool = False
     roi: Optional[Roi] = None  # detection area; None = whole frame
     perspective: Optional[list] = None  # top-view corners; None = camera view as is
 
@@ -42,6 +45,12 @@ class DetectionFilters:
             return []
         present = {d.get("class_name") for d in filtered_detections}
         return sorted(self.required_classes - present)
+
+    def layout_warnings(self, filtered_detections: list) -> List[str]:
+        """Mark inspection messages; [] when off or nothing is detected."""
+        if not self.check_layout or not filtered_detections:
+            return []
+        return check_layout(filtered_detections)
 
     def judge(self, filtered_detections: list) -> str:
         present_classes = {d.get("class_name") for d in filtered_detections}

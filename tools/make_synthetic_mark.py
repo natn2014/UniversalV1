@@ -274,8 +274,49 @@ def mark_e(pen):
     return _hcat([ring, number], int(pen.rng.integers(8, 20)))
 
 
+_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+
+
 def mark_dot(pen):
-    return pen.text(f"DOT-{pen.digits(3)} M{pen.digits(3)}")
+    return pen.text(f"DOT-{pen.digits(3)}")
+
+
+def mark_m_code(pen):
+    """Model code: M + 3-4 digits / capitals, sometimes ending in E or S (M874, M8U74E, M1H4)."""
+    r = pen.rng
+    body = "".join(str(r.integers(0, 10)) if r.random() < 0.7 else _LETTERS[r.integers(24)]
+                   for _ in range(int(r.integers(2, 5))))
+    return pen.text(f"M{r.integers(1, 10)}{body}{str(r.choice(['', '', 'E', 'S']))}")
+
+
+def mark_short_name(pen):
+    """Two characters (58, U8, Y2); a third start with T (T1, T2) so they are
+    not taken for the 11T plant code. Sometimes a frame line runs through it."""
+    r = pen.rng
+    first = "T" if r.random() < 0.35 else (_LETTERS[r.integers(24)] if r.random() < 0.5 else str(r.integers(0, 10)))
+    out = pen.bold(f"{first}{r.integers(0, 10)}", r.uniform(1.1, 1.5))
+    if r.random() < 0.3:
+        out = out.copy()
+        x = int(r.uniform(0.1, 0.9) * out.shape[1])
+        cv2.line(out, (x, 0), (x, out.shape[0] - 1), int(r.uniform(90, 170)), max(1, out.shape[0] // 12))
+    return out
+
+
+def mark_type_code(pen):
+    r = pen.rng
+    return pen.bold(_LETTERS[r.integers(24)] + _LETTERS[r.integers(24)], r.uniform(1.3, 1.8))
+
+
+def mark_plant_code(pen):
+    return pen.text(f"{pen.rng.integers(10, 20)}{_LETTERS[pen.rng.integers(24)] if pen.rng.random() < 0.3 else 'T'}")
+
+
+def mark_letter_l(pen):
+    return pen.bold("L", pen.rng.uniform(1.0, 1.4))
+
+
+def mark_letter_t(pen):
+    return pen.bold("T", pen.rng.uniform(1.0, 1.4))
 
 
 def mark_as(pen):
@@ -456,11 +497,14 @@ MARKS: Dict[str, Callable[[Pen], np.ndarray]] = {
     "bis_isi": mark_bis, "laminated": mark_laminated, "glass_class": mark_glass_class,
     "date_code": mark_date, "logo_toyota": logo_toyota, "logo_honda": logo_honda, "logo_nissan": logo_nissan,
     "logo_agc": logo_agc, "lamisafe": mark_lamisafe, "temperlite": mark_temperlite,
+    "short_name": mark_short_name, "type_code": mark_type_code, "plant_code": mark_plant_code,
+    "m_code": mark_m_code, "letter_l": mark_letter_l, "letter_t": mark_letter_t,
 }
 assert set(MARKS) == set(STANDARD_CLASSES)
 LOGOS = [c for c in STANDARD_CLASSES if c.startswith("logo_")]
 BRANDS = [c for c in LOGOS if c != "logo_agc"]  # car brand: at most one per marking
 GLASS_NAMES = ("lamisafe", "temperlite")      # at most one per marking
+GLASS_LETTERS = ("letter_l", "letter_t")       # at most one per marking
 
 
 # --- Unlabelled print: other things on a marking the model must ignore ----
@@ -518,8 +562,10 @@ def pick_marks(rng: np.random.Generator) -> List[str]:
             marks.append("logo_agc")
         if rng.random() < 0.5:
             marks.append(GLASS_NAMES[rng.integers(2)])
+        if rng.random() < 0.5:
+            marks.append(GLASS_LETTERS[rng.integers(2)])
         for c in STANDARD_CLASSES:
-            if c in LOGOS or c in GLASS_NAMES:
+            if c in LOGOS or c in GLASS_NAMES or c in GLASS_LETTERS:
                 continue
             if rng.random() < (0.9 if c == "e_mark" else rng.uniform(0.5, 0.75)):
                 marks.append(c)
@@ -569,7 +615,6 @@ def _layout(canvases: List[Tuple[str, np.ndarray]], rng: np.random.Generator, ma
 
 AGC_SHARE = 0.7          # marked images in the AGC layout; the rest use _layout
 Row = Tuple[np.ndarray, List[Tuple[str, Tuple[int, int, int, int]]]]
-_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ"
 
 
 def _row(items: List[Tuple[str, np.ndarray]], gaps) -> Row:
@@ -627,18 +672,28 @@ def agc_layout(pen: Pen, rng: np.random.Generator) -> Row:
         rows.append(_row([(brand, MARKS[brand](pen))], 0))
     if rng.random() < 0.92:
         rows.append(_row([("logo_agc", logo_agc(pen))], 0))
+    if rng.random() < 0.35:  # part number (5403010-ER51-AA 3.1) and serial (S27413): unlabelled
+        L = _LETTERS
+        part = (f"{pen.digits(7)}-{L[rng.integers(24)]}{L[rng.integers(24)]}{pen.digits(2)}-"
+                f"{L[rng.integers(24)]}{L[rng.integers(24)]} {rng.integers(1, 10)}.{rng.integers(0, 10)}")
+        rows.append(_row([(EXTRA, pen.text(part))], 0))
+        if rng.random() < 0.8:  # serial: often S + digits, printed just above the E-mark like the M-code below it
+            rows.append(_row([(EXTRA, pen.text(f"{'S' if rng.random() < 0.5 else L[rng.integers(24)]}{pen.digits(5)}"))], 0))
     if rng.random() < 0.95:
         e = [("e_mark", mark_e(pen))]
         rows.append(_row(([("glass_class", pen.text(prefix))] if rng.random() < 0.8 else []) + e, gap))
     if rng.random() < 0.45:
-        rows.append(_row([("dot", pen.text(f"DOT-{pen.digits(3)} M{pen.digits(3)}")),
-                          ("as_class", pen.text(f"AS{int(rng.integers(1, 4))}"))], gap))
-    elif rng.random() < 0.7:
-        rows.append(_row([(EXTRA, pen.text(f"M{pen.digits(int(rng.integers(3, 5)))}{'E' if rng.random() < 0.3 else ''}"))], 0))
+        word = int(BASE_CHAR_PX * rng.uniform(0.3, 0.7))
+        rows.append(_row([("dot", mark_dot(pen)), ("m_code", mark_m_code(pen)),
+                          ("as_class", pen.text(f"AS{int(rng.integers(1, 4))}"))], word))
+    elif rng.random() < 0.8:
+        rows.append(_row([("m_code", mark_m_code(pen))], 0))
     has_tis = rng.random() < 0.92
     number = f"TIS {pen.digits(4) if rng.random() < 0.3 else '2602-2556'}"
-    letter = (EXTRA, pen.bold("T" if tempered else "L"))
-    plant = (EXTRA, pen.text("THA 11T" if rng.random() < 0.4 else "11T"))
+    letter = ("letter_t", mark_letter_t(pen)) if tempered else ("letter_l", mark_letter_l(pen))
+    plant_items = [("plant_code", mark_plant_code(pen))]
+    if rng.random() < 0.4:
+        plant_items.insert(0, (EXTRA, pen.text("THA")))
     number_line = None
     if has_tis:
         words = pen.text(number)
@@ -646,10 +701,15 @@ def agc_layout(pen: Pen, rng: np.random.Generator) -> Row:
         lead = [("glass_class", pen.text(prefix))] if rng.random() < 0.8 else []
         if rng.random() < 0.5:   # number beside the emblem, letter and plant code below
             rows.append(_row(lead + [("tis_mark", _hcat([emblem, words], gap))], gap))
-            rows.append(_row([letter, plant], int(BASE_CHAR_PX * rng.uniform(3, 8))))
+            far = int(BASE_CHAR_PX * rng.uniform(3, 8))
+            rows.append(_row([letter] + plant_items, [far] + [gap] * (len(plant_items) - 1)))
         else:                    # emblem with the letter; the number on its own line further down
-            rows.append(_row(lead + [("tis_mark", emblem), letter, plant], [gap, gap // 2, int(BASE_CHAR_PX * rng.uniform(3, 8))]))
+            far = int(BASE_CHAR_PX * rng.uniform(3, 8))
+            rows.append(_row(lead + [("tis_mark", emblem), letter] + plant_items,
+                             [gap] * len(lead) + [gap // 2, far] + [gap] * (len(plant_items) - 1)))
             number_line = _row([("tis_mark", pen.text(number + (" (2013)" if rng.random() < 0.7 else "")))], 0)
+    if rng.random() < 0.2:   # QR code under the TIS line (unlabelled)
+        rows.append(_row([(EXTRA, _qr(pen))], 0))
     if rng.random() < 0.85:
         name = "temperlite" if tempered else "lamisafe"
         rows.append(_row([(name, MARKS[name](pen))], 0))
@@ -657,7 +717,7 @@ def agc_layout(pen: Pen, rng: np.random.Generator) -> Row:
         rows.append(number_line)
     low: List[Tuple[str, np.ndarray]] = []
     if rng.random() < 0.85:
-        low.append((EXTRA, pen.bold(f"{_LETTERS[rng.integers(24)] if rng.random() < 0.5 else rng.integers(0, 10)}{rng.integers(0, 10)}", 1.3)))
+        low.append(("short_name", mark_short_name(pen)))
     if rng.random() < 0.65:
         low.append(("sni_mark", mark_sni(pen)))
     if rng.random() < 0.92:
@@ -665,7 +725,7 @@ def agc_layout(pen: Pen, rng: np.random.Generator) -> Row:
     if low:
         rows.append(_row(low, [gap // 2] * (len(low) - 2) + [int(BASE_CHAR_PX * rng.uniform(1.5, 4))] if len(low) > 1 else 0))
     if rng.random() < 0.6:
-        rows.append(_row([(EXTRA, pen.bold(_LETTERS[rng.integers(24)] + _LETTERS[rng.integers(24)], 1.6))], 0))
+        rows.append(_row([("type_code", mark_type_code(pen))], 0))
     if not rows:
         rows.append(_row([("e_mark", mark_e(pen))], 0))
     block, boxes = _stack(rows, "right" if rng.random() < 0.7 else "center", int(BASE_CHAR_PX * rng.uniform(0.25, 0.7)))

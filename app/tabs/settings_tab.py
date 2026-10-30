@@ -183,6 +183,12 @@ class SettingsTab(QWidget):
         self.required_teach_button.clicked.connect(self.teach_required_marks)
         self.required_count_label = QLabel()
         self.required_count_label.setObjectName("hint")
+        self.layout_check_checkbox = QCheckBox("Mark inspection: check layout")
+        self.layout_check_checkbox.setToolTip(
+            "Warn on the Monitor when marks are out of the usual AGC order: brand logo, AGC AUTOMOTIVE, "
+            "E-mark, then M-code / TIS from top to bottom; 11T right-most, SNI on the left, short name "
+            "left-most. A warning only: the OK / NG verdict does not change.")
+        self.layout_check_checkbox.toggled.connect(self._toggle_layout_check)
 
         self._build_layout()
 
@@ -269,6 +275,7 @@ class SettingsTab(QWidget):
         required_body.addLayout(row(self.required_teach_button, None, self.required_count_label))
         required_body.addWidget(required_hint)
         required_body.addWidget(self.required_scroll, 1)
+        required_body.addWidget(self.layout_check_checkbox)
 
         # Left: this station, the same for every job. Right: saved with the
         # job (the AI model and its filters), so it changes on Job Change.
@@ -455,6 +462,9 @@ class SettingsTab(QWidget):
             self._ctx.filters.required_classes.discard(class_name)
         self._refresh_required_count()
 
+    def _toggle_layout_check(self, checked: bool) -> None:
+        self._ctx.filters.check_layout = checked
+
     def _refresh_required_count(self) -> None:
         n = len(self._ctx.filters.required_classes)
         self.required_count_label.setText(f"{n} required" if n else "not used")
@@ -526,6 +536,7 @@ class SettingsTab(QWidget):
             "target_gate": filters.target_gate,
             "selected_classes": sorted(filters.selected_classes),
             "required_classes": sorted(filters.required_classes),
+            "check_layout": filters.check_layout,
             "perspective": filters.perspective,
             "roi": list(filters.roi) if filters.roi else None,
             "autocapture_masters": ctx.master_entries(),
@@ -572,5 +583,7 @@ class SettingsTab(QWidget):
             if isinstance(widget, QCheckBox):
                 widget.setChecked(widget.text() in selected)
         self.set_required_marks(config.get("required_classes", []))  # older jobs: none
+        self.layout_check_checkbox.setChecked(bool(config.get("check_layout", False)))
+        self._ctx.filters.check_layout = self.layout_check_checkbox.isChecked()
 
         return model_ok

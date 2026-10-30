@@ -42,6 +42,12 @@ STANDARD_CLASSES = [
     "logo_agc",     # glass maker: AGC AUTOMOTIVE
     "lamisafe",     # AGC laminated glass name
     "temperlite",   # AGC tempered glass name
+    "short_name",   # maker short name beside SNI: 58, U8, T1, Y2
+    "type_code",    # type identifier at the bottom: FI, FY, AC
+    "plant_code",   # plant location: 11T (THA before it is not part of the box)
+    "m_code",       # model code: M874, M8U74E (also the M-part of the DOT line)
+    "letter_l",     # L beside the TIS emblem: laminated glass
+    "letter_t",     # T beside the TIS emblem: tempered glass
 ]
 # Elements whose crops go to the char model.
 TEXT_ELEMENTS = ("e_mark", "text_line", "date_code", "class_mark")

@@ -128,6 +128,13 @@ class MonitorTab(QWidget):
         self.missing_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.missing_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.missing_label.setToolTip("Marks this job requires that the AI did not find on the part.")
+        # Mark inspection warnings (Settings > Required Marks > check layout); amber, not NG.
+        self.layout_label = QLabel()
+        self.layout_label.setObjectName("layoutWarnings")
+        self.layout_label.setStyleSheet(f"color: {STANDBY_YELLOW}; font-weight: 800;")
+        self.layout_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.layout_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.layout_label.setToolTip("Marks printed out of the usual layout. A warning: the verdict is not changed.")
 
         self.monitor_info_label = QLabel()
         self.monitor_info_label.setObjectName("monitorInfo")
@@ -229,6 +236,7 @@ class MonitorTab(QWidget):
         top, top_layout = top_bar()
         top_layout.addWidget(self.monitor_info_label)
         top_layout.addWidget(self.missing_label, 1)
+        top_layout.addWidget(self.layout_label, 1)
         top_layout.addWidget(self.judgement_banner)
 
         video_frame = QFrame()
@@ -852,6 +860,8 @@ class MonitorTab(QWidget):
         self._live = True
         missing = self._ctx.filters.missing(detections)
         self.missing_label.setText(f"Missing: {', '.join(missing)}" if missing else "")
+        layout = self._ctx.filters.layout_warnings(detections)
+        self.layout_label.setText(f"Layout: {'; '.join(layout)}" if layout else "")
 
         if not self._preview:
             # One cycle = each time the held judgement becomes OK or NG.
