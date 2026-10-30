@@ -3,12 +3,14 @@ from typing import Optional
 
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QFrame,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -16,6 +18,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSlider,
     QSpinBox,
+    QTableWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -25,6 +28,9 @@ from ..context import AppContext
 from ..optional_deps import BUZZER_OFF, BUZZER_PATTERN_NAMES
 from ..theme import make_icon
 from ..widgets.layout import make_card, row, section_heading, tip_label
+
+DEFAULT_MARK_CONF = 40  # % for a newly ticked mark (the standard-mark model is checked at 0.4)
+JUDGE_MODES = (("detection", "AI Detection"), ("required", "Required Marks"))
 
 
 class SettingsTab(QWidget):
@@ -169,13 +175,35 @@ class SettingsTab(QWidget):
         self.class_filters_scroll.setWidget(self.class_filters_container)
         self.class_filters_scroll.setMinimumHeight(200)
 
-        # Required marks: the classes a part of this job must show (NG if one is missing).
-        self.required_container = QWidget()
-        self.required_layout = QVBoxLayout(self.required_container)
-        self.required_scroll = QScrollArea()
-        self.required_scroll.setWidgetResizable(True)
-        self.required_scroll.setWidget(self.required_container)
-        self.required_scroll.setMinimumHeight(140)
+        # What decides OK / NG for the AI: Target Classes or the Required Marks list.
+        self.judge_mode_group = QButtonGroup(self)
+        self.judge_mode_buttons = {}
+        for mode, text in JUDGE_MODES:
+            button = QPushButton(text)
+            button.setCheckable(True)
+            button.setMinimumHeight(44)
+            self.judge_mode_group.addButton(button)
+            self.judge_mode_buttons[mode] = button
+        self.judge_mode_buttons["detection"].setChecked(True)
+        self.judge_mode_buttons["detection"].setToolTip(
+            "OK / NG from the Target Classes below (OR / AND).")
+        self.judge_mode_buttons["required"].setToolTip(
+            "OK only when every ticked mark is found at or above its own confidence; a missing mark is NG.")
+        self.judge_mode_group.buttonToggled.connect(self._on_judge_mode_toggled)
+
+        # Required marks: the classes a part of this job must show (NG if one is missing),
+        # each with its own minimum confidence.
+        self.required_table = QTableWidget(0, 2)
+        self.required_table.setHorizontalHeaderLabels(["Mark", "Min conf"])
+        self.required_table.verticalHeader().setVisible(False)
+        self.required_table.verticalHeader().setDefaultSectionSize(44)
+        self.required_table.setSelectionMode(QTableWidget.NoSelection)
+        self.required_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.required_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.required_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
+        self.required_table.setColumnWidth(1, 150)
+        self.required_table.setMinimumHeight(260)
+        self._mark_conf_spins = {}
         self.required_teach_button = QPushButton("Set from current part")
         self.required_teach_button.setIcon(make_icon("target"))
         self.required_teach_button.setToolTip(
@@ -254,27 +282,37 @@ class SettingsTab(QWidget):
         ):
             widget.setToolTip(hint)
         self.confidence_label.setStyleSheet("color: #ffcf73; font-weight: 700;")
+        filters_body.addLayout(row(
+            tip_label("Judge by:", "What decides OK / NG for the AI: Target Classes, or the Required Marks list "
+                      "(missing mark = NG, each mark with its own confidence)."),
+            self.judge_mode_buttons["detection"], self.judge_mode_buttons["required"]))
+        filters_body.addSpacing(6)
         filters_body.addLayout(row(tip_label("Confidence threshold", "AI detections less sure than this are ignored. Raise it if wrong things are found; lower it if real ones are missed.", self.confidence_slider, self.confidence_label), None, self.confidence_label))
         filters_body.addWidget(self.confidence_slider)
         filters_body.addSpacing(6)
         self.max_detections_spinbox.setFixedWidth(120)
         filters_body.addLayout(row(self.max_detections_label, None, self.max_detections_spinbox))
         filters_body.addSpacing(6)
-        filters_body.addWidget(self.target_class_label)
-        filters_body.addLayout(row(
+        self.target_box = QWidget()
+        self.target_box.setObjectName("clearBox")
+        target_layout = QVBoxLayout(self.target_box)
+        target_layout.setContentsMargins(0, 0, 0, 0)
+        target_layout.addWidget(self.target_class_label)
+        target_layout.addLayout(row(
             self.target_class_combo_1, self.target_gate_combo, self.target_class_combo_2))
+        filters_body.addWidget(self.target_box)
         filters_body.addSpacing(6)
         filters_body.addWidget(tip_label("Classes to show:", "Only the ticked classes are drawn and counted. None ticked = all classes."))
         filters_body.addWidget(self.class_filters_scroll, 1)
 
-        required_card, required_body = make_card("Required Marks", badge="ai")
-        required_hint = QLabel("NG when a ticked mark is not found on the part. None ticked = not used "
-                               "(Target Classes decide).")
+        self.required_card, required_body = make_card("Required Marks", badge="ai")
+        required_hint = QLabel("OK when every ticked mark is found at or above its Min conf; a missing "
+                               "or weaker mark is NG. None ticked = Target Classes decide.")
         required_hint.setObjectName("hint")
         required_hint.setWordWrap(True)
         required_body.addLayout(row(self.required_teach_button, None, self.required_count_label))
         required_body.addWidget(required_hint)
-        required_body.addWidget(self.required_scroll, 1)
+        required_body.addWidget(self.required_table, 1)
         required_body.addWidget(self.layout_check_checkbox)
 
         # Left: this station, the same for every job. Right: saved with the
@@ -292,7 +330,8 @@ class SettingsTab(QWidget):
         right_column.addWidget(job_heading)
         right_column.addWidget(model_card)
         right_column.addWidget(filters_card, 1)
-        right_column.addWidget(required_card, 1)
+        right_column.addWidget(self.required_card, 1)
+        self._show_judge_mode()
 
         columns = QHBoxLayout()
         columns.addLayout(left_column, 1)
@@ -439,28 +478,62 @@ class SettingsTab(QWidget):
         filters.target_class_2 = None
 
         # Required marks: same classes, none ticked until taught or chosen.
-        while self.required_layout.count() > 0:
-            item = self.required_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
         filters.required_classes.clear()
-        for class_name in sorted(model_classes):
+        filters.mark_conf.clear()
+        self.required_table.setRowCount(0)
+        self._mark_conf_spins = {}
+        for row_index, class_name in enumerate(sorted(model_classes)):
             checkbox = QCheckBox(class_name)
+            spin = QSpinBox()
+            spin.setRange(1, 100)
+            spin.setSingleStep(5)
+            spin.setSuffix(" %")
+            spin.setValue(DEFAULT_MARK_CONF)
+            spin.setEnabled(False)
+            spin.setToolTip(f"{class_name} counts as found only at or above this confidence.")
+            filters.mark_conf[class_name] = DEFAULT_MARK_CONF / 100.0
             checkbox.toggled.connect(lambda checked, cn=class_name: self._toggle_required(cn, checked))
-            self.required_layout.addWidget(checkbox)
-        self.required_layout.addStretch(1)
+            spin.valueChanged.connect(lambda value, cn=class_name: self._on_mark_conf_changed(cn, value))
+            self.required_table.insertRow(row_index)
+            self.required_table.setCellWidget(row_index, 0, checkbox)
+            self.required_table.setCellWidget(row_index, 1, spin)
+            self._mark_conf_spins[class_name] = spin
         self._refresh_required_count()
 
     def _required_checkboxes(self) -> list:
-        return [w for w in (self.required_layout.itemAt(i).widget() for i in range(self.required_layout.count()))
-                if isinstance(w, QCheckBox)]
+        return [self.required_table.cellWidget(r, 0) for r in range(self.required_table.rowCount())]
 
     def _toggle_required(self, class_name: str, checked: bool) -> None:
         if checked:
             self._ctx.filters.required_classes.add(class_name)
         else:
             self._ctx.filters.required_classes.discard(class_name)
+        self._mark_conf_spins[class_name].setEnabled(checked)
         self._refresh_required_count()
+
+    def _on_mark_conf_changed(self, class_name: str, value: int) -> None:
+        self._ctx.filters.mark_conf[class_name] = value / 100.0
+
+    def set_mark_conf(self, conf: dict) -> None:
+        """Min conf per mark, 0-1 (marks not in `conf` keep theirs)."""
+        for class_name, value in conf.items():
+            spin = self._mark_conf_spins.get(class_name)
+            if spin is not None:
+                spin.setValue(int(round(value * 100)))
+
+    def set_judge_mode(self, mode: str) -> None:
+        self.judge_mode_buttons.get(mode, self.judge_mode_buttons["detection"]).setChecked(True)
+
+    def _on_judge_mode_toggled(self, button, checked: bool) -> None:
+        if checked:
+            self._ctx.filters.judge_mode = next(m for m, b in self.judge_mode_buttons.items() if b is button)
+            self._show_judge_mode()
+
+    def _show_judge_mode(self) -> None:
+        """Only the controls that decide OK / NG in this mode are shown."""
+        by_marks = self._ctx.filters.by_marks
+        self.target_box.setVisible(not by_marks)
+        self.required_card.setVisible(by_marks)
 
     def _toggle_layout_check(self, checked: bool) -> None:
         self._ctx.filters.check_layout = checked
@@ -535,7 +608,9 @@ class SettingsTab(QWidget):
             "target_class_2": filters.target_class_2,
             "target_gate": filters.target_gate,
             "selected_classes": sorted(filters.selected_classes),
+            "judge_mode": filters.judge_mode,
             "required_classes": sorted(filters.required_classes),
+            "mark_conf": {c: filters.mark_conf[c] for c in sorted(filters.required_classes) if c in filters.mark_conf},
             "check_layout": filters.check_layout,
             "perspective": filters.perspective,
             "roi": list(filters.roi) if filters.roi else None,
@@ -582,7 +657,14 @@ class SettingsTab(QWidget):
             widget = self.class_filters_layout.itemAt(i).widget()
             if isinstance(widget, QCheckBox):
                 widget.setChecked(widget.text() in selected)
-        self.set_required_marks(config.get("required_classes", []))  # older jobs: none
+        required = config.get("required_classes", [])
+        self.set_required_marks(required)  # older jobs: none
+        # Older jobs: no own confidence per mark (the slider's) and Required Marks
+        # decide whenever any are ticked.
+        threshold = config.get("confidence_threshold", 0.0)
+        self.set_mark_conf({c: threshold for c in required})
+        self.set_mark_conf(config.get("mark_conf", {}))
+        self.set_judge_mode(config.get("judge_mode") or ("required" if required else "detection"))
         self.layout_check_checkbox.setChecked(bool(config.get("check_layout", False)))
         self._ctx.filters.check_layout = self.layout_check_checkbox.isChecked()
 

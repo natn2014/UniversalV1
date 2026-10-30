@@ -28,7 +28,7 @@ REAL = Path(__file__).resolve().parents[1] / "datasets" / "real_marks"
 
 
 def box(cls, x1, y1, x2, y2):
-    return {"class_name": cls, "x1": x1, "y1": y1, "x2": x2, "y2": y2, "conf": 0.9}
+    return {"class_name": cls, "x1": x1, "y1": y1, "x2": x2, "y2": y2, "conf": 0.9, "label": cls}
 
 
 def good_layout():
@@ -90,7 +90,7 @@ class Rules(unittest.TestCase):
 class Filters(unittest.TestCase):
     def test_off_by_default_and_no_effect_on_verdict(self):
         bad = moved(good_layout(), "plant_code", dx=-200)
-        f = DetectionFilters(required_classes={"e_mark", "tis_mark"})
+        f = DetectionFilters(judge_mode="required", required_classes={"e_mark", "tis_mark"})
         self.assertEqual(f.layout_warnings(bad), [])
         f.check_layout = True
         self.assertEqual(f.layout_warnings(bad), ["plant_code not right-most"])
@@ -133,6 +133,7 @@ class Tabs(unittest.TestCase):
         image = QImage(500, 500, QImage.Format_RGB888)
         image.fill(QColor("#202020"))
         self.ctx.filters.selected_classes = set(self.ctx.model_classes)
+        self.settings.set_judge_mode("required")
         self.settings.set_required_marks(["e_mark", "tis_mark"])
         self.settings.layout_check_checkbox.setChecked(True)
         tab._reset_judgement()

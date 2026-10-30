@@ -19,6 +19,7 @@ from app.context import AppContext  # noqa: E402
 from app.judgement import DetectionFilters  # noqa: E402
 from app.marking.classes import STANDARD_CLASSES, read_classes_file  # noqa: E402
 from app.tabs.monitor_tab import MonitorTab  # noqa: E402
+from app.theme import NG_RED, OK_GREEN  # noqa: E402
 from app.tabs.settings_tab import SettingsTab  # noqa: E402
 from app.yolo_labels import read_yolo_label_file  # noqa: E402
 
@@ -28,8 +29,8 @@ from make_synthetic_mark import make_dataset  # noqa: E402
 APP = QApplication.instance() or QApplication([])
 
 
-def det(cls):
-    return {"class_name": cls, "conf": 0.9, "x1": 10, "y1": 10, "x2": 40, "y2": 40, "label": cls}
+def det(cls, conf=0.9):
+    return {"class_name": cls, "conf": conf, "x1": 10, "y1": 10, "x2": 40, "y2": 40, "label": cls}
 
 
 class Dataset(unittest.TestCase):
@@ -118,7 +119,7 @@ class Prelabel(unittest.TestCase):
 
 class Judge(unittest.TestCase):
     def test_required_marks(self):
-        f = DetectionFilters(required_classes={"e_mark", "tis_mark"})
+        f = DetectionFilters(judge_mode="required", required_classes={"e_mark", "tis_mark"})
         self.assertEqual(f.judge([det("e_mark"), det("tis_mark"), det("dot")]), "GREEN")
         self.assertEqual(f.judge([det("e_mark"), det("dot")]), "RED")
         self.assertEqual(f.missing([det("e_mark"), det("dot")]), ["tis_mark"])
@@ -130,6 +131,36 @@ class Judge(unittest.TestCase):
         self.assertEqual(f.judge([det("e_mark")]), "GREEN")
         self.assertEqual(f.judge([det("dot")]), "RED")
         self.assertEqual(f.missing([det("dot")]), [])
+
+
+class JudgeMode(unittest.TestCase):
+    def filters(self, mode="required"):
+        return DetectionFilters(judge_mode=mode, confidence_threshold=0.5, selected_classes={"e_mark", "tis_mark", "dot"},
+                                required_classes={"e_mark", "tis_mark"}, mark_conf={"e_mark": 0.25, "tis_mark": 0.6})
+
+    def test_detection_mode_ignores_required_marks(self):
+        f = self.filters("detection")
+        f.target_class_1 = "dot"
+        self.assertEqual(f.judge(f.apply([det("dot")])), "GREEN")
+        self.assertEqual(f.missing(f.apply([det("dot")])), [])
+        self.assertEqual(f.mark_results([det("dot")]), [])
+        self.assertEqual(f.apply([det("e_mark", 0.3)]), [])  # the slider's 0.5 for every class
+
+    def test_each_mark_has_its_own_confidence(self):
+        f = self.filters()
+        self.assertEqual(f.judge(f.apply([det("e_mark", 0.3), det("tis_mark", 0.7)])), "GREEN")
+        self.assertEqual(f.judge(f.apply([det("e_mark", 0.3), det("tis_mark", 0.55)])), "RED")
+        self.assertEqual(f.missing(f.apply([det("e_mark", 0.3), det("tis_mark", 0.55)])), ["tis_mark"])
+        self.assertEqual(f.apply([det("dot", 0.45)]), [])  # not required: the slider's 0.5
+
+    def test_mark_results_rows(self):
+        f = self.filters()
+        self.assertEqual(f.mark_results([det("e_mark", 0.3), det("e_mark", 0.8), det("tis_mark", 0.55)]), [
+            {"class_name": "e_mark", "conf": 0.8, "min_conf": 0.25, "ok": True},
+            {"class_name": "tis_mark", "conf": 0.55, "min_conf": 0.6, "ok": False}])
+        rows = f.mark_results([det("e_mark", 0.8)])
+        self.assertEqual([(r["conf"], r["ok"]) for r in rows], [(0.8, True), (None, False)])
+        self.assertEqual([r["ok"] for r in f.mark_results([det("dot", 0.1)])], [None, None])  # no part
 
 
 class TabsTest(unittest.TestCase):
@@ -187,12 +218,76 @@ class SettingsCard(TabsTest):
         self.assertEqual(self.ctx.filters.required_classes, set())  # older job: nothing required
 
 
+class Switch(TabsTest):
+    def test_switch_shows_the_controls_of_its_mode(self):
+        self.assertEqual(self.ctx.filters.judge_mode, "detection")
+        self.assertFalse(self.settings.target_box.isHidden())
+        self.assertTrue(self.settings.required_card.isHidden())
+        self.settings.judge_mode_buttons["required"].click()
+        self.assertEqual(self.ctx.filters.judge_mode, "required")
+        self.assertTrue(self.settings.target_box.isHidden())
+        self.assertFalse(self.settings.required_card.isHidden())
+
+    def test_min_conf_per_mark(self):
+        spin = self.settings._mark_conf_spins["tis_mark"]
+        self.assertFalse(spin.isEnabled())
+        self.settings.set_required_marks(["tis_mark"])
+        self.assertTrue(spin.isEnabled())
+        spin.setValue(65)
+        self.assertEqual(self.ctx.filters.mark_conf["tis_mark"], 0.65)
+
+    def test_saved_with_the_job(self):
+        self.settings.set_judge_mode("required")
+        self.settings.set_required_marks(["e_mark", "tis_mark"])
+        self.settings.set_mark_conf({"e_mark": 0.3, "tis_mark": 0.7})
+        config = self.settings.collect_config()
+        self.assertEqual(config["judge_mode"], "required")
+        self.assertEqual(config["mark_conf"], {"e_mark": 0.3, "tis_mark": 0.7})
+        self.settings.set_judge_mode("detection")
+        self.settings.set_mark_conf({"e_mark": 0.9})
+        self.settings.apply_config(config)
+        self.assertEqual(self.ctx.filters.judge_mode, "required")
+        self.assertEqual(self.ctx.filters.mark_conf["e_mark"], 0.3)
+
+    def test_older_job(self):
+        old = {"confidence_threshold": 0.45, "required_classes": ["e_mark"]}
+        self.settings.apply_config(old)
+        self.assertEqual(self.ctx.filters.judge_mode, "required")  # ticked marks decided before
+        self.assertEqual(self.ctx.filters.mark_conf["e_mark"], 0.45)  # with the slider's confidence
+        self.settings.apply_config({"confidence_threshold": 0.45})
+        self.assertEqual(self.ctx.filters.judge_mode, "detection")
+
+
+class MonitorMarks(TabsTest):
+    def test_mark_table_like_the_tool_table(self):
+        tab = MonitorTab(self.ctx)
+        image = QImage(200, 100, QImage.Format_RGB888)
+        image.fill(QColor("#202020"))
+        self.ctx.filters.selected_classes = {"dot", "e_mark", "tis_mark"}
+        self.assertFalse(tab.table.isHidden())
+        self.assertTrue(tab.mark_table.isHidden())
+        self.settings.set_judge_mode("required")
+        self.settings.set_required_marks(["e_mark", "tis_mark"])
+        self.settings.set_mark_conf({"e_mark": 0.5, "tis_mark": 0.8})
+        tab._reset_judgement()
+        tab.on_frame(image, [det("e_mark", 0.9), det("tis_mark", 0.6)], [])
+        self.assertTrue(tab.table.isHidden())
+        self.assertFalse(tab.mark_table.isHidden())
+        cells = [[tab.mark_table.item(r, c).text() for c in range(4)] for r in range(tab.mark_table.rowCount())]
+        self.assertEqual(cells, [["e_mark", "0.90", "0.50", "OK"], ["tis_mark", "0.60", "0.80", "NG"]])
+        self.assertEqual(tab.mark_table.item(1, 3).background().color().name(), QColor(NG_RED).name())
+        self.assertEqual(tab.mark_table.item(0, 3).background().color().name(), QColor(OK_GREEN).name())
+        self.assertEqual(tab._latch.state, "RED")
+        tab.deleteLater()
+
+
 class MonitorMissing(TabsTest):
     def test_missing_marks_shown_and_ng(self):
         tab = MonitorTab(self.ctx)
         image = QImage(200, 100, QImage.Format_RGB888)
         image.fill(QColor("#202020"))
         self.ctx.filters.selected_classes = {"dot", "e_mark", "tis_mark"}
+        self.settings.set_judge_mode("required")
         self.settings.set_required_marks(["e_mark", "tis_mark"])
         tab._reset_judgement()
         tab.on_frame(image, [det("e_mark")], [])

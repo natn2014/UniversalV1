@@ -70,6 +70,7 @@ class MonitorTab(QWidget):
         self._current_frame_image: Optional[QImage] = None
         self._current_frame_detections: list = []
         self._current_tool_results: list = []
+        self._judge_mode_shown: Optional[bool] = None
         self._latch = JudgementLatch()
         self._pending_ng_save: bool = False
         self._stop_requested: bool = False
@@ -199,6 +200,19 @@ class MonitorTab(QWidget):
         self.table.setMinimumWidth(220)
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
 
+        # Judge by Required Marks: one row per ticked mark, like the tool table;
+        # shown instead of the class counts.
+        self.mark_table = QTableWidget(0, 4)
+        self.mark_table.setHorizontalHeaderLabels(["Mark", "Conf", "Min", "Result"])
+        self.mark_table.verticalHeader().setVisible(False)
+        self.mark_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.mark_table.setSelectionMode(QTableWidget.NoSelection)
+        self.mark_table.setAlternatingRowColors(True)
+        self.mark_table.setMinimumWidth(220)
+        header = self.mark_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+
         # Rule-based vision tools (app/vision): one row per tool, hidden when
         # the job has none.
         self.tool_header = QLabel()
@@ -251,11 +265,12 @@ class MonitorTab(QWidget):
         side_layout = QVBoxLayout(side_panel)
         side_layout.setContentsMargins(0, 0, 0, 0)
         side_layout.setSpacing(0)
-        panel_header = QLabel()
-        panel_header.setObjectName("panelHeader")
-        set_badge_title(panel_header, "ai", "AI Detections")
-        side_layout.addWidget(panel_header)
+        self.ai_header = QLabel()
+        self.ai_header.setObjectName("panelHeader")
+        side_layout.addWidget(self.ai_header)
         side_layout.addWidget(self.table, 1)
+        side_layout.addWidget(self.mark_table, 1)
+        self._show_judge_mode()
         side_layout.addWidget(self.tool_header)
         side_layout.addWidget(self.tool_table)
         # In the side panel, not the bottom bar: that must fit the 1024-wide
@@ -851,6 +866,7 @@ class MonitorTab(QWidget):
 
     @Slot(QImage, list)
     def on_frame(self, image: QImage, detections: list, tool_results: Optional[list] = None) -> None:
+        marks = self._ctx.filters.mark_results(detections)  # before filtering: weak marks show their conf
         detections = self._ctx.filters.apply(detections)  # Use filtered for drawing and table
         tool_results = tool_results or []
         self._current_frame_image = image
@@ -873,7 +889,9 @@ class MonitorTab(QWidget):
             self._ctx.tower.update_state(state)
 
         self._show_frame(image, detections, tool_results)
+        self._show_judge_mode()
         self._update_class_table(detections)
+        self._update_mark_table(marks)
         self._update_tool_table(tool_results)
         if self._ctx.masters:
             self._match_masters(image, detections)
@@ -956,6 +974,46 @@ class MonitorTab(QWidget):
 
             self.table.setItem(row, 0, class_item)
             self.table.setItem(row, 1, count_item)
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._show_judge_mode()  # the switch may have changed on the Settings tab
+
+    def _show_judge_mode(self) -> None:
+        """Required Marks mode: the mark table instead of the class counts."""
+        by_marks = self._ctx.filters.by_marks
+        if self._judge_mode_shown == by_marks:
+            return
+        self._judge_mode_shown = by_marks
+        set_badge_title(self.ai_header, "ai", "Required Marks" if by_marks else "AI Detections")
+        self.table.setVisible(not by_marks)
+        self.mark_table.setVisible(by_marks)
+        if by_marks:
+            self._update_mark_table(self._ctx.filters.mark_results(self._current_frame_detections))
+
+    def _update_mark_table(self, marks: list) -> None:
+        self.mark_table.setRowCount(len(marks))
+        for row, mark in enumerate(marks):
+            conf = mark["conf"]
+            name = QTableWidgetItem(mark["class_name"])
+            value = QTableWidgetItem("—" if conf is None else f"{conf:.2f}")
+            value.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            minimum = QTableWidgetItem(f"{mark['min_conf']:.2f}")
+            minimum.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            if mark["ok"] is None:
+                verdict = QTableWidgetItem("—")
+            else:
+                verdict = QTableWidgetItem("OK" if mark["ok"] else "NG")
+                verdict.setBackground(QBrush(QColor(OK_GREEN if mark["ok"] else NG_RED)))
+                verdict.setForeground(QBrush(QColor("#ffffff")))
+                verdict.setToolTip("Found at or above Min" if mark["ok"] else
+                                   "Not found" if conf is None else "Found below Min")
+            verdict.setTextAlignment(Qt.AlignCenter)
+            font = verdict.font()
+            font.setBold(True)
+            verdict.setFont(font)
+            for col, item in enumerate((name, value, minimum, verdict)):
+                self.mark_table.setItem(row, col, item)
 
     # --- Vision tools ---------------------------------------------------
 
