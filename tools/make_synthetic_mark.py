@@ -104,9 +104,34 @@ def make(tilt_deg: float = -3.0, blur: int = 3, seed: int = 1):
 # rows, scaled, warped like a camera view and blended onto glass.
 
 FONTS = (cv2.FONT_HERSHEY_DUPLEX, cv2.FONT_HERSHEY_SIMPLEX, cv2.FONT_HERSHEY_TRIPLEX)
-BACKGROUND_SHARE = 0.05  # images with no mark (empty label file)
+BACKGROUND_SHARE = 0.1   # images with no mark (empty label file), often with unlabelled print
 MIN_INSIDE = 0.6         # a mark less than this much inside the frame is re-placed
 BASE_CHAR_PX = 22
+# Bold sans like real glass print; marks fall back to Hershey when none exist.
+TTF_BOLD = [f for f in (
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSansNarrow-Bold.ttf",
+) if Path(f).exists()]
+TTF_SHARE = 0.6          # images whose text is a TTF font instead of Hershey
+_ttf_cache: Dict[Tuple[str, int], object] = {}
+
+
+def _ttf_text(path: str, text: str, cap_px: float, narrow: float = 1.0) -> np.ndarray:
+    """Black `text` on white, capitals about `cap_px` tall, x squeezed by `narrow`."""
+    from PIL import Image, ImageDraw, ImageFont
+    size = max(6, int(round(cap_px / 0.73)))
+    font = _ttf_cache.get((path, size))
+    if font is None:
+        font = _ttf_cache[(path, size)] = ImageFont.truetype(path, size)
+    x0, y0, x1, y1 = font.getbbox(text)
+    im = Image.new("L", (x1 - x0 + 8, y1 - y0 + 8), 255)
+    ImageDraw.Draw(im).text((4 - x0, 4 - y0), text, font=font, fill=0)
+    a = np.array(im)
+    if narrow != 1.0:
+        a = cv2.resize(a, (max(1, int(a.shape[1] * narrow)), a.shape[0]), interpolation=cv2.INTER_AREA)
+    return _trim(a)
 
 
 class Pen:
@@ -116,14 +141,25 @@ class Pen:
         self.rng = rng
         self.font = FONTS[rng.integers(len(FONTS))]
         self.thick = int(rng.integers(2, 4))
+        self.ttf = TTF_BOLD[rng.integers(len(TTF_BOLD))] if TTF_BOLD and rng.random() < TTF_SHARE else None
+        self.bold_ttf = TTF_BOLD[rng.integers(len(TTF_BOLD))] if TTF_BOLD else None
 
     def text(self, text: str, scale: float = 1.0, thick: int = 0) -> np.ndarray:
+        if self.ttf:
+            return _ttf_text(self.ttf, text, BASE_CHAR_PX * scale)
         thick = thick or self.thick
         (w, h), base = cv2.getTextSize(text, self.font, scale, thick)
         pad = thick + 1
         canvas = np.full((h + base + 2 * pad, w + 2 * pad), 255, np.uint8)
         cv2.putText(canvas, text, (pad, pad + h), self.font, scale, 0, thick, cv2.LINE_AA)
         return _trim(canvas)
+
+    def bold(self, text: str, scale: float = 1.0, narrow: float = 1.0) -> np.ndarray:
+        """Heavy text for logo letters (E of the E-mark, SNI)."""
+        if self.bold_ttf:
+            return _ttf_text(self.bold_ttf, text, BASE_CHAR_PX * scale, narrow)
+        t = self.text(text, scale, self.thick + 2)
+        return cv2.resize(t, (max(1, int(t.shape[1] * narrow)), t.shape[0])) if narrow != 1.0 else t
 
     def digits(self, n: int) -> str:
         return "".join(str(d) for d in self.rng.integers(0, 10, n))
@@ -162,6 +198,7 @@ def _vcat(parts: List[np.ndarray], gap: int = 4) -> np.ndarray:
 def _framed(inner: np.ndarray, shape: str, thick: int, pad: int = 8) -> np.ndarray:
     """`inner` inside a circle, ellipse, box or rounded box."""
     h, w = inner.shape
+    pad = max(pad, 2 * thick + 3, h // 5)  # keep bold letters clear of the frame
     if shape == "circle":
         side = int(math.hypot(w, h)) + 2 * pad
         canvas = np.full((side, side), 255, np.uint8)
@@ -189,18 +226,52 @@ def _framed(inner: np.ndarray, shape: str, thick: int, pad: int = 8) -> np.ndarr
 
 
 def _emblem(pen: Pen, size: int = 44) -> np.ndarray:
-    """A round emblem with a four-arrow sign inside (TIS-like)."""
-    c = np.full((size, size), 255, np.uint8)
-    m, t = size // 2, pen.thick
-    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-        tip = (m + dx * (m - 6), m + dy * (m - 6))
-        cv2.arrowedLine(c, (m, m), tip, 0, t, cv2.LINE_AA, tipLength=0.35)
-    return _framed(c, "circle", t, pad=2)
+    """TIS-like emblem: a ring around an up/down arrow between two split
+    triangles pointing left and right."""
+    k = 4
+    S = size * k
+    c = np.full((S, S), 255, np.uint8)
+    m = S // 2
+    ring = int(S * pen.rng.uniform(0.045, 0.07))
+    cv2.circle(c, (m, m), m - ring, 0, ring, cv2.LINE_AA)
+    r = m - 2 * ring - int(S * 0.06)          # reach of the sign inside the ring
+    shaft, head = int(S * 0.035), int(r * 0.32)
+    cv2.rectangle(c, (m - shaft, m - r + head), (m + shaft, m + r - head), 0, -1)
+    for sgn in (-1, 1):                        # arrow heads up and down
+        tip = m + sgn * r
+        cv2.fillPoly(c, [np.int32([(m, tip), (m - head * 0.75, tip - sgn * head), (m + head * 0.75, tip - sgn * head)])], 0, cv2.LINE_AA)
+    gap, half = int(S * 0.025), int(r * 0.72)
+    for sgn in (-1, 1):                        # left and right triangles, split by a white bar
+        tip, base = m + sgn * r, m + sgn * int(S * 0.09)
+        cv2.fillPoly(c, [np.int32([(tip, m), (base, m - half), (base, m + half)])], 0, cv2.LINE_AA)
+        cv2.rectangle(c, (min(tip, base) - 2, m - gap), (max(tip, base) + 2, m + gap), 255, -1)
+        notch = base + sgn * int(r * 0.07)
+        cv2.fillPoly(c, [np.int32([(base, m - half), (notch, m), (base, m + half)])], 255, cv2.LINE_AA)
+    return cv2.resize(c, (size, size), interpolation=cv2.INTER_AREA)
+
+
+def _circled(inner: np.ndarray, thick: int, pad: int = 3) -> np.ndarray:
+    """`inner` in a circle that hugs it (the E-mark ring)."""
+    h, w = inner.shape
+    side = int(max(w, h) * 1.12) + 2 * (pad + thick)
+    canvas = np.full((side, side), 255, np.uint8)
+    y0, x0 = (side - h) // 2, (side - w) // 2
+    canvas[y0:y0 + h, x0:x0 + w] = np.minimum(canvas[y0:y0 + h, x0:x0 + w], inner)
+    cv2.circle(canvas, (side // 2, side // 2), side // 2 - thick, 0, thick, cv2.LINE_AA)
+    return canvas
 
 
 def mark_e(pen):
-    inner = pen.text(f"E{int(pen.rng.choice([1, 2, 4, 6, 11, 43]))}", 0.9)
-    return _hcat([_framed(inner, "circle", pen.thick, 4), pen.text(f"43R-00{pen.digits(4)}")], 12)
+    """ECE R43: big bold E with a smaller country number in a ring, then 43R-00xxxx."""
+    n = str(int(pen.rng.choice([1, 2, 3, 4, 5, 6, 8, 9, 11, 13, 43])))
+    number = pen.bold(f"43R-00{pen.digits(4)}") if pen.rng.random() < 0.6 else pen.text(f"43R-00{pen.digits(4)}")
+    if pen.rng.random() < 0.25:  # older style: E and number the same size
+        return _hcat([_framed(pen.text(f"E{n}", 0.9), "circle", pen.thick, 4), number], 12)
+    e = pen.bold("E", 1.45)
+    num = pen.bold(n, 0.75)
+    num = cv2.copyMakeBorder(num, int(e.shape[0] * 0.18), 0, 0, 0, cv2.BORDER_CONSTANT, value=255)
+    ring = _circled(_hcat([e, num], 1), max(2, e.shape[0] // 11))
+    return _hcat([ring, number], int(pen.rng.integers(8, 20)))
 
 
 def mark_dot(pen):
@@ -216,12 +287,25 @@ def mark_ccc(pen):
 
 
 def mark_tis(pen):
-    return _hcat([_emblem(pen), pen.text(f"TIS {pen.digits(4)}-{pen.digits(4)}")], 12)
+    text = f"TIS {pen.digits(4)}-{pen.digits(4)}"
+    words = pen.bold(text) if pen.rng.random() < 0.5 else pen.text(text)
+    size = int(words.shape[0] * pen.rng.uniform(2.2, 3.4))
+    return _hcat([_emblem(pen, size), words], int(pen.rng.integers(8, 20)))
 
 
 def mark_sni(pen):
+    """SNI logo: heavy condensed letters with a bar above and below; sometimes
+    the older boxed form, sometimes with a maker code beside it."""
     code = f"{'ABCDEFGHJKLMNPRSTUVWXY'[pen.rng.integers(22)]}{pen.rng.integers(1, 10)}"
-    return _hcat([pen.text(code), _framed(pen.text("SNI", 0.9), "box", pen.thick, 4)], 10)
+    if pen.rng.random() < 0.2:
+        logo = _framed(pen.text("SNI", 0.9), "box", pen.thick, 4)
+    else:
+        letters = pen.bold("SNI", pen.rng.uniform(1.2, 1.6), narrow=pen.rng.uniform(0.6, 0.8))
+        h, w = letters.shape
+        bar = max(2, int(h * pen.rng.uniform(0.12, 0.18)))
+        rule = np.zeros((bar, w), np.uint8)
+        logo = _vcat([rule, letters, rule], max(2, int(h * 0.12)))
+    return _hcat([pen.text(code), logo], 10) if pen.rng.random() < 0.4 else logo
 
 
 def mark_inmetro(pen):
@@ -245,7 +329,7 @@ def mark_glass_class(pen):
     return pen.text(str(pen.rng.choice(["//", "II", "V", "V-VI"])))
 
 
-def mark_date(pen):
+def _date_dots(pen):
     """Digit with dots on either side (dot-pattern date code)."""
     left, right = int(pen.rng.integers(0, 4)), int(pen.rng.integers(0, 4))
     digit = pen.text(str(pen.rng.integers(0, 10)))
@@ -254,6 +338,20 @@ def mark_date(pen):
     cv2.circle(dot, (h // 4, h // 2), max(2, h // 7), 0, -1, cv2.LINE_AA)
     parts = [dot] * left + [digit] + [dot] * right
     return _hcat(parts, 4) if len(parts) > 1 else _hcat([dot, digit], 4)
+
+
+def _date_rows(pen):
+    """Widely spaced digit rows (month / year code, e.g. 1 2 4 8 over 1 2 4 8)."""
+    n = int(pen.rng.integers(3, 7))
+    digits = sorted(set(int(d) for d in pen.rng.integers(0, 10, n + 2)))[:n] if pen.rng.random() < 0.5 \
+        else [1, 2, 4, 8][:max(3, min(n, 4))]
+    gap = int(BASE_CHAR_PX * pen.rng.uniform(0.8, 2.0))
+    rows = [_hcat([pen.text(str(d)) for d in digits], gap) for _ in range(int(pen.rng.choice([1, 2, 2])))]
+    return _vcat(rows, int(BASE_CHAR_PX * pen.rng.uniform(0.3, 0.8))) if len(rows) > 1 else rows[0]
+
+
+def mark_date(pen):
+    return _date_rows(pen) if pen.rng.random() < 0.6 else _date_dots(pen)
 
 
 def logo_acme(pen):
@@ -292,6 +390,51 @@ MARKS: Dict[str, Callable[[Pen], np.ndarray]] = {
 }
 assert set(MARKS) == set(STANDARD_CLASSES)
 LOGOS = [c for c in STANDARD_CLASSES if c.startswith("logo_")]
+
+
+# --- Unlabelled print: other things on a marking the model must ignore ----
+
+EXTRA_WORDS = ["TEMPERLITE", "TEMPERED", "SECURIT", "SAFETY GLASS", "TOUGHENED", "MADE IN THAILAND",
+               "MADE IN CHINA", "SOLAR", "ACOUSTIC", "PRIVACY"]
+
+
+def _qr(pen):
+    """QR-like square: three finder squares and random modules."""
+    n = int(pen.rng.choice([21, 25, 29]))
+    grid = pen.rng.random((n, n)) < 0.5
+    for y, x in ((0, 0), (0, n - 7), (n - 7, 0)):
+        grid[max(0, y - 1):y + 8, max(0, x - 1):x + 8] = False
+        grid[y:y + 7, x:x + 7] = True
+        grid[y + 1:y + 6, x + 1:x + 6] = False
+        grid[y + 2:y + 5, x + 2:x + 5] = True
+    cell = max(2, int(BASE_CHAR_PX * pen.rng.uniform(2.5, 5.0) / n))
+    img = np.where(np.kron(grid, np.ones((cell, cell), bool)), 0, 255).astype(np.uint8)
+    return cv2.copyMakeBorder(img, 2, 2, 2, 2, cv2.BORDER_CONSTANT, value=255)
+
+
+def _part_number(pen):
+    r = pen.rng
+    a = "ABCDEFGHJKLMNPRSTUVWXYZ"
+    return pen.text(str(r.choice([
+        f"{pen.digits(7)}-{a[r.integers(23)]}{a[r.integers(23)]}{pen.digits(2)}-{a[r.integers(23)]}{a[r.integers(23)]} {r.integers(1, 9)}.{r.integers(0, 9)}",
+        f"{a[r.integers(23)]}{pen.digits(5)}",
+        f"M{pen.digits(3)}{a[r.integers(23)]}",
+        f"{pen.digits(2)}{a[r.integers(23)]}",
+        a[r.integers(23)],
+    ])))
+
+
+def extra_print(pen) -> np.ndarray:
+    k = pen.rng.random()
+    if k < 0.25:
+        return _qr(pen)
+    if k < 0.5:
+        return pen.bold(str(pen.rng.choice(EXTRA_WORDS))) if pen.rng.random() < 0.5 else pen.text(str(pen.rng.choice(EXTRA_WORDS)))
+    return _part_number(pen)
+
+
+EXTRA_SHARE = 0.7       # images with unlabelled print (QR, words, numbers) among the marks
+EXTRA = "_extra"        # layout key for unlabelled print; never written to a label
 
 
 def pick_marks(rng: np.random.Generator) -> List[str]:
@@ -369,9 +512,12 @@ def make_dataset_image(rng: np.random.Generator, size: Tuple[int, int] = (1280, 
     bg = _glass_bg(rng, w, h)
     boxes: List[Tuple[str, Tuple[float, float, float, float]]] = []
     layer = np.full((h, w), 255, np.uint8)
-    if marks:
-        pen = Pen(rng)
-        block, block_boxes = _layout([(m, MARKS[m](pen)) for m in marks], rng, max_w=int(rng.uniform(450, 800)))
+    pen = Pen(rng)
+    canvases = [(m, MARKS[m](pen)) for m in marks]
+    if rng.random() < EXTRA_SHARE:
+        canvases += [(EXTRA, extra_print(pen)) for _ in range(int(rng.integers(1, 5)))]
+    if canvases:
+        block, block_boxes = _layout(canvases, rng, max_w=int(rng.uniform(450, 800)))
         scale = rng.uniform(12, 40) / BASE_CHAR_PX
         scale = min(scale, 0.85 * w / block.shape[1], 0.85 * h / block.shape[0])
         block = cv2.resize(block, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
@@ -387,13 +533,13 @@ def make_dataset_image(rng: np.random.Generator, size: Tuple[int, int] = (1280, 
                 cx1, cy1, cx2, cy2 = max(qx1, 0), max(qy1, 0), min(qx2, w), min(qy2, h)
                 inside = max(0, cx2 - cx1) * max(0, cy2 - cy1) / max(1e-6, (qx2 - qx1) * (qy2 - qy1))
                 placed.append((key, (cx1, cy1, cx2, cy2), inside))
-            if all(p[2] >= MIN_INSIDE for p in placed):
+            if all(p[2] >= MIN_INSIDE for p in placed if p[0] != EXTRA):
                 break
         layer[y0:y0 + bh, x0:x0 + bw] = block
         layer = cv2.warpPerspective(layer, m, (w, h), flags=cv2.INTER_LINEAR, borderValue=255)
-        boxes = [(k, b) for k, b, inside in placed if inside >= MIN_INSIDE]
+        boxes = [(k, b) for k, b, inside in placed if k != EXTRA and inside >= MIN_INSIDE]
         if rng.random() < 0.4:  # dark ceramic band on the side away from the print
-            xs = [b[0] for _, b in boxes] + [b[2] for _, b in boxes]
+            xs = [b[0] for _, b, _ in placed] + [b[2] for _, b, _ in placed]
             if min(xs) > 0.25 * w:
                 bg[:, :int(rng.uniform(0.05, min(xs) / w - 0.05) * w)] = rng.uniform(40, 80)
             elif max(xs) < 0.75 * w:
