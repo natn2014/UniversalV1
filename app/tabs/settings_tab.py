@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -30,7 +31,8 @@ from .. import jobs
 from .. import paths
 from ..camera import RESOLUTION_CHOICES, find_cameras, parse_resolution
 from ..context import AppContext
-from ..i18n import tr, translator
+from ..i18n import tr, translator, trf
+from ..judgement import MarkHold
 from ..marking.short_name import valid_short_name
 from ..optional_deps import BUZZER_OFF, BUZZER_PATTERN_NAMES
 from ..roi import roi_to_pixels
@@ -72,6 +74,7 @@ class SettingsTab(QWidget):
         self._applying = False
         self._job_baseline: dict = {}  # JOB_KEYS as last saved / loaded
         self._machine_reloaders: list = []  # sections' widget reloads after Revert
+        self._preview_hold = MarkHold()
         ctx.model_path_changed.connect(lambda _: self._job_edited())
 
         self.model_label = QLabel("No model selected")
@@ -146,6 +149,8 @@ class SettingsTab(QWidget):
             settings.set(state_hold_ms=self.state_hold_spinbox.value())
         self.state_hold_spinbox.valueChanged.connect(
             lambda value: settings.set(state_hold_ms=value))
+
+        self.mark_hold_spinbox = self._make_setting_spinbox("mark_hold_ms", 0, 5000, 100, " ms")
 
         self.slow_tool_spinbox = QDoubleSpinBox()
         self.slow_tool_spinbox.setRange(0.5, 10.0)
@@ -275,6 +280,14 @@ class SettingsTab(QWidget):
         camera_body.addLayout(row(tip_label("Camera:", "Which camera to use. Tap Scan Cameras after plugging one in.", self.camera_combo), self.camera_combo, self.scan_button, None))
         camera_body.addLayout(row(tip_label("Resolution:", "Image size asked from the camera. Higher = finer detail but slower; Actual shows what the camera gave.", self.resolution_combo), self.resolution_combo, None))
         camera_body.addWidget(self.resolution_actual_label)
+        self.auto_start_checkbox = QCheckBox("Start inspecting when the app opens")
+        self.auto_start_checkbox.setToolTip(
+            "When the app opens it loads the last job; with this on it also starts the camera and the "
+            "inspection, as if Start were pressed.")
+        self.auto_start_checkbox.setChecked(self._ctx.settings["auto_start"])
+        self.auto_start_checkbox.toggled.connect(lambda on: self._ctx.settings.set(auto_start=on))
+        self._machine_reloaders.append(lambda: self.auto_start_checkbox.setChecked(self._ctx.settings["auto_start"]))
+        camera_body.addWidget(self.auto_start_checkbox)
 
         tower_card, tower_body = make_card("Tower Light & Buzzer", icon="tower")
         tower_body.addWidget(self.tower_status_label)
@@ -288,6 +301,10 @@ class SettingsTab(QWidget):
         hold_hint.setObjectName("hint")
         hold_hint.setWordWrap(True)
         tower_body.addWidget(hold_hint)
+        tower_body.addLayout(row(tip_label(
+            "Mark OK hold:", "Required Marks: a mark found OK stays OK this long, so losing it for a frame or two "
+            "(glare, a hand passing) doesn't turn it NG. It is NG only when not found for longer. 0 = off.",
+            self.mark_hold_spinbox), None, self.mark_hold_spinbox))
         tower_body.addLayout(row(tip_label("OCR / code rate:", "How many times a second OCR and code-reader tools run. They run in the background, so the live view stays smooth; higher = faster result, more CPU.", self.slow_tool_spinbox), None, self.slow_tool_spinbox))
         slow_hint = QLabel("OCR and code tools run this often in the background; the live view keeps its full frame rate")
         slow_hint.setObjectName("hint")
@@ -310,8 +327,10 @@ class SettingsTab(QWidget):
 
         filters_card, filters_body = make_card("AI Detection Filters", badge="ai")
         for widget, hint in (
-            (self.max_detections_label, "Keep only this many detections (the most confident). 0 = all."),
-            (self.max_detections_spinbox, "Keep only this many detections (the most confident). 0 = all."),
+            (self.max_detections_label, "Keep only this many detections (the most confident). 0 = all. "
+                                        "Not used when judging by Required Marks."),
+            (self.max_detections_spinbox, "Keep only this many detections (the most confident). 0 = all. "
+                                          "Not used when judging by Required Marks."),
             (self.target_class_label, "OK needs these classes found: OR = either one, AND = both. -- None -- = not used."),
             (self.target_class_combo_1, "First class that must be found for OK."),
             (self.target_gate_combo, "OR: either class is enough.  AND: both must be found."),
@@ -468,12 +487,42 @@ class SettingsTab(QWidget):
         self.image_card, reload_image = make_image_card(self._ctx)
         self.add_section_widget("camera", self.image_card)
         self._machine_reloaders.append(reload_image)
+        self.ng_log_card = self._make_ng_log_card()
+        self.add_section_widget("autocapture", self.ng_log_card)
         self.relay_card, reload_relay = make_relay_card(self._ctx, self)
         self.add_section_widget("relay", self.relay_card)
         self._machine_reloaders.append(reload_relay)
         self.show_section("camera")
         self._refresh_job_note()
         translator().language_changed.connect(self._on_language_changed)
+
+    def _make_ng_log_card(self) -> QFrame:
+        """NG Log: the size limit (the oldest images are deleted beyond it)
+        and how big the log is now."""
+        settings = self._ctx.settings
+        card, body = make_card("NG Log", icon="list")
+        self.ng_log_limit_spinbox = QDoubleSpinBox()
+        self.ng_log_limit_spinbox.setRange(0.0, 1000.0)
+        self.ng_log_limit_spinbox.setSingleStep(0.5)
+        self.ng_log_limit_spinbox.setDecimals(1)
+        self.ng_log_limit_spinbox.setSuffix(" GB")
+        self.ng_log_limit_spinbox.setSpecialValueText("No limit")
+        self.ng_log_limit_spinbox.setValue(settings["ng_log_max_gb"])
+        self.ng_log_limit_spinbox.valueChanged.connect(lambda v: settings.set(ng_log_max_gb=round(v, 1)))
+        self._machine_reloaders.append(lambda: self.ng_log_limit_spinbox.setValue(settings["ng_log_max_gb"]))
+        body.addLayout(row(tip_label("Keep at most:", "The NG images in the Log are kept under this size: when "
+                                     "it is exceeded, the oldest are deleted first. 0 = no limit.",
+                                     self.ng_log_limit_spinbox), None, self.ng_log_limit_spinbox))
+        self.ng_log_size_label = QLabel()
+        self.ng_log_size_label.setObjectName("hint")
+        body.addWidget(self.ng_log_size_label)
+        return card
+
+    def _refresh_ng_log_size(self) -> None:
+        from .. import ng_log
+        size = ng_log.ng_log_size() / 1024 ** 3
+        self.ng_log_size_label.setText(trf("Now {} GB; the oldest NG images are deleted beyond the limit",
+                                           f"{size:.2f}"))
 
     @staticmethod
     def _make_page(widgets: list) -> QScrollArea:
@@ -504,6 +553,8 @@ class SettingsTab(QWidget):
 
     def show_section(self, key: str) -> None:
         self.current_section = key
+        if key == "autocapture" and hasattr(self, "ng_log_size_label"):
+            self._refresh_ng_log_size()
         self.nav_buttons[key].setChecked(True)
         self.pages.setCurrentIndex(list(self.nav_buttons).index(key))
         title = next(t for _, sections in SECTIONS for k, t, _ in sections if k == key)
@@ -538,7 +589,11 @@ class SettingsTab(QWidget):
         filters = self._ctx.filters
         section = getattr(self, "current_section", "camera")
         shown = filters.apply(detections) if section in ("model", "marks") else []
-        marks = {m["class_name"]: m for m in filters.mark_results(detections)} if section == "marks" else {}
+        marks = {}
+        if section == "marks":  # held like the Monitor's table (Mark OK hold), so it doesn't flicker either
+            rows = self._preview_hold.update(filters.mark_results(detections), bool(shown), time.monotonic(),
+                                             self._ctx.settings["mark_hold_ms"] / 1000.0)
+            marks = {m["class_name"]: m for m in rows}
         self.preview_info.setText(tr(f"Live camera  ·  {image.width()} × {image.height()}"
                                      + (f"  ·  {len(shown)} detections" if section in ("model", "marks") else "")))
 
@@ -647,6 +702,7 @@ class SettingsTab(QWidget):
         self.ok_beep_checkbox.setChecked(settings["ok_beep_enabled"])
         self.ok_beep_duration_spinbox.setValue(settings["ok_beep_ms"])
         self.state_hold_spinbox.setValue(settings["state_hold_ms"])
+        self.mark_hold_spinbox.setValue(settings["mark_hold_ms"])
         self.slow_tool_spinbox.setValue(settings["slow_tool_hz"])
         self.autocapture_max_spinbox.setValue(settings["autocapture_max_images"])
         self.autocapture_threshold_spinbox.setValue(settings["autocapture_threshold"])

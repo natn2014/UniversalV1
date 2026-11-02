@@ -1,7 +1,8 @@
 import sys
+from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QSize, Qt, Slot
+from PySide6.QtCore import QLockFile, QSize, QStandardPaths, Qt, QTimer, Slot
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -14,7 +15,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import jobs
+from . import jobs, ng_log
 from .context import AppContext
 from .tabs.job_change_tab import JobChangeTab
 from .tabs.log_tab import LogTab
@@ -88,6 +89,7 @@ class MainWindow(QWidget):
         self.settings_tab.scan_cameras()
         self.ctx.tower.connect_device()
         self.ctx.relay.restart()
+        self._trim_ng_log()
         self._auto_load_last_config()
 
     # Monitor-tab actions, kept here as the window's public controls.
@@ -131,6 +133,7 @@ class MainWindow(QWidget):
         self.job_change_tab.refresh_job_buttons()
 
     def _auto_load_last_config(self) -> None:
+        self._last_job_loaded = False
         part_no = jobs.read_last_part()
         if part_no is None:
             return
@@ -139,8 +142,20 @@ class MainWindow(QWidget):
             return
         model_ok = self.settings_tab.apply_config(config)
         self.ctx.set_current_part(part_no)
+        self._last_job_loaded = True
         if model_ok:
             self.ctx.status.emit(f"Auto-loaded last config: '{part_no}'.")
+
+    def auto_start(self) -> bool:
+        """Called once the window is up: with the last job loaded and Start
+        when the app opens on (Settings > Camera), start inspecting, as if the
+        operator pressed Start. False when it did not start."""
+        if not (self._last_job_loaded and self.ctx.settings["auto_start"]) or self.ctx.worker.isRunning():
+            return False
+        if not self.monitor_tab.start_stream():
+            return False
+        self.ctx.status.emit(f"Started job '{self.ctx.current_part_no}' automatically.")
+        return True
 
     @Slot(str)
     def _on_job_selected(self, part_no: str) -> None:
@@ -253,6 +268,15 @@ class MainWindow(QWidget):
         self._save_current_as_job(part_no)
         self.ctx.status.emit(f"Saved config for '{part_no}'.")
 
+    def _trim_ng_log(self) -> None:
+        """At start, the NG log back under its limit (it may have been lowered,
+        or images added by an older version without a limit)."""
+        limit = int(self.ctx.settings["ng_log_max_gb"] * 1024 ** 3)
+        if limit > 0 and ng_log.ng_log_size() > limit:
+            deleted, freed = ng_log.prune_ng_log(int(limit * ng_log.PRUNE_TO))
+            self.ctx.status.emit(f"NG log over its limit: deleted the {deleted} oldest NG images "
+                                 f"({freed / 1024 ** 3:.1f} GB).")
+
     # --- Language -------------------------------------------------------
 
     def _make_language_switch(self) -> QWidget:
@@ -312,6 +336,13 @@ class MainWindow(QWidget):
 
 def main() -> None:
     app = QApplication(sys.argv)
+    # One copy only: two would fight over the camera, the tower light and the
+    # relay (the boot service and a start from a terminal / VS Code).
+    lock = QLockFile(str(Path(QStandardPaths.writableLocation(QStandardPaths.TempLocation)) / "universalv1-app.lock"))
+    lock.setStaleLockTime(0)  # a lock left by a crashed copy is taken over (its process is gone)
+    if not lock.tryLock(100):
+        QMessageBox.warning(None, "UniversalV1", "The inspection app is already running.")
+        sys.exit(1)
     app.setStyleSheet(DARK_INDUSTRIAL_QSS)
     hints = HintWrapper(app)
     app.installEventFilter(hints)
@@ -319,4 +350,5 @@ def main() -> None:
     window.resize(1050, 720)
     window.set_language(window.ctx.settings["language"])
     window.showFullScreen()
+    QTimer.singleShot(1000, window.auto_start)  # after the window is up and the model warm
     sys.exit(app.exec())

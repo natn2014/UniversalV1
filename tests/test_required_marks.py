@@ -192,6 +192,8 @@ class TabsTest(unittest.TestCase):
         for p in self.patches:
             p.start()
         self.ctx = AppContext()
+        self.ctx.settings.set(mark_hold_ms=0)  # judged per frame here; MarkHoldMonitor tests the hold
+        self.ctx.settings.commit()
         self.settings = SettingsTab(self.ctx)
         self.ctx.model_classes = ["dot", "e_mark", "tis_mark"]
         self.ctx.model_classes_changed.emit(self.ctx.model_classes)
@@ -361,6 +363,93 @@ class MonitorMarks(TabsTest):
             tab._show_judge_mode()
             self.assertIn("Mark Inspection", tab.monitor_info_label.text())
             self.assertIn("badge_mark.svg", tab.monitor_info_label.text())
+        tab.deleteLater()
+
+
+class Hold(unittest.TestCase):
+    """MarkHold: a mark OK in the last hold_s stays OK; NG only after."""
+
+    def rows(self, **ok):
+        return [{"class_name": n, "conf": 0.9 if v else None, "min_conf": 0.4, "ok": v} for n, v in ok.items()]
+
+    def test_dropout_shorter_than_hold_stays_ok(self):
+        from app.judgement import MarkHold, held_missing, held_state
+        h = MarkHold()
+        self.assertEqual(held_state(h.update(self.rows(e_mark=True, tis_mark=True), True, 0.0, 1.0)), "GREEN")
+        held = h.update(self.rows(e_mark=True, tis_mark=False), True, 0.5, 1.0)
+        self.assertEqual((held_state(held), held[1].get("held")), ("GREEN", True))
+        self.assertEqual(held[1]["conf"], 0.9)  # the last good row is shown
+        held = h.update(self.rows(e_mark=True, tis_mark=False), True, 1.2, 1.0)  # not OK for > 1 s
+        self.assertEqual((held_state(held), held_missing(held)), ("RED", ["tis_mark"]))
+        held = h.update(self.rows(e_mark=True, tis_mark=True), True, 1.3, 1.0)
+        self.assertEqual(held_state(held), "GREEN")
+
+    def test_arrival_grace_then_ng(self):
+        from app.judgement import MarkHold, held_state
+        h = MarkHold()
+        self.assertEqual(held_state(h.update(self.rows(e_mark=True, tis_mark=False), True, 10.0, 1.0)), "YELLOW")
+        self.assertEqual(held_state(h.update(self.rows(e_mark=True, tis_mark=False), True, 10.6, 1.0)), "YELLOW")
+        self.assertEqual(held_state(h.update(self.rows(e_mark=True, tis_mark=False), True, 11.1, 1.0)), "RED")
+
+    def test_new_part_does_not_inherit(self):
+        from app.judgement import MarkHold, held_state
+        h = MarkHold()
+        h.update(self.rows(e_mark=True, tis_mark=True), True, 0.0, 1.0)
+        none = self.rows(e_mark=None, tis_mark=None)
+        self.assertEqual(held_state(h.update(none, False, 0.4, 1.0)), "GREEN")  # part lost briefly: still held
+        self.assertEqual(held_state(h.update(none, False, 1.5, 1.0)), "YELLOW")  # gone: start over
+        held = h.update(self.rows(e_mark=True, tis_mark=False), True, 1.6, 1.0)  # next part, TIS missing
+        self.assertNotIn(True, [r.get("held") for r in held])
+        h.update(self.rows(e_mark=True, tis_mark=False), True, 2.2, 1.0)  # frames keep coming
+        self.assertEqual(held_state(h.update(self.rows(e_mark=True, tis_mark=False), True, 2.7, 1.0)), "RED")
+
+    def test_reset_on_trigger_and_hold_off(self):
+        from app.judgement import MarkHold, held_state
+        h = MarkHold()
+        h.update(self.rows(e_mark=True, tis_mark=True), True, 0.0, 1.0)
+        h.reset(0.2)  # a trigger: this part is judged from scratch
+        self.assertEqual(held_state(h.update(self.rows(e_mark=True, tis_mark=False), True, 0.3, 1.0)), "YELLOW")
+        rows = self.rows(e_mark=True, tis_mark=False)
+        self.assertIs(MarkHold().update(rows, True, 0.0, 0.0), rows)  # hold 0: per frame
+
+    def test_short_name_read_is_held(self):
+        from app.judgement import MarkHold, held_short_name
+        h = MarkHold()
+        good = [{"class_name": "short_name", "conf": 0.9, "min_conf": 0.4, "ok": True, "read": "T1",
+                 "expected": "T1", "ocr_state": "ok"}]
+        bad = [dict(good[0], ok=False, read="TA", ocr_state="ng")]
+        h.update(good, True, 0.0, 1.0)
+        self.assertEqual(held_short_name(h.update(bad, True, 0.5, 1.0))["state"], "ok")
+        h.update(bad, True, 1.0, 1.0)
+        self.assertEqual(held_short_name(h.update(bad, True, 1.6, 1.0))["state"], "ng")
+
+
+class MarkHoldMonitor(TabsTest):
+    def test_table_and_verdict_ride_out_a_dropout(self):
+        self.ctx.settings.set(mark_hold_ms=1000, state_hold_ms=0)
+        tab = MonitorTab(self.ctx)
+        image = QImage(200, 100, QImage.Format_RGB888)
+        image.fill(QColor("#202020"))
+        self.ctx.filters.selected_classes = {"dot", "e_mark", "tis_mark"}
+        self.settings.set_judge_mode("required")
+        self.settings.set_required_marks(["e_mark", "tis_mark"])
+        tab._reset_judgement()
+        clock = [100.0]
+        with mock.patch.object(monitor_mod.time, "monotonic", side_effect=lambda: clock[0]):
+            tab.on_frame(image, [det("e_mark"), det("tis_mark")], [])
+            self.assertEqual(tab._latch.state, "GREEN")
+            clock[0] = 100.5
+            tab.on_frame(image, [det("e_mark")], [])  # TIS lost for half a second
+            self.assertEqual(tab._latch.state, "GREEN")
+            self.assertEqual(tab.missing_label.text(), "")
+            self.assertEqual(tab.mark_table.item(1, 3).text(), "OK")
+            clock[0] = 101.0
+            tab.on_frame(image, [det("e_mark")], [])
+            clock[0] = 101.6
+            tab.on_frame(image, [det("e_mark")], [])  # gone for more than a second
+            self.assertEqual(tab._latch.state, "RED")
+            self.assertEqual(tab.missing_label.text(), "Missing: tis_mark")
+            self.assertEqual(tab.mark_table.item(1, 3).text(), "NG")
         tab.deleteLater()
 
 

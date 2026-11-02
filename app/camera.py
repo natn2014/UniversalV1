@@ -157,13 +157,18 @@ class VideoWorker(QThread):
         most confident short_name detection, and hands the reader a new crop
         when it is due."""
         expected = self._short_name_expected
-        boxes = [d for d in detections if d["class_name"] == "short_name"]
-        if not expected or not boxes:
+        if not expected or not detections:
             return
-        det = max(boxes, key=lambda d: d["conf"])
         now = time.monotonic()
         reader = self._short_name
+        # The part is there while any mark is: a short-name box that blinks
+        # (confidence near its threshold) must not start a new part and lose
+        # the good read.
         reader.seen(now)
+        boxes = [d for d in detections if d["class_name"] == "short_name"]
+        if not boxes:
+            return
+        det = max(boxes, key=lambda d: d["conf"])
         if reader.due(now, self._slow_hz):
             others = [(d["x1"], d["y1"], d["x2"], d["y2"]) for d in detections if d is not det]
             x1, y1, x2, y2 = pad_box((det["x1"], det["y1"], det["x2"], det["y2"]), frame.shape[1], frame.shape[0], others)

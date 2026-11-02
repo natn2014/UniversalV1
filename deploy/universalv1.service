@@ -1,0 +1,30 @@
+# systemd USER service: starts the UniversalV1 inspection app when the desktop
+# session starts (after boot, with GDM automatic login) and restarts it if it
+# stops unexpectedly. Installed by deploy/install.sh to
+# ~/.config/systemd/user/universalv1.service with @APP_DIR@ filled in.
+#
+#   systemctl --user status universalv1      state
+#   systemctl --user restart universalv1     restart the app
+#   systemctl --user stop universalv1        stop it (until the next login)
+#   systemctl --user disable universalv1     no auto start
+#   journalctl --user -u universalv1 -f      service messages (app output: logs/app.log)
+
+[Unit]
+Description=UniversalV1 vision inspection (kiosk)
+After=graphical-session.target
+PartOf=graphical-session.target
+# A crash loop (e.g. camera driver) is not retried forever: 5 tries in 2 min.
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=@APP_DIR@
+ExecStart=@APP_DIR@/deploy/run_app.sh
+Restart=on-failure
+RestartSec=5
+# Let the app close cleanly (outputs off, files written) before it is killed.
+TimeoutStopSec=15
+
+[Install]
+WantedBy=graphical-session.target

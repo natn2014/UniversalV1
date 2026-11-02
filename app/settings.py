@@ -14,6 +14,11 @@ DEFAULT_APP_SETTINGS = {
     "ok_beep_ms": 50,
     # Minimum time a STANDBY/OK/NG judgement is held before it may change.
     "state_hold_ms": 1000,
+    # Required Marks: a mark found OK stays OK this long (a frame or two lost
+    # doesn't flip it), and is NG only after this long without it. 0 = off.
+    "mark_hold_ms": 1000,
+    # When the app opens with the last job loaded, start inspecting at once.
+    "auto_start": True,
     # Camera capture size "WxH"; falls back to 640x480 if the camera can't.
     "camera_resolution": "1920x1080",
     # OK/NG cycle counters, persisted so a kiosk restart doesn't lose them.
@@ -27,6 +32,9 @@ DEFAULT_APP_SETTINGS = {
     # After a save, wait until no master matches (part removed) before the
     # next one, so one part held in view is saved once, not every interval.
     "autocapture_wait_clear": True,
+    # NG image log (ng_logs/): the oldest images are deleted to keep it under
+    # this size. 0 = no limit.
+    "ng_log_max_gb": 5.0,
     # OCR / code tools run at most this often, in their own thread, so the
     # live view stays smooth.
     "slow_tool_hz": 2.0,

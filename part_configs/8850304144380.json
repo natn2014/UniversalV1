@@ -1,6 +1,6 @@
 {
   "part_no": "8850304144380",
-  "model_path": "/home/jetson/dev/UniversalV1/weights/standard_marks_v8.pt",
+  "model_path": "/home/jetson/dev/UniversalV1/weights/MarkV9_best.pt",
   "confidence_threshold": 0.6,
   "max_detections": 3,
   "target_class_1": null,
@@ -38,16 +38,14 @@
     "logo_agc",
     "m_code",
     "short_name",
-    "tis_mark",
-    "type_code"
+    "tis_mark"
   ],
   "mark_conf": {
     "e_mark": 0.4,
     "logo_agc": 0.4,
     "m_code": 0.4,
     "short_name": 0.4,
-    "tis_mark": 0.4,
-    "type_code": 0.4
+    "tis_mark": 0.4
   },
   "check_layout": false,
   "perspective": [

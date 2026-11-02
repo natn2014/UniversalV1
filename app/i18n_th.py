@@ -205,6 +205,9 @@ TH = {
     "Image size asked from the camera. Higher = finer detail but slower; Actual shows what the camera gave.":
         "ขนาดภาพที่ขอจากกล้อง สูง = ละเอียดแต่ช้ากว่า ช่อง จริง แสดงขนาดที่กล้องให้มา",
     "Look again for connected cameras.": "ค้นหากล้องที่เสียบอยู่อีกครั้ง",
+    "Start inspecting when the app opens": "เริ่มตรวจทันทีเมื่อเปิดโปรแกรม",
+    "When the app opens it loads the last job; with this on it also starts the camera and the inspection, as if Start were pressed.":
+        "เมื่อเปิดโปรแกรมจะโหลดงานล่าสุด ถ้าเปิดตัวเลือกนี้จะเปิดกล้องและเริ่มตรวจด้วย เหมือนกด เริ่ม",
     "Mirror  ⇆": "กลับซ้าย-ขวา  ⇆",
     "Flip  ⇅": "กลับบน-ล่าง  ⇅",
     "Brightness": "ความสว่าง",
@@ -242,6 +245,9 @@ TH = {
     "Pattern 4": "รูปแบบ 4",
     "Beep on OK": "เสียงสั้นเมื่อ OK",
     "State hold time:": "เวลาค้างผล:",
+    "Mark OK hold:": "ค้าง OK ของเครื่องหมาย:",
+    "Required Marks: a mark found OK stays OK this long, so losing it for a frame or two (glare, a hand passing) doesn't turn it NG. It is NG only when not found for longer. 0 = off.":
+        "เครื่องหมายบังคับ: เมื่อพบ OK แล้วจะค้าง OK นานเท่านี้ หลุดไปหนึ่งสองเฟรม (แสงสะท้อน มือผ่าน) จะไม่เป็น NG จะเป็น NG เมื่อไม่พบนานกว่านี้ 0 = ปิด",
     "Minimum time between STANDBY / OK / NG changes (0 = off)": "เวลาขั้นต่ำระหว่างการเปลี่ยน รอ / OK / NG (0 = ปิด)",
     "OCR / code rate:": "ความถี่ OCR / โค้ด:",
     "OCR and code tools run this often in the background; the live view keeps its full frame rate":
@@ -286,6 +292,11 @@ TH = {
 
     # --- Settings: auto capture ----------------------------------------------
     "Max images per job:": "จำนวนภาพสูงสุดต่องาน:",
+    "NG Log": "บันทึก NG",
+    "Keep at most:": "เก็บไม่เกิน:",
+    "No limit": "ไม่จำกัด",
+    "The NG images in the Log are kept under this size: when it is exceeded, the oldest are deleted first. 0 = no limit.":
+        "ภาพ NG ในบันทึกจะเก็บไม่เกินขนาดนี้ ถ้าเกินจะลบภาพเก่าสุดก่อน 0 = ไม่จำกัด",
     "Match threshold:": "เกณฑ์ความเหมือน:",
     "Min interval:": "ระยะห่างขั้นต่ำ:",
     "Wait for part to leave before next capture": "รอชิ้นงานออกก่อนเก็บภาพถัดไป",
@@ -315,6 +326,8 @@ TH = {
     "AI detections less sure than this are ignored. Raise it if wrong things are found; lower it if real ones are missed.":
         "ผล AI ที่มั่นใจน้อยกว่านี้จะไม่นับ เพิ่มถ้าเจอของผิด ลดถ้าพลาดของจริง",
     "Keep only this many detections (the most confident). 0 = all.": "เก็บเฉพาะผลที่มั่นใจที่สุดตามจำนวนนี้ 0 = ทั้งหมด",
+    "Keep only this many detections (the most confident). 0 = all. Not used when judging by Required Marks.":
+        "เก็บเฉพาะผลที่มั่นใจที่สุดตามจำนวนนี้ 0 = ทั้งหมด ไม่ใช้เมื่อตัดสินโดยเครื่องหมายบังคับ",
     "OK needs these classes found: OR = either one, AND = both. -- None -- = not used.":
         "OK เมื่อพบคลาสเหล่านี้: OR = อย่างใดอย่างหนึ่ง AND = ทั้งสอง -- ไม่มี -- = ไม่ใช้",
     "First class that must be found for OK.": "คลาสแรกที่ต้องพบจึงจะ OK",
@@ -344,6 +357,7 @@ TH = {
     "letter + digit, or 2 digits": "ตัวอักษร + ตัวเลข หรือตัวเลข 2 ตัว",
     "read by OCR": "อ่านด้วย OCR",
     "Short name: unreadable": "ชื่อย่อ: อ่านไม่ได้",
+    "Short name: not read (STANDBY)": "ชื่อย่อ: ยังอ่านไม่ได้ (รอ)",
     "Short name": "ชื่อย่อ",
 
     # --- Tools tab -----------------------------------------------------------
@@ -606,6 +620,7 @@ FORMATS = {
     "Reset cycle counters?\n\nOK: {}    NG: {}": "รีเซ็ตตัวนับ?\n\nOK: {}    NG: {}",
     "Applied config for '{}'.": "ใช้การตั้งค่าของ '{}' แล้ว",
     "Auto-loaded last config: '{}'.": "โหลดการตั้งค่าล่าสุดอัตโนมัติ: '{}'",
+    "Started job '{}' automatically.": "เริ่มตรวจงาน '{}' อัตโนมัติ",
     "Config for '{}' no longer exists.": "ไม่มีการตั้งค่าของ '{}' แล้ว",
     "Found saved config for '{}'. Apply?": "พบการตั้งค่าของ '{}' ใช้หรือไม่?",
     "No config found for '{}'. Save current settings as a new config for this part?": "ไม่พบการตั้งค่าของ '{}' บันทึกการตั้งค่าปัจจุบันเป็นงานใหม่หรือไม่?",
@@ -660,6 +675,9 @@ FORMATS = {
     "Added class \"{}\" (id {}) — saved to classes.txt; retrain to use it.": "เพิ่มคลาส \"{}\" (id {}) — บันทึกใน classes.txt แล้ว เทรนใหม่เพื่อใช้งาน",
     "Renamed \"{}\" → \"{}\" — labels unchanged.": "เปลี่ยนชื่อ \"{}\" → \"{}\" — label ไม่เปลี่ยน",
     "NG  ·  {}  ·  {}": "NG  ·  {}  ·  {}",
+    "Now {} GB; the oldest NG images are deleted beyond the limit": "ตอนนี้ {} GB ภาพ NG เก่าสุดจะถูกลบเมื่อเกินขีดจำกัด",
+    "NG log over its limit: deleted the {} oldest NG images.": "บันทึก NG เกินขีดจำกัด: ลบภาพ NG เก่าสุด {} ภาพ",
+    "NG log over its limit: deleted the {} oldest NG images ({} GB).": "บันทึก NG เกินขีดจำกัด: ลบภาพ NG เก่าสุด {} ภาพ ({} GB)",
     "Short name: read {} ≠ {}": "ชื่อย่อ: อ่านได้ {} ≠ {}",
     "Read {}  ≠  expected {}": "อ่านได้ {}  ≠  ต้องเป็น {}",
     "Unreadable  ·  expected {}": "อ่านไม่ได้  ·  ต้องเป็น {}",

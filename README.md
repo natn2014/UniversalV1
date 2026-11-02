@@ -82,72 +82,56 @@ The tool design and the per-tool details are in [core_function.md](core_function
 
 ## Installation
 
-```bash
-git clone https://github.com/natn2014/UniversalV1.git
-cd UniversalV1
-
-# System libraries: barcode / QR decoding, and the OCR engine for the OCR tool
-sudo apt install libzbar0 tesseract-ocr
-
-# Python environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# 1) Install CUDA-enabled torch FIRST (matches the Jetson's CUDA)
-pip install torch torchvision --index-url https://pypi.org/simple
-# 2) Then the rest
-pip install -r requirements.txt
-```
-
-> Install `opencv-python-headless`, not `opencv-python`. The non-headless build brings its own Qt plugins, and they clash with PySide6.
-
-### Tower light permissions (udev)
+On a Jetson Orin Nano (Ubuntu 24.04 / JetPack, CUDA 13), the installer does everything in a checked order and sets up the start at boot:
 
 ```bash
-sudo cp deploy/99-patlite-lr6.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules && sudo udevadm trigger
-sudo usermod -aG plugdev $USER    # log out/in afterwards
+git clone git@github.com:natn2014/UniversalV1.git ~/dev/UniversalV1
+cd ~/dev/UniversalV1
+git checkout imageprocessing
+# copy the model files that are not in git, e.g. weights/MarkV9_best.pt
+./deploy/install.sh
+sudo reboot
 ```
+
+Run it as the user the kiosk runs as, not with `sudo`; it asks for the sudo password itself. **See [deploy/INSTALL.md](deploy/INSTALL.md)** for the 12 steps, resuming after a failure (`--from N`), checking an install (`--check`) and the day-to-day commands.
+
+What it sets up, in this order:
+- **System packages:** zbar, Tesseract, the Qt/X11 libraries and fonts with Thai.
+- **The tower light's udev rule.**
+- **Python packages:** PyTorch with CUDA (first, checked on the GPU), OpenCV *headless*, Ultralytics, PySide6 and the OCR modules. Versions are pinned in `deploy/constraints-jetson.txt`.
+- **Power mode 25 W.**
+- **Start at boot:** automatic login and the `universalv1` service.
+
+> Install `opencv-python-headless`, not `opencv-python`. The non-headless build brings its own Qt plugins, and they clash with PySide6. The installer removes the `opencv-python` that Ultralytics pulls in.
 
 ## Running
 
+After the install and a reboot, the app starts by itself: the desktop logs in, the app opens full screen, loads the last job and starts inspecting.
+
+To run it by hand (with the service stopped):
+
 ```bash
-source .venv/bin/activate
-python3 main.py
+systemctl --user stop universalv1
+.venv/bin/python main.py
 ```
 
-The window opens full screen. Choose a model and camera in **Settings**, or pick a job in **Job Change**, then press **Start** on the Monitor tab.
+Choose a model and camera in **Settings**, or pick a job in **Job Change**. Inspection starts on its own when the app opens with a job (Settings > Camera > *Start inspecting when the app opens*), or press **Start** on the Monitor tab.
 
-## Kiosk autostart (boot → app)
+## Start at boot (kiosk)
 
-1. Install the user service:
+`./deploy/install.sh` sets this up (step 12): GDM automatic login, no screen lock, and the systemd user service `universalv1`. The service starts `deploy/run_app.sh` with the desktop session and restarts the app if it crashes.
 
-   ```bash
-   mkdir -p ~/.config/systemd/user
-   cp deploy/wire-harness-detector.service ~/.config/systemd/user/
-   systemctl --user daemon-reload
-   systemctl --user enable --now wire-harness-detector.service
-   ```
+```bash
+systemctl --user status  universalv1    # running?
+systemctl --user restart universalv1    # restart the app
+systemctl --user stop    universalv1    # stop it (e.g. before running main.py by hand)
+journalctl --user -u universalv1 -f     # service messages
+tail -f logs/app.log                    # the app's output
+./deploy/install.sh --check             # what is installed / missing
+./deploy/install.sh --remove-service    # no more auto start
+```
 
-   The service file contains absolute paths (`/home/orin_nano/dev/Wire_harness_module`). Edit them if you clone the repo somewhere else.
-
-2. Enable automatic login, so the desktop session and the app start without a keyboard. In `/etc/gdm3/custom.conf`, under `[daemon]`:
-
-   ```ini
-   AutomaticLoginEnable = true
-   AutomaticLogin = orin_nano
-   ```
-
-3. Useful commands:
-
-   ```bash
-   systemctl --user status  wire-harness-detector.service
-   systemctl --user restart wire-harness-detector.service
-   systemctl --user stop    wire-harness-detector.service   # before running main.py by hand
-   journalctl --user -u wire-harness-detector.service -f    # live log
-   ```
-
-Only one copy of the app can use the camera and tower light at a time. Stop the service before starting `main.py` manually.
+Only one copy of the app runs at a time: a second start says "already running" and exits (the camera and tower light can only be used by one).
 
 ## Project layout
 
@@ -164,7 +148,7 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 | `patlite_lr6.py` | PATLITE LR6-USB driver (from [TowerLightUSB](https://github.com/natn2014/TowerLightUSB)) |
 | `part_configs/<part>.json` | Saved jobs, one per part number |
 | `*.pt`, `weights/` | YOLO models |
-| `deploy/` | systemd service and udev rule |
+| `deploy/` | Installer (`install.sh`, guide `INSTALL.md`), pinned versions, the `universalv1` service and its launcher, tower light udev rule |
 | `docs/` | User manuals, screenshots and demo GIFs (`docs/gifs/`) |
 | `tools/record_demo_gifs.py` | Re-records the demo GIFs from the running app (live camera; uses scratch copies of all data) |
 | `tools/make_tool_thumbs.py`, `tools/make_readme_gifs.py` | Draw the Tool Catalog example pictures (`app/assets/tool_thumbs/`) and record the vision-tool GIFs offscreen |
@@ -178,9 +162,10 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 
 | Symptom | Check |
 |---|---|
-| "Tower Light: Not Connected" | Check the USB cable and the udev rule above. Make sure no other copy of the app is running. |
+| "Tower Light: Not Connected" | Check the USB cable and the udev rule (`./deploy/install.sh --check`; install it with `--from 3`). Make sure no other copy of the app is running. |
 | Camera does not open | Another process is using it: the service, a second app, or the barcode dialog. Stop it, then press **Scan Cameras** in Settings. |
-| App restarts in a loop after boot | Run `journalctl --user -u wire-harness-detector.service`. The service must not hard-code `DISPLAY`. |
+| App restarts in a loop after boot | Run `journalctl --user -u universalv1` and look at `logs/app.log`. |
+| App does not start after boot | `./deploy/install.sh --check`: automatic login and the service must both be on (`--from 12`). |
 | First Start takes about 10 s | Normal. The GPU compiles its kernels on the first inference (Orin is compute capability 8.7). |
 | Training is killed | The device ran out of RAM. Training already uses batch 8 and workers 0. Close other programs and stop the Monitor stream. |
 
@@ -253,63 +238,53 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 
 ### การติดตั้ง
 
-```bash
-git clone https://github.com/natn2014/UniversalV1.git
-cd UniversalV1
-sudo apt install libzbar0 tesseract-ocr   # ไลบรารีอ่านบาร์โค้ด และโปรแกรม OCR
-python3 -m venv .venv
-source .venv/bin/activate
-pip install torch torchvision --index-url https://pypi.org/simple   # ติดตั้ง torch (CUDA) ก่อน
-pip install -r requirements.txt
-```
-
-ติดตั้งสิทธิ์ใช้งานไฟสัญญาณ (udev):
+บน Jetson Orin Nano (Ubuntu 24.04 / JetPack, CUDA 13) ใช้สคริปต์ติดตั้ง ซึ่งติดตั้งทีละขั้นตามลำดับที่ตรวจสอบแล้ว และตั้งค่าให้เปิดโปรแกรมเองเมื่อบูตเครื่อง:
 
 ```bash
-sudo cp deploy/99-patlite-lr6.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules && sudo udevadm trigger
-sudo usermod -aG plugdev $USER            # จากนั้น Logout แล้ว Login ใหม่
+git clone git@github.com:natn2014/UniversalV1.git ~/dev/UniversalV1
+cd ~/dev/UniversalV1
+git checkout imageprocessing
+# คัดลอกไฟล์โมเดลที่ไม่อยู่ใน git เช่น weights/MarkV9_best.pt
+./deploy/install.sh
+sudo reboot
 ```
+
+ให้รันด้วยผู้ใช้ที่ใช้งานเครื่อง (ไม่ต้องใส่ `sudo` สคริปต์จะถามรหัสผ่านเอง) **ดูรายละเอียดใน [deploy/INSTALL.md](deploy/INSTALL.md)** ทั้ง 12 ขั้นตอน การติดตั้งต่อหลังแก้ปัญหา (`--from N`) และการตรวจสอบ (`--check`)
 
 ### การเปิดใช้งาน
 
+หลังติดตั้งและรีบูต โปรแกรมจะเปิดเอง (Login อัตโนมัติ เปิดเต็มจอ โหลดงานล่าสุด และเริ่มตรวจทันที)
+
+เปิดเองด้วยมือ (หยุด service ก่อน):
+
 ```bash
-source .venv/bin/activate
-python3 main.py
+systemctl --user stop universalv1
+.venv/bin/python main.py
 ```
 
 ### เปิดโปรแกรมอัตโนมัติเมื่อบูตเครื่อง (Kiosk)
 
-```bash
-mkdir -p ~/.config/systemd/user
-cp deploy/wire-harness-detector.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now wire-harness-detector.service
-```
-
-เปิด Auto Login ในไฟล์ `/etc/gdm3/custom.conf` ใต้หัวข้อ `[daemon]`:
-
-```ini
-AutomaticLoginEnable = true
-AutomaticLogin = orin_nano
-```
+`./deploy/install.sh` ตั้งค่าให้แล้ว (ขั้นที่ 12): Login อัตโนมัติ ไม่ล็อกหน้าจอ และ service `universalv1`
 
 คำสั่งที่ใช้บ่อย:
 
 ```bash
-systemctl --user status  wire-harness-detector.service   # ดูสถานะ
-systemctl --user restart wire-harness-detector.service   # รีสตาร์ทโปรแกรม
-systemctl --user stop    wire-harness-detector.service   # หยุดก่อนเปิด main.py เอง
-journalctl --user -u wire-harness-detector.service -f    # ดู Log
+systemctl --user status  universalv1    # ดูสถานะ
+systemctl --user restart universalv1    # รีสตาร์ทโปรแกรม
+systemctl --user stop    universalv1    # หยุดก่อนเปิด main.py เอง
+journalctl --user -u universalv1 -f     # ดู Log ของ service
+tail -f logs/app.log                    # ดู Log ของโปรแกรม
+./deploy/install.sh --check             # ตรวจว่าติดตั้งครบหรือไม่
 ```
 
-> ไฟล์ service ระบุ path เต็ม (`/home/orin_nano/dev/Wire_harness_module`) หากติดตั้งไว้ที่อื่นต้องแก้ path ในไฟล์ด้วย และกล้องกับไฟสัญญาณใช้งานได้ครั้งละ 1 โปรแกรมเท่านั้น
+> โปรแกรมเปิดได้ครั้งละ 1 ตัว ถ้าเปิดซ้ำจะแจ้งว่า "already running" แล้วปิดตัวเอง (กล้องและไฟสัญญาณใช้ได้ครั้งละโปรแกรมเดียว)
 
 ### การแก้ปัญหาเบื้องต้น
 
 | อาการ | วิธีตรวจสอบ |
 |---|---|
-| "Tower Light: Not Connected" | ตรวจสาย USB และกฎ udev ด้านบน และตรวจว่าไม่มีโปรแกรมอื่นเปิดค้างอยู่ |
+| "Tower Light: Not Connected" | ตรวจสาย USB และกฎ udev (`./deploy/install.sh --check` ติดตั้งด้วย `--from 3`) และตรวจว่าไม่มีโปรแกรมอื่นเปิดค้างอยู่ |
+| ไม่เปิดเองหลังบูต | `./deploy/install.sh --check` ต้องเปิด Login อัตโนมัติและ service (`--from 12`) |
 | กล้องไม่เปิด | มีโปรแกรมอื่นใช้กล้องอยู่ (service, โปรแกรมที่เปิดซ้อน หรือหน้าต่างสแกนบาร์โค้ด) ให้ปิดก่อน แล้วกด **Scan Cameras** ในหน้า Settings |
 | กด Start ครั้งแรกช้าประมาณ 10 วินาที | เป็นเรื่องปกติ GPU ต้องคอมไพล์ในการประมวลผลครั้งแรก |
 | โปรแกรมถูกปิดระหว่างเทรน | หน่วยความจำ (RAM) ไม่พอ ให้หยุด Monitor และปิดโปรแกรมอื่นก่อนเทรน |

@@ -50,9 +50,11 @@ class DetectionFilters:
             if det.get("class_name", "unknown") in self.selected_classes
             and det.get("conf", 0.0) >= self.class_threshold(det.get("class_name", "unknown"))
         ]
-        # Highest-confidence first; cap to the configured maximum (0 = unlimited)
+        # Highest-confidence first; cap to the configured maximum (0 = unlimited).
+        # Not in Required Marks mode: every required mark must be able to count
+        # (a cap of 3 once hid the short name, so its OCR was never checked).
         filtered.sort(key=lambda d: d.get("conf", 0.0), reverse=True)
-        if self.max_detections > 0:
+        if self.max_detections > 0 and not self.by_marks:
             filtered = filtered[: self.max_detections]
         return filtered
 
@@ -82,12 +84,11 @@ class DetectionFilters:
         return ocr
 
     def short_name_issue(self, filtered_detections: list) -> str:
-        """"Short name: read TA ≠ T1" / "Short name: unreadable" while it is NG, else ""."""
+        """"Short name: read TA ≠ T1" while a clear wrong read makes it NG, else ""
+        (not read yet / unreadable is STANDBY, not NG)."""
         ocr = self.short_name_ocr(filtered_detections)
-        if ocr is None or ocr["state"] in ("ok", "pending"):
+        if ocr is None or ocr["state"] != "ng":
             return ""
-        if ocr["state"] == "unreadable":
-            return "Short name: unreadable"
         return f"Short name: read {ocr['text']} ≠ {ocr['expected']}"
 
     def mark_results(self, detections: list) -> List[dict]:
@@ -108,9 +109,13 @@ class DetectionFilters:
             conf, minimum = best.get(name), self.class_threshold(name)
             ok = (conf is not None and conf >= minimum) if filtered else None
             row = {"class_name": name, "conf": conf, "min_conf": minimum, "ok": ok}
+            if name == "short_name" and self.checks_short_name and ok and ocr is None:
+                ocr = {"text": "", "conf": 0.0, "expected": self.short_name_expected, "state": "pending"}
+                # Found but its read is not with it: never OK without the OCR.
             if name == "short_name" and ocr is not None and ok:
                 row["read"], row["expected"], row["ocr_state"] = ocr["text"], ocr["expected"], ocr["state"]
-                row["ok"] = None if ocr["state"] == "pending" else ocr["state"] == "ok"
+                # Not read (yet) = STANDBY; only a clear wrong read is NG.
+                row["ok"] = None if ocr["state"] in ("pending", "unreadable") else ocr["state"] == "ok"
             rows.append(row)
         return rows
 
@@ -129,7 +134,7 @@ class DetectionFilters:
                 return "RED"
             ocr = self.short_name_ocr(filtered_detections)
             if ocr is not None and ocr["state"] != "ok":
-                return "YELLOW" if ocr["state"] == "pending" else "RED"  # still reading / wrong or unreadable
+                return "RED" if ocr["state"] == "ng" else "YELLOW"  # a clear wrong read / not read (yet)
             return "GREEN"
         targets = [c for c in (self.target_class_1, self.target_class_2) if c]
         if targets:
@@ -235,3 +240,80 @@ class InspectionCycle:
         if confirm_ng and counted == "RED":
             self.awaiting_confirm = True
         return state, counted
+
+
+class MarkHold:
+    """Required Marks rows held steady (time passed in, so it is testable).
+
+    A mark found OK stays OK for `hold_s` after it was last OK (the row shown
+    is that last good one), so a mark lost for a frame or two (glare, a hand
+    passing) doesn't flip the table and the verdict. It is NG only when it has
+    not been OK for longer than that. For `hold_s` after a part arrives, a
+    mark not found yet is pending ("…", STANDBY) rather than NG, so marks can
+    come in one by one. No part for longer than `hold_s` starts over, so the
+    next part never inherits the last one's OKs. hold_s <= 0: rows as they are.
+    """
+
+    def __init__(self) -> None:
+        self._good: Dict[str, Tuple[dict, float]] = {}  # mark -> (last OK row, when)
+        self._arrived: Optional[float] = None
+        self._last_part: Optional[float] = None
+
+    def reset(self, now: Optional[float] = None) -> None:
+        """Forget the held OKs; with `now`, a part counts as arriving now (a trigger)."""
+        self._good.clear()
+        self._arrived = self._last_part = now
+
+    def update(self, rows: List[dict], part_present: bool, now: float, hold_s: float) -> List[dict]:
+        if hold_s <= 0:
+            return rows
+        if part_present:
+            if self._last_part is None or now - self._last_part > hold_s:
+                self.reset(now)  # a new part
+            self._last_part = now
+        elif self._last_part is None or now - self._last_part > hold_s:
+            self.reset()
+            return rows  # no part
+        arriving = self._arrived is not None and now - self._arrived < hold_s
+        held = []
+        for row in rows:
+            name = row["class_name"]
+            good = self._good.get(name)
+            if row["ok"]:
+                self._good[name] = (row, now)
+                held.append(row)
+            elif good is not None and now - good[1] <= hold_s:
+                held.append({**good[0], "held": True})
+            elif row["ok"] is False and (arriving or not part_present):
+                held.append({**row, "ok": None})  # not NG yet: still arriving / briefly lost
+            else:
+                held.append(row)
+        return held
+
+
+def held_state(rows: List[dict]) -> str:
+    """The verdict from Required Marks rows: any NG = RED, any pending (or no
+    part: every row pending) = YELLOW, else GREEN."""
+    if any(r["ok"] is False for r in rows):
+        return "RED"
+    if not rows or any(r["ok"] is None for r in rows):
+        return "YELLOW"
+    return "GREEN"
+
+
+def held_missing(rows: List[dict]) -> List[str]:
+    """NG marks that are missing / too weak (a wrong short name is reported apart)."""
+    return [r["class_name"] for r in rows if r["ok"] is False and r.get("ocr_state") not in ("ng", "unreadable")]
+
+
+def held_short_name(rows: List[dict]) -> Optional[dict]:
+    """The short name's OCR result as the table shows it ({text, expected,
+    state}), or None when its read is not part of the rows."""
+    for r in rows:
+        if r["class_name"] == "short_name" and "read" in r:
+            if r["ok"] is None:  # not read yet, or unreadable: STANDBY
+                state = "unreadable" if r.get("ocr_state") == "unreadable" else "pending"
+            else:
+                state = "ok" if r["ok"] else r["ocr_state"]
+            return {"text": r["read"], "conf": 0.0, "expected": r["expected"], "state": state}
+    return None

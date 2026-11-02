@@ -32,7 +32,7 @@ from ..context import AppContext
 from ..i18n import tr, translator, trf
 from ..jobs import inspection_types
 from ..marking.short_name import pad_box
-from ..judgement import InspectionCycle
+from ..judgement import InspectionCycle, MarkHold, held_missing, held_short_name, held_state
 from ..ng_log import save_ng_image
 from ..paths import CAPTURES_IMAGES_DIR, CAPTURES_LABELS_DIR, NO_PART_NAME
 from ..roi import detections_in_crop, roi_to_pixels
@@ -81,6 +81,7 @@ class MonitorTab(QWidget):
         self._kinds_shown: Optional[list] = None
         # Held judgement, trigger mode and the Confirm NG latch (relay inputs).
         self._latch = InspectionCycle()
+        self._mark_hold = MarkHold()
         self._pending_ng_save: bool = False
         self._stop_requested: bool = False
         self._camera_lost: bool = False
@@ -525,6 +526,7 @@ class MonitorTab(QWidget):
 
     def _reset_judgement(self) -> None:
         self._latch.reset()
+        self._mark_hold.reset()
         self._short_name_zoom = None
         self._set_short_name_tile(None)
         self._update_judgement_banner("YELLOW")
@@ -570,7 +572,9 @@ class MonitorTab(QWidget):
         if role == "confirm_ng":
             self.confirm_ng()
         elif role == "trigger":
-            if not self._latch.trigger():
+            if self._latch.trigger():
+                self._mark_hold.reset(time.monotonic())  # judge this part from scratch
+            else:
                 self._ctx.status.emit("Trigger ignored: confirm the NG first.")
             self._refresh_cycle_prompt()
 
@@ -1004,24 +1008,33 @@ class MonitorTab(QWidget):
         self._ctx.last_detections = detections
         self._live = True
         filters = self._ctx.filters
-        missing = filters.missing(detections)
-        issue = filters.short_name_issue(detections)
+        # Required Marks held steady: a mark OK in the last mark_hold_ms stays OK.
+        marks = self._mark_hold.update(marks, bool(detections), time.monotonic(),
+                                       self._ctx.settings["mark_hold_ms"] / 1000.0)
+        missing = held_missing(marks)
+        ocr = held_short_name(marks)
+        # NG (zoom) only for a clear wrong read; not read is STANDBY with an amber note.
+        issue = f"Short name: read {ocr['text']} ≠ {ocr['expected']}" if ocr and ocr["state"] == "ng" else ""
+        unread = bool(ocr) and ocr["state"] == "unreadable"
         warning = [tr(f"Missing: {', '.join(missing)}")] if missing else []
         if issue:
             warning.append(tr(issue))
         self._set_warning(self.missing_label, "   ·   ".join(warning))
         layout = self._ctx.filters.layout_warnings(detections)
-        self._set_warning(self.layout_label, tr(f"Layout: {'; '.join(layout)}") if layout else "")
+        notes = [tr(f"Layout: {'; '.join(layout)}")] if layout else []
+        if unread:
+            notes.append(tr("Short name: not read (STANDBY)"))
+        self._set_warning(self.layout_label, "   ·   ".join(notes))
 
         if not self._preview:
             # One cycle = each time the held judgement becomes OK or NG, or
             # one per trigger in trigger mode.
             relay = self._ctx.relay
-            ocr = filters.short_name_ocr(detections)
+            yolo_state = held_state(marks) if filters.by_marks and filters.required_classes else None
             state, counted = self._latch.update(
-                self._raw_state(detections, tool_results), self._ctx.settings["state_hold_ms"],
+                self._raw_state(detections, tool_results, yolo_state), self._ctx.settings["state_hold_ms"],
                 trigger_mode=relay.has_input("trigger"), confirm_ng=relay.has_input("confirm_ng"),
-                pending=ocr is not None and ocr["state"] == "pending")
+                pending=bool(detections) and any(m["ok"] is None for m in marks))
             if counted:
                 self._count_cycle(counted)
             self._keep_short_name_zoom(image, detections, ocr, issue, state)
@@ -1046,10 +1059,12 @@ class MonitorTab(QWidget):
             for then in pending:
                 then()
 
-    def _raw_state(self, detections: list, tool_results: list) -> str:
-        """YOLO's state as before when the job has no tools; otherwise the
-        AND / OR of the tools and YOLO (a lost part gives STANDBY)."""
-        yolo_state = self._ctx.filters.judge(detections)
+    def _raw_state(self, detections: list, tool_results: list, yolo_state: Optional[str] = None) -> str:
+        """YOLO's state (`yolo_state` when given: the held Required Marks;
+        else judged on this frame) as before when the job has no tools;
+        otherwise the AND / OR of the tools and YOLO (a lost part gives STANDBY)."""
+        if yolo_state is None:
+            yolo_state = self._ctx.filters.judge(detections)
         if not tool_results:
             return yolo_state
         if self._ctx.model_path is None:
@@ -1078,8 +1093,9 @@ class MonitorTab(QWidget):
         """While the short name is wrong / unreadable, remember a crop of it to
         show zoomed; it stays as long as the result is NG (e.g. waiting for
         Confirm NG after the part was taken away)."""
-        if issue:
-            det = max((d for d in detections if d.get("class_name") == "short_name"), key=lambda d: d.get("conf", 0.0))
+        boxes = [d for d in detections if d.get("class_name") == "short_name"]
+        if issue and boxes:
+            det = max(boxes, key=lambda d: d.get("conf", 0.0))
             box = tuple(int(det[k]) for k in ("x1", "y1", "x2", "y2"))
             others = [tuple(d[k] for k in ("x1", "y1", "x2", "y2")) for d in detections if d is not det]
             x1, y1, x2, y2 = pad_box(box, image.width(), image.height(), others)
@@ -1088,7 +1104,7 @@ class MonitorTab(QWidget):
             else:
                 caption = trf("Read {}  ≠  expected {}", ocr["text"], ocr["expected"])
             self._short_name_zoom = {"crop": image.copy(QRect(x1, y1, x2 - x1, y2 - y1)), "box": box, "text": caption}
-        elif state != "RED":
+        elif not issue and state != "RED":
             self._short_name_zoom = None
 
     def _draw_short_name_zoom(self, painter: QPainter, image: QImage) -> None:
@@ -1150,11 +1166,14 @@ class MonitorTab(QWidget):
         self._draw_short_name_zoom(painter, image)
 
     def _save_ng_image(self, pixmap: QPixmap) -> None:
+        max_bytes = int(self._ctx.settings["ng_log_max_gb"] * 1024 ** 3)
         try:
-            save_ng_image(pixmap, self._ctx.current_part_no or NO_PART_NAME)
+            deleted = save_ng_image(pixmap, self._ctx.current_part_no or NO_PART_NAME, max_bytes)
         except OSError as exc:
             self._ctx.status.emit(f"NG image save failed: {exc}")
             return
+        if deleted:
+            self._ctx.status.emit(f"NG log over its limit: deleted the {deleted} oldest NG images.")
         self.ng_saved.emit()
 
     def _update_class_table(self, detections: list) -> None:

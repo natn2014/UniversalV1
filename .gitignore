@@ -13,3 +13,6 @@ runs/
 .ui_assets/
 samples/
 datasets/
+
+# Runtime logs (deploy/run_app.sh, deploy/install.sh)
+logs/

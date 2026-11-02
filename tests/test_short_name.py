@@ -92,6 +92,20 @@ class Reading(unittest.TestCase):
                 read = read_short_name(printed(text, red_line, blur), text, ENGINE)
                 self.assertEqual((read.text, read.state), (text, "ok"), (text, red_line, blur))
 
+    def test_tilted_print_is_straightened(self):
+        # Tightly set T1 turned the other way is still weak (the T and the 1 merge).
+        for text, angles in (("T1", (10, 20)), ("58", (-15, 10, 20))):
+            for deg in angles:
+                crop = printed(text, red_line=True)
+                h, w = crop.shape[:2]
+                m = cv2.getRotationMatrix2D((w / 2, h / 2), deg, 1.0)
+                tilted = cv2.warpAffine(cv2.copyMakeBorder(crop, 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=(255, 255, 255)),
+                                        cv2.getRotationMatrix2D((w / 2 + 20, h / 2 + 20), deg, 1.0), (w + 40, h + 40),
+                                        borderValue=(255, 255, 255))
+                read = read_short_name(tilted, text, ENGINE)
+                self.assertEqual((read.text, read.state), (text, "ok"), (text, deg))
+                self.assertEqual(read_short_name(tilted, "U8", ENGINE).state != "ok", True)
+
     def test_wrong_name_is_ng(self):
         self.assertEqual(read_short_name(printed("T1"), "T2", ENGINE).state, "ng")
         self.assertEqual(read_short_name(printed("20"), "Q0", ENGINE).state, "ng")  # a digit never passes as a letter
@@ -145,8 +159,51 @@ class Reader(unittest.TestCase):
             self.assertFalse(reader.due(10.1, 2.0))
             self.assertTrue(self.wait_for(reader, "T1", 10.1, "ok"))
             self.assertEqual(reader.result("T2", 10.2)["state"], "ng")  # preset changed: compared again
-            reader.seen(11.0)  # gone 0.5 s+ before this: a new part starts over
-            self.assertEqual(reader.result("T1", 11.0)["state"], "pending")
+            reader.seen(10.9)  # still the same part: the good read stays
+            self.assertEqual(reader.result("T1", 10.9)["state"], "ok")
+            reader.seen(12.0)  # nothing seen for over a second before this: a new part starts over
+            self.assertEqual(reader.result("T1", 12.0)["state"], "pending")
+
+    def test_blinking_box_keeps_the_read(self):
+        """Worker: frames where only the short name's box is missing (other marks
+        in view) don't start a new part, so the next box gets the good read at once."""
+        from app.camera import VideoWorker
+        from app.marking.short_name import ShortNameRead
+        worker = VideoWorker()
+        worker.set_short_name_expected("48")
+        frame = np.full((300, 400, 3), 255, np.uint8)
+        clock = [0.0]
+        with mock.patch("app.camera.time.monotonic", side_effect=lambda: clock[0]), \
+             mock.patch("app.marking.short_name.read_short_name", return_value=ShortNameRead("48", 90.0, "ok")), \
+             mock.patch.object(worker._short_name, "_engine_factory", lambda: FakeEngine()):
+            box = lambda: det("short_name", box=(30, 200, 80, 240))  # noqa: E731
+            other = lambda: det("e_mark", box=(200, 40, 380, 100))  # noqa: E731
+            worker._read_short_name(frame, [other(), box()])
+            self.assertTrue(self.wait_for(worker._short_name, "48", 0.0, "ok"))
+            for t in (0.4, 0.8, 1.2, 1.6):  # the box blinks out for 1.6 s; the marking stays
+                clock[0] = t
+                worker._read_short_name(frame, [other()])
+            clock[0] = 1.7
+            dets = [other(), box()]
+            worker._read_short_name(frame, dets)
+            self.assertEqual(dets[1]["ocr"]["state"], "ok")  # straight away, not pending
+
+    def test_stale_good_read_does_not_stand_in(self):
+        """The marking stays in view while another print is shown: an old good
+        read stands in for unclear new reads only for a second."""
+        from app.marking.short_name import ShortNameRead
+        reads = iter([ShortNameRead("48", 90.0, "ok"), ShortNameRead("", 0.0, "unreadable")])
+        reader = ShortNameReader(lambda: FakeEngine())
+        with mock.patch("app.marking.short_name.read_short_name", side_effect=lambda *a: next(reads)):
+            reader.seen(0.0)
+            reader.submit(np.zeros((5, 5, 3), np.uint8), "48", 0.0)
+            self.assertTrue(self.wait_for(reader, "48", 0.0, "ok"))
+            reader.seen(0.9)
+            reader.submit(np.zeros((5, 5, 3), np.uint8), "48", 0.9)  # unclear read of the new print
+            time.sleep(0.2)
+            self.assertEqual(reader.result("48", 0.9)["state"], "ok")  # the good read is fresh
+            reader.seen(1.6)
+            self.assertNotEqual(reader.result("48", 1.6)["state"], "ok")  # stale: not passed
 
     def test_unreadable_after_timeout(self):
         reader = ShortNameReader(lambda: None)  # no OCR engine: never a clear read
@@ -176,13 +233,33 @@ class Judging(unittest.TestCase):
         part = lambda o: [det("e_mark"), det("short_name", ocr=o)]  # noqa: E731
         self.assertEqual(f.judge(part(ocr("ok"))), "GREEN")
         self.assertEqual(f.judge(part(ocr("ng", "TA"))), "RED")
-        self.assertEqual(f.judge(part(ocr("unreadable", ""))), "RED")
+        self.assertEqual(f.judge(part(ocr("unreadable", ""))), "YELLOW")  # not read: STANDBY, never OK
         self.assertEqual(f.judge(part(ocr("pending", ""))), "YELLOW")
         self.assertEqual(f.judge(part(None)), "YELLOW")  # box without a read yet
         self.assertEqual(f.judge([det("e_mark")]), "RED")  # short name missing
         self.assertEqual(f.short_name_issue(part(ocr("ng", "TA"))), "Short name: read TA ≠ T1")
-        self.assertEqual(f.short_name_issue(part(ocr("unreadable", ""))), "Short name: unreadable")
+        self.assertEqual(f.short_name_issue(part(ocr("unreadable", ""))), "")  # not an NG
         self.assertEqual(f.short_name_issue(part(ocr("ok"))), "")
+
+    def test_never_ok_without_its_read(self):
+        """The job that showed OK with X6 under the camera: Max Detections 3
+        (left from an older job) dropped the short name's box, so its row took
+        the raw confidence and passed without OCR."""
+        f = self.filters("48")
+        f.selected_classes |= {"tis_mark", "m_code", "sni_mark"}
+        f.max_detections = 3  # not used when judging by Required Marks
+        part = [det("tis_mark", 0.92), det("m_code", 0.92), det("sni_mark", 0.93), det("e_mark", 0.88),
+                det("short_name", 0.80, ocr=ocr("ng", "X6", "48"))]
+        self.assertEqual(len(f.apply(part)), 5)
+        self.assertEqual(f.judge(f.apply(part)), "RED")
+        rows = {r["class_name"]: r for r in f.mark_results(part)}
+        self.assertEqual((rows["short_name"]["ok"], rows["short_name"]["read"]), (False, "X6"))
+        no_read = [det("e_mark"), det("short_name", 0.8)]  # found, but no OCR result with it
+        rows = {r["class_name"]: r for r in f.mark_results(no_read)}
+        self.assertIsNone(rows["short_name"]["ok"])  # STANDBY, never OK
+        self.assertEqual(f.judge(f.apply(no_read)), "YELLOW")
+        f.judge_mode = "detection"
+        self.assertEqual(len(f.apply(part)), 3)  # the cap still works for AI Detection jobs
 
     def test_stale_preset_read_is_pending(self):
         f = self.filters("T2")
@@ -222,6 +299,8 @@ class Tabs(unittest.TestCase):
         for p in self.patches:
             p.start()
         self.ctx = AppContext()
+        self.ctx.settings.set(mark_hold_ms=0)  # judged per frame (the hold is tested in test_required_marks)
+        self.ctx.settings.commit()
         self.settings = SettingsTab(self.ctx)
         self.ctx.model_classes = ["e_mark", "short_name"]
         self.ctx.model_classes_changed.emit(self.ctx.model_classes)
@@ -256,6 +335,65 @@ class Tabs(unittest.TestCase):
         self.assertEqual((self.ctx.filters.short_name_expected, self.ctx.worker._short_name_expected), ("U8", "U8"))
         self.settings.apply_config({"judge_mode": "required", "required_classes": ["short_name"]})
         self.assertEqual(self.settings.short_name_edit.text(), "")  # older job: presence only
+
+    def test_monitor_holds_a_good_read_for_a_second(self):
+        self.ctx.settings.set(mark_hold_ms=1000, state_hold_ms=0)
+        self.settings.set_required_marks(["e_mark", "short_name"])
+        self.settings.set_short_name("T1")
+        self.ctx.filters.selected_classes = {"e_mark", "short_name"}
+        tab = MonitorTab(self.ctx)
+        image = QImage(400, 300, QImage.Format_RGB888)
+        image.fill(QColor("#ffffff"))
+        tab._reset_judgement()
+        part = lambda o: [det("e_mark", box=(200, 40, 380, 100)), det("short_name", ocr=o, box=(30, 200, 80, 240))]  # noqa: E731
+        clock = [50.0]
+        with mock.patch.object(monitor_mod.time, "monotonic", side_effect=lambda: clock[0]):
+            tab.on_frame(image, part(ocr("ok")), [])
+            self.assertEqual(tab.judgement_banner.text(), "OK")
+            for t, read in ((50.3, ocr("ng", "TA")), (50.6, ocr("pending", "")), (50.9, ocr("ng", "T4"))):
+                clock[0] = t  # misreads / a new read pending within the second: still OK
+                tab.on_frame(image, part(read), [])
+                self.assertEqual(tab.judgement_banner.text(), "OK", t)
+                self.assertIsNone(tab._short_name_zoom)
+                self.assertIn(QColor(OK_GREEN).name(), tab.short_name_tile.styleSheet())
+                self.assertEqual(tab.missing_label.text(), "")
+            clock[0] = 51.2  # wrong for more than a second since the last good read
+            tab.on_frame(image, part(ocr("ng", "TA")), [])
+            self.assertEqual(tab.judgement_banner.text(), "NG")
+            self.assertIn("Short name: read TA ≠ T1", tab.missing_label.text())
+            self.assertIsNotNone(tab._short_name_zoom)
+            self.assertIn(QColor(NG_RED).name(), tab.short_name_tile.styleSheet())
+            clock[0] = 51.3
+            tab.on_frame(image, part(ocr("ok")), [])  # read right again
+            self.assertEqual(tab.judgement_banner.text(), "OK")
+        tab.deleteLater()
+
+    def test_tower_green_only_after_a_correct_read(self):
+        """The tower light (and relay) follow the verdict: never OK before the
+        short name has read right; NG once it has read wrong for over a second."""
+        self.ctx.settings.set(mark_hold_ms=1000, state_hold_ms=0)
+        self.settings.set_required_marks(["e_mark", "short_name"])
+        self.settings.set_short_name("48")
+        self.ctx.filters.selected_classes = {"e_mark", "short_name"}
+        tab = MonitorTab(self.ctx)
+        tower, relay = [], []
+        self.ctx.tower.update_state = tower.append
+        self.ctx.relay.update_state = relay.append
+        image = QImage(400, 300, QImage.Format_RGB888)
+        image.fill(QColor("#ffffff"))
+        tab._reset_judgement()
+        part = lambda o: [det("e_mark", box=(200, 40, 380, 100)), det("short_name", ocr=o, box=(30, 200, 80, 240))]  # noqa: E731
+        clock = [0.0]
+        with mock.patch.object(monitor_mod.time, "monotonic", side_effect=lambda: clock[0]):
+            for t, o in ((0.0, ocr("pending", "", "48")), (0.5, ocr("ng", "43", "48")), (1.2, ocr("ng", "43", "48"))):
+                clock[0] = t
+                tab.on_frame(image, part(o), [])
+                self.assertNotEqual(tower[-1], "GREEN", t)
+            self.assertEqual(tower[-1], "RED")
+            clock[0] = 1.4
+            tab.on_frame(image, part(ocr("ok", "48", "48")), [])
+            self.assertEqual((tower[-1], relay[-1]), ("GREEN", "GREEN"))
+        tab.deleteLater()
 
     def test_monitor_ng_zoom(self):
         self.settings.set_required_marks(["e_mark", "short_name"])
