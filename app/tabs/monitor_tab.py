@@ -149,6 +149,14 @@ class MonitorTab(QWidget):
         self.layout_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.layout_label.setToolTip("Marks printed out of the usual layout. A warning: the verdict is not changed.")
 
+        # Short name check: the preset value, big; green when read right, red when not.
+        self.short_name_tile = QLabel()
+        self.short_name_tile.setObjectName("shortNameTile")
+        self.short_name_tile.setAlignment(Qt.AlignCenter)
+        self.short_name_tile.setFixedHeight(60)  # the side panel's full width
+        self.short_name_tile.hide()
+        self._set_short_name_tile(None)
+
         # Trigger mode / Confirm NG (relay inputs): what the cycle waits for.
         self.cycle_label = QLabel()
         self.cycle_label.setObjectName("cycleState")
@@ -245,6 +253,7 @@ class MonitorTab(QWidget):
         self.mark_table.setSelectionMode(QTableWidget.NoSelection)
         self.mark_table.setAlternatingRowColors(True)
         self.mark_table.setMinimumWidth(220)
+        self.mark_table.setMinimumHeight(60)
         header = self.mark_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeToContents)
         header.setSectionResizeMode(0, QHeaderView.Stretch)
@@ -295,10 +304,11 @@ class MonitorTab(QWidget):
         warnings.addWidget(self.cycle_label)
         info_grid.addLayout(warnings, 1, 1)
         # Right under the NG pill, where the operator is already looking.
-        info_grid.addWidget(self.confirm_button, 1, 2)
+        info_grid.addWidget(self.confirm_button, 1, 3)
         info_grid.setColumnStretch(1, 1)
         top_layout.addLayout(info_grid, 1)
-        info_grid.addWidget(self.judgement_banner, 0, 2, Qt.AlignRight)
+        info_grid.addWidget(self.judgement_banner, 0, 3, Qt.AlignRight)
+
 
         video_frame = QFrame()
         video_frame.setObjectName("videoFrame")
@@ -312,6 +322,8 @@ class MonitorTab(QWidget):
         side_layout = QVBoxLayout(side_panel)
         side_layout.setContentsMargins(0, 0, 0, 0)
         side_layout.setSpacing(0)
+        # The preset short name, big, above the marks (only when it is checked).
+        side_layout.addWidget(self.short_name_tile)
         self.ai_header = QLabel()
         self.ai_header.setObjectName("panelHeader")
         side_layout.addWidget(self.ai_header)
@@ -513,11 +525,14 @@ class MonitorTab(QWidget):
 
     def _reset_judgement(self) -> None:
         self._latch.reset()
+        self._short_name_zoom = None
+        self._set_short_name_tile(None)
         self._update_judgement_banner("YELLOW")
         self._refresh_cycle_prompt()
 
     def _on_language_changed(self, _language: str) -> None:
         self._judge_mode_shown = None  # re-title the side panel
+        self._set_short_name_tile("RED" if self._short_name_zoom else None)
         self._show_judge_mode()
         self._refresh_monitor_info()
         self._refresh_run_button()
@@ -1010,6 +1025,10 @@ class MonitorTab(QWidget):
             if counted:
                 self._count_cycle(counted)
             self._keep_short_name_zoom(image, detections, ocr, issue, state)
+            if self._short_name_zoom is not None:
+                self._set_short_name_tile("RED")  # wrong / unreadable: red while the NG lasts
+            else:
+                self._set_short_name_tile("GREEN" if ocr is not None and ocr["state"] == "ok" else None)
             self._show_state(state)
 
         self._show_frame(image, detections, tool_results)
@@ -1037,6 +1056,22 @@ class MonitorTab(QWidget):
             yolo_state = None  # no model: the tools alone decide
         position_found = all(r.ok for r in tool_results if r.kind == "position")
         return total_state(tool_results, yolo_state, self._ctx.tools_gate, position_found)
+
+    def _set_short_name_tile(self, state: Optional[str]) -> None:
+        """Shown while the job checks the short name: its preset value on
+        green (read right), red (wrong / unreadable) or neutral (no part yet,
+        still reading)."""
+        filters = self._ctx.filters
+        self.short_name_tile.setVisible(filters.checks_short_name)
+        if not filters.checks_short_name:
+            return
+        bg, fg = {"GREEN": (OK_GREEN, "#ffffff"), "RED": (NG_RED, "#ffffff")}.get(state, ("#3a4048", "#e8ecf0"))
+        caption = tr("Short name")
+        self.short_name_tile.setText(
+            f'<span style="font-size:13pt; font-weight:700;">{caption}&nbsp;&nbsp;</span>'
+            f'<span style="font-size:34pt; font-weight:800;">{filters.short_name_expected}</span>')
+        self.short_name_tile.setStyleSheet(
+            f"QLabel#shortNameTile {{ background: {bg}; color: {fg}; border: 2px solid #0b0d10; border-radius: 0; }}")
 
     def _keep_short_name_zoom(self, image: QImage, detections: list, ocr: Optional[dict], issue: str,
                               state: str) -> None:
@@ -1143,6 +1178,7 @@ class MonitorTab(QWidget):
     def showEvent(self, event) -> None:
         super().showEvent(event)
         self._show_judge_mode()  # the switch may have changed on the Settings tab
+        self._set_short_name_tile("RED" if self._short_name_zoom else None)  # the preset may have changed
 
     def _show_judge_mode(self) -> None:
         """Required Marks mode: the mark table instead of the class counts."""

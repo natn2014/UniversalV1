@@ -27,7 +27,7 @@ from app.marking.classes import STANDARD_CLASSES  # noqa: E402
 from app.marking.short_name import ShortNameReader, pad_box, read_short_name, valid_short_name  # noqa: E402
 from app.tabs.monitor_tab import MonitorTab  # noqa: E402
 from app.tabs.settings_tab import SettingsTab  # noqa: E402
-from app.theme import NG_RED  # noqa: E402
+from app.theme import NG_RED, OK_GREEN  # noqa: E402
 from app.vision.ocr import get_engine  # noqa: E402
 from app.yolo_labels import read_yolo_label_file  # noqa: E402
 
@@ -262,6 +262,10 @@ class Tabs(unittest.TestCase):
         self.assertIn("Short name: read TA ≠ T1", tab.missing_label.text())
         self.assertIsNotNone(tab._short_name_zoom)
         self.assertIn("TA", tab._short_name_zoom["text"])
+        tile = tab.short_name_tile
+        self.assertFalse(tile.isHidden())
+        self.assertIn("T1", tile.text())  # the preset, big
+        self.assertIn(QColor(NG_RED).name(), tile.styleSheet())
         # The saved NG image has the zoom in the corner away from the box (top right here).
         shot = tab._render_frame(image, tab._ctx.filters.apply(bad), []).toImage()
         self.assertEqual(QColor(shot.pixel(int(400 * 0.98) - 2, int(300 * 0.07) + 30)).name(), QColor(NG_RED).name())
@@ -270,6 +274,12 @@ class Tabs(unittest.TestCase):
         tab.on_frame(image, good, [])
         self.assertEqual(tab.judgement_banner.text(), "OK")
         self.assertIsNone(tab._short_name_zoom)
+        self.assertIn(QColor(OK_GREEN).name(), tab.short_name_tile.styleSheet())
+        tab._reset_judgement()
+        self.assertNotIn(QColor(OK_GREEN).name(), tab.short_name_tile.styleSheet())  # no part: neutral
+        self.settings.set_short_name("")
+        tab._set_short_name_tile(None)
+        self.assertTrue(tab.short_name_tile.isHidden())  # presence only: no tile
         tab.deleteLater()
 
 
