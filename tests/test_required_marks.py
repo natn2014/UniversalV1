@@ -13,6 +13,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtGui import QColor, QImage  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
+import app.jobs as jobs_mod  # noqa: E402
+import app.paths as paths_mod  # noqa: E402
 import app.settings as settings_mod  # noqa: E402
 import app.tabs.monitor_tab as monitor_mod  # noqa: E402
 from app.context import AppContext  # noqa: E402
@@ -163,12 +165,29 @@ class JudgeMode(unittest.TestCase):
         self.assertEqual([r["ok"] for r in f.mark_results([det("dot", 0.1)])], [None, None])  # no part
 
 
+class InspectionTypes(unittest.TestCase):
+    def test_kinds_from_a_job(self):
+        from app.jobs import inspection_types
+        model = {"model_path": "weights/standard_marks_v8.pt"}
+        self.assertEqual(inspection_types({}), [])
+        self.assertEqual(inspection_types(model), ["ai"])
+        self.assertEqual(inspection_types({**model, "judge_mode": "required", "required_classes": ["e_mark"]}), ["mark"])
+        self.assertEqual(inspection_types({**model, "judge_mode": "required"}), ["ai"])  # none ticked
+        self.assertEqual(inspection_types({**model, "required_classes": ["e_mark"]}), ["mark"])  # older job
+        self.assertEqual(inspection_types({**model, "judge_mode": "detection", "required_classes": ["e_mark"]}), ["ai"])
+        self.assertEqual(inspection_types({"tools": [{"kind": "width"}]}), ["vision"])
+        self.assertEqual(inspection_types({**model, "judge_mode": "required", "required_classes": ["e_mark"],
+                                           "tools": [{"kind": "width"}]}), ["mark", "vision"])
+
+
 class TabsTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.patches = [
             mock.patch.object(settings_mod, "APP_SETTINGS_FILE", Path(self.tmp.name) / "app_settings.json"),
             mock.patch.object(monitor_mod, "save_ng_image", mock.Mock()),
+            # No mark model: switching to Required Marks keeps the test's classes.
+            mock.patch.object(paths_mod, "MARK_MODEL_PATH", Path(self.tmp.name) / "missing.pt"),
         ]
         for p in self.patches:
             p.start()
@@ -258,6 +277,56 @@ class Switch(TabsTest):
         self.assertEqual(self.ctx.filters.judge_mode, "detection")
 
 
+class MarkModelAndJobSave(TabsTest):
+    def setUp(self):
+        super().setUp()
+        self.model = Path(self.tmp.name) / "standard_marks_v8.pt"
+        self.model.write_bytes(b"")
+        self.configs = Path(self.tmp.name) / "part_configs"
+        for p in (mock.patch.object(paths_mod, "MARK_MODEL_PATH", self.model),
+                  mock.patch.object(jobs_mod, "PART_CONFIGS_DIR", self.configs),
+                  mock.patch.object(jobs_mod, "LAST_PART_FILE", self.configs / ".last_part"),
+                  mock.patch.object(type(self.ctx), "load_model", autospec=True)):
+            self.patches.append(p)
+            p.start()
+
+    def test_switch_to_required_marks_loads_the_mark_model(self):
+        self.settings.judge_mode_buttons["required"].click()
+        self.ctx.load_model.assert_called_once_with(self.ctx, self.model)
+        self.settings.judge_mode_buttons["detection"].click()
+        self.ctx.load_model.assert_called_once()  # back to AI Detection: no load
+
+    def test_required_marks_job_opens_with_the_mark_model(self):
+        self.settings.apply_config({"model_path": "weights/standard_marks_v6.pt", "judge_mode": "required",
+                                    "required_classes": ["e_mark"]})
+        self.ctx.load_model.assert_called_once_with(self.ctx, self.model)
+        self.ctx.load_model.reset_mock()
+        self.settings.apply_config({"model_path": None, "required_classes": ["e_mark"]})  # older job
+        self.ctx.load_model.assert_called_once_with(self.ctx, self.model)
+        self.ctx.load_model.reset_mock()
+        self.settings.apply_config({"model_path": None, "judge_mode": "detection"})
+        self.ctx.load_model.assert_not_called()
+
+    def test_edits_are_saved_on_save(self):
+        self.ctx.set_current_part("MarkTest")
+        self.settings.set_judge_mode("required")
+        self.settings.set_required_marks(["e_mark", "tis_mark"])
+        self.settings._mark_conf_spins["tis_mark"].setValue(70)
+        self.assertIsNone(jobs_mod.load_part_config("MarkTest"))  # nothing written before Save
+        self.assertIn("required_classes", self.settings.unsaved_changes())
+        self.settings.save()
+        saved = jobs_mod.load_part_config("MarkTest")
+        self.assertEqual((saved["judge_mode"], saved["required_classes"], saved["mark_conf"]["tis_mark"]),
+                         ("required", ["e_mark", "tis_mark"], 0.7))
+        self.assertEqual(self.settings.unsaved_changes(), [])
+
+    def test_applying_a_job_does_not_save_it(self):
+        self.ctx.set_current_part("MarkTest")
+        self.settings.apply_config({"judge_mode": "detection", "confidence_threshold": 0.3})
+        self.assertEqual(self.settings.unsaved_changes(), [])
+        self.assertIsNone(jobs_mod.load_part_config("MarkTest"))
+
+
 class MonitorMarks(TabsTest):
     def test_mark_table_like_the_tool_table(self):
         tab = MonitorTab(self.ctx)
@@ -278,6 +347,20 @@ class MonitorMarks(TabsTest):
         self.assertEqual(tab.mark_table.item(1, 3).background().color().name(), QColor(NG_RED).name())
         self.assertEqual(tab.mark_table.item(0, 3).background().color().name(), QColor(OK_GREEN).name())
         self.assertEqual(tab._latch.state, "RED")
+        tab.deleteLater()
+
+    def test_inspection_type_in_the_info_strip(self):
+        tab = MonitorTab(self.ctx)
+        self.assertNotIn("Inspection", tab.monitor_info_label.text())  # no model loaded
+        with mock.patch.object(type(self.ctx), "model_path", new_callable=mock.PropertyMock,
+                               return_value=Path("weights/standard_marks_v8.pt")):
+            tab._refresh_monitor_info()
+            self.assertIn("AI Detection", tab.monitor_info_label.text())
+            self.settings.set_judge_mode("required")
+            self.settings.set_required_marks(["e_mark"])
+            tab._show_judge_mode()
+            self.assertIn("Mark Inspection", tab.monitor_info_label.text())
+            self.assertIn("badge_mark.svg", tab.monitor_info_label.text())
         tab.deleteLater()
 
 

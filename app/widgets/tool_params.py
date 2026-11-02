@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..i18n import tr
 from ..paths import ROOT_DIR
 from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
 from ..vision.base import Tool
@@ -322,7 +323,7 @@ class AddToolDialog(QDialog):
             category = CATEGORIES[0][0]
         AddToolDialog.last_category = category
         self.category_tiles[category].setChecked(True)
-        self.question.setText("▼  " + CATEGORY_QUESTIONS.get(category, "Pick a tool"))
+        self.question.setText("▼  " + tr(CATEGORY_QUESTIONS.get(category, "Pick a tool")))
         self._pages.setCurrentIndex(self._page_of[category])
         kinds = dict(CATEGORIES)[category]
         self.select(self.selected_kind if self.selected_kind in kinds else kinds[0])

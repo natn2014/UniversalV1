@@ -12,7 +12,7 @@ VIDEO_MIN_SIZE = (520, 300)
 
 def make_card(title: str, badge: str = None, icon: str = None):
     """Section card with a dark header strip (Keyence-style section bar).
-    `badge` ("ai" / "vision") or `icon` (a make_icon kind) goes before the title."""
+    `badge` ("ai" / "mark" / "vision") or `icon` (a make_icon kind) goes before the title."""
     card = QFrame()
     card.setObjectName("card")
     outer = QVBoxLayout(card)

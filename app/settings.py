@@ -1,5 +1,7 @@
 import json
 
+from PySide6.QtCore import QObject, Signal
+
 from .optional_deps import BUZZER_ON
 from .paths import APP_SETTINGS_FILE
 
@@ -28,6 +30,26 @@ DEFAULT_APP_SETTINGS = {
     # OCR / code tools run at most this often, in their own thread, so the
     # live view stays smooth.
     "slow_tool_hz": 2.0,
+    # Camera image adjustments (app/image_adjust.py): how the camera is
+    # mounted (mirror / flip) and colour enhancement, before anything sees it.
+    "camera_mirror": False,
+    "camera_flip": False,
+    "camera_brightness": 0,
+    "camera_contrast": 100,
+    "camera_saturation": 100,
+    "camera_gamma": 1.0,
+    "camera_clahe": False,
+    # Relay I/O board (app/relay_io.py, Waveshare Modbus POE ETH Relay 8DI/8DO).
+    # Roles per channel "1".."8": DI none / trigger / confirm_ng, DO none / ok / ng.
+    "relay_enabled": False,
+    "relay_host": "192.168.1.201",
+    "relay_port": 4196,
+    "relay_address": 1,
+    "relay_protocol": "rtu_tcp",
+    "relay_di_roles": {},
+    "relay_do_roles": {},
+    "relay_do_pulse_ms": 0,  # 0 = OK / NG outputs stay on while the result lasts
+    "language": "en",  # UI language: "en" / "th" (flags in the tab bar corner)
 }
 
 
@@ -53,16 +75,47 @@ def save_app_settings(settings: dict) -> None:
     APP_SETTINGS_FILE.write_text(json.dumps(data, indent=2))
 
 
-class AppSettings:
-    """In-memory copy of app_settings.json, shared by every tab; each change
-    is written straight back to disk."""
+# Written to disk at once: counters and operator toggles outside Settings.
+# Every other key is a Settings value: live in memory at once, on disk only
+# after commit() (the Settings tab's Save), back to the saved value on revert().
+IMMEDIATE_KEYS = {"ok_count", "ng_count", "buzzer_enabled", "language"}
+
+
+class AppSettings(QObject):
+    """In-memory copy of app_settings.json, shared by every tab."""
+
+    changed = Signal(list)  # keys whose value changed (set or revert)
 
     def __init__(self) -> None:
+        super().__init__()
         self._values = load_app_settings()
+        self._saved = dict(self._values)
 
     def __getitem__(self, key: str):
         return self._values[key]
 
     def set(self, **values) -> None:
+        keys = [k for k, v in values.items() if self._values.get(k) != v]
         self._values.update(values)
-        save_app_settings(self._values)
+        immediate = {k: v for k, v in values.items() if k in IMMEDIATE_KEYS}
+        if immediate:
+            self._saved.update(immediate)
+            save_app_settings(immediate)
+        if keys:
+            self.changed.emit(keys)
+
+    def unsaved_keys(self) -> list:
+        return sorted(k for k, v in self._values.items() if self._saved.get(k) != v)
+
+    def commit(self) -> None:
+        if self.unsaved_keys():
+            self._saved = dict(self._values)
+            save_app_settings(self._saved)
+
+    def revert(self) -> list:
+        """Back to the saved values; returns the keys that changed."""
+        keys = self.unsaved_keys()
+        self._values.update({k: self._saved[k] for k in keys})
+        if keys:
+            self.changed.emit(keys)
+        return keys

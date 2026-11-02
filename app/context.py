@@ -6,11 +6,13 @@ from PySide6.QtCore import QObject, Signal
 from . import jobs
 from .autocapture import load_masters
 from .camera import VideoWorker, parse_resolution
+from .image_adjust import ImageAdjust
 from .judgement import DetectionFilters
 from .optional_deps import YOLO
 from .paths import TOOLS_DIR
 from .perspective import normalize_quad
 from .roi import normalize_roi
+from .relay_io import RelayIOController
 from .settings import AppSettings
 from .tower import TowerController
 from .vision.store import tools_from_config, tools_to_config
@@ -42,7 +44,10 @@ class AppContext(QObject):
         self.worker = VideoWorker()
         self.worker.set_resolution(parse_resolution(self.settings["camera_resolution"]))
         self.worker.set_slow_hz(self.settings["slow_tool_hz"])
+        self.worker.set_image_adjust(ImageAdjust.from_settings(self.settings))
+        self.settings.changed.connect(self._on_settings_changed)
         self.tower = TowerController(self.settings, self)
+        self.relay = RelayIOController(self.settings, self)
         self.filters = DetectionFilters()
         self.model_classes: list = []
         self.camera_index: Optional[int] = None
@@ -59,6 +64,10 @@ class AppContext(QObject):
     @property
     def model_path(self) -> Optional[Path]:
         return self.worker._model_path
+
+    def _on_settings_changed(self, keys: list) -> None:
+        if any(k.startswith("camera_") and k != "camera_resolution" for k in keys):
+            self.worker.set_image_adjust(ImageAdjust.from_settings(self.settings))
 
     def load_model(self, model_path: Path) -> None:
         self.worker.set_model_path(model_path)

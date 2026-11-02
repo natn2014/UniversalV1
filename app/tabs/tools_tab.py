@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 
 from ..autocapture import qimage_to_array
 from ..context import AppContext
+from ..i18n import tr, translator
 from ..perspective import PerspectiveWarp
 from ..roi import normalize_roi, roi_to_pixels
 from ..theme import (
@@ -106,6 +107,7 @@ class ToolsTab(QWidget):
         ctx.worker.frame_ready.connect(self._on_worker_frame)
         ctx.tools_changed.connect(self._on_tools_changed)
         ctx.part_changed.connect(lambda _: self._refresh_info())
+        translator().language_changed.connect(lambda _: (self._refresh_info(), self._rebuild_list()))
         ctx.mm_per_px_changed.connect(lambda _: self._refresh_all())
         self._rebuild_list()
         self._refresh_all()
@@ -492,7 +494,7 @@ class ToolsTab(QWidget):
         self.table.setRowCount(len(self.tools))
         for row, tool in enumerate(self.tools):
             hint = kind_hint(tool.kind)
-            for col, text in ((0, tool.name), (1, kind_title(tool.kind))):
+            for col, text in ((0, tool.name), (1, tr(kind_title(tool.kind)))):
                 item = QTableWidgetItem(text)
                 item.setToolTip(hint)
                 self.table.setItem(row, col, item)
@@ -601,10 +603,10 @@ class ToolsTab(QWidget):
 
     def _refresh_info(self) -> None:
         mm = self._ctx.mm_per_px
-        calibration = f"{mm:.4f} mm/px" if mm else "not calibrated"
+        calibration = f"{mm:.4f} mm/px" if mm else tr("not calibrated")
         part = self._ctx.current_part_no or "—"
-        self.info_label.setText(f"Part: {part}   ·   Tools: {len(self.tools)}   ·   Scale: {calibration}")
-        self.gate_button.setText(f"Gate: {self._ctx.tools_gate}")
+        self.info_label.setText(tr("Part: {}   ·   Tools: {}   ·   Scale: {}").format(part, len(self.tools), calibration))
+        self.gate_button.setText(tr("Gate: {}").format(self._ctx.tools_gate))
         if self._mode is None:
             if self._frame is not None:
                 hint = "Frozen frame  ·  Select a tool to teach it, set its limits or edit its parameters"
@@ -613,8 +615,8 @@ class ToolsTab(QWidget):
             else:
                 hint = "Live  ·  Snapshot freezes the frame  ·  Add Tool, then drag its area"
             if any(t.SLOW for t in self.tools) and not any(t.kind == "position" for t in self.tools):
-                hint += "  ·  Add a Position tool so OCR / code results are matched to each part"
-            self.hint_label.setText(hint)
+                hint = tr(hint) + tr("  ·  Add a Position tool so OCR / code results are matched to each part")
+            self.hint_label.setText(tr(hint))
 
     def _render(self) -> None:
         if self._frame is not None:
@@ -696,7 +698,7 @@ class ToolsTab(QWidget):
             return False
         self._exit_mode()
         self._mode = mode
-        self.hint_label.setText(hint)
+        self.hint_label.setText(tr(hint))
         for name, button in (("set_roi", self.roi_button), ("pick", self.pick_color_button)):
             button.blockSignals(True)
             button.setChecked(mode == name)
@@ -774,7 +776,7 @@ class ToolsTab(QWidget):
             text = f"{spots} picked. Tap more spots to add them, or use − / + to narrow or widen."
             hint = "Tap more spots to add them  ·  − / + narrow or widen  ·  Done when it looks right"
         self.pick_count_label.setText(text)
-        self.hint_label.setText(hint)
+        self.hint_label.setText(tr(hint))
         for button in (self.narrow_button, self.wider_button):
             button.setEnabled(self._pick_taps > 0)
 

@@ -5,6 +5,7 @@ from PySide6.QtCore import QEvent, QObject, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
 from PySide6.QtWidgets import QAbstractItemView, QToolTip
 
+from .i18n import tr
 from .paths import ROOT_DIR
 
 
@@ -67,6 +68,7 @@ ARROW_UP_SVG, ARROW_DOWN_SVG = _write_arrow_svgs()
 # the reserved verdict colours and the orange "selected" gloss.
 AI_COLOR = "#8b5cf6"
 VISION_COLOR = "#0ea5c6"
+MARK_COLOR = "#d946ef"  # mark inspection (AI judging by Required Marks)
 BADGE_SVGS = {
     # Chip with pins and "AI" on it.
     "ai": (
@@ -76,6 +78,14 @@ BADGE_SVGS = {
         f'<rect x="3" y="3" width="14" height="14" rx="2.5" fill="{AI_COLOR}"/>'
         '<text x="10" y="13.6" font-family="sans-serif" font-size="8.5" font-weight="700" '
         'fill="#ffffff" text-anchor="middle">AI</text></svg>'
+    ),
+    # A standard mark (ringed E, like the E-mark): AI checking the printed marks.
+    "mark": (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">'
+        f'<rect x="1" y="1" width="18" height="18" rx="3" fill="{MARK_COLOR}"/>'
+        '<circle cx="10" cy="10" r="6.2" fill="none" stroke="#ffffff" stroke-width="1.6"/>'
+        '<text x="10" y="13.4" font-family="sans-serif" font-size="9.5" font-weight="800" '
+        'fill="#ffffff" text-anchor="middle">E</text></svg>'
     ),
     # Magnifier over an ROI frame: measuring the image itself.
     "vision": (
@@ -102,8 +112,59 @@ BADGE_PATHS = _write_badges()
 
 
 def badge_icon(kind: str) -> QIcon:
-    """"ai" or "vision" badge as an icon, e.g. for a tab."""
+    """"ai", "mark" or "vision" badge as an icon, e.g. for a tab."""
     return QIcon(BADGE_PATHS[kind])
+
+
+# Kinds of inspection a job runs, each with its badge (see jobs.inspection_types).
+INSPECTION_TITLES = {"mark": "Mark Inspection", "ai": "AI Detection", "vision": "Image Processing"}
+
+
+def badges_icon(kinds, size: int = 24, gap: int = 4) -> QIcon:
+    """Several badges side by side in one icon (e.g. a job tile running two kinds)."""
+    kinds = list(kinds)
+    pixmap = QPixmap(max(1, len(kinds) * (size + gap) - gap), size)
+    pixmap.fill(Qt.transparent)
+    painter = QPainter(pixmap)
+    for i, kind in enumerate(kinds):
+        painter.drawPixmap(i * (size + gap), 0, QIcon(BADGE_PATHS[kind]).pixmap(size, size))
+    painter.end()
+    return QIcon(pixmap)
+
+
+def make_flag_icon(language: str, width: int = 36, height: int = 24) -> QIcon:
+    """National flag for the language switch, drawn in code (no image or emoji
+    font needed): "th" Thailand, "en" United Kingdom."""
+    pixmap = QPixmap(width, height)
+    pixmap.fill(Qt.white)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.Antialiasing)
+    w, h = width, height
+    if language == "th":
+        # Red, white, blue (double), white, red.
+        for top, rows, color in ((0, 1, "#a51931"), (1, 1, "#f4f5f8"), (2, 2, "#2d2a4a"),
+                                 (4, 1, "#f4f5f8"), (5, 1, "#a51931")):
+            painter.fillRect(QRectF(0, h * top / 6, w, h * rows / 6 + 0.5), QColor(color))
+    else:
+        painter.fillRect(QRectF(0, 0, w, h), QColor("#012169"))
+        for color, thick in (("#ffffff", h / 5), ("#c8102e", h / 15)):
+            painter.setPen(QPen(QColor(color), thick))
+            painter.drawLine(QPointF(0, 0), QPointF(w, h))
+            painter.drawLine(QPointF(0, h), QPointF(w, 0))
+        for color, thick in (("#ffffff", h / 3), ("#c8102e", h / 5)):
+            painter.setPen(QPen(QColor(color), thick))
+            painter.drawLine(QPointF(w / 2, 0), QPointF(w / 2, h))
+            painter.drawLine(QPointF(0, h / 2), QPointF(w, h / 2))
+    painter.setPen(QPen(QColor("#0b0d10"), 1))
+    painter.setBrush(Qt.NoBrush)
+    painter.drawRect(QRectF(0.5, 0.5, w - 1, h - 1))
+    painter.end()
+    return QIcon(pixmap)
+
+
+def inspection_title(kinds, size: int = 18) -> str:
+    """Rich text: badge + name of each kind of inspection, for an info strip."""
+    return "&nbsp;&nbsp;&nbsp;".join(badge_title(k, tr(INSPECTION_TITLES[k]), size) for k in kinds)
 
 
 def badge_title(kind: str, text: str, size: int = 18) -> str:
@@ -552,6 +613,52 @@ QLabel#monitorInfo {{
     color: #c7cdd4;
     font-weight: 600;
 }}
+QFrame#settingsNav {{
+    background: #1b1f24;
+    border: 1px solid #2c323a;
+    border-radius: 6px;
+}}
+QLabel#navGroup {{
+    color: #8f99a4;
+    font-size: 10pt;
+    font-weight: 700;
+    padding: 6px 4px 0 4px;
+}}
+QPushButton#navTile {{
+    text-align: left;
+    padding: 6px 10px;
+    font-size: 12pt;
+}}
+QPushButton#navTile:checked {{
+    background: {GLOSS_BLUE};
+    color: #ffffff;
+    border: 1px solid #0d3f86;
+}}
+QLabel#unsavedChip {{
+    color: #9aa5b1;
+    font-weight: 700;
+    padding: 4px 10px;
+}}
+QLabel#unsavedChip[dirty="true"] {{
+    color: #1a1a1a;
+    background: {STANDBY_YELLOW};
+    border-radius: 12px;
+}}
+QToolButton#flagButton {{
+    background: transparent;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    padding: 2px;
+}}
+QToolButton#flagButton:checked {{
+    border: 2px solid #f0a330;
+    background: #2a2f36;
+}}
+QLabel#monitorPartModel {{
+    color: #e8ecf0;
+    font-size: 32pt;  /* 2.5x the base 13pt: read from the line */
+    font-weight: 700;
+}}
 QLabel#judgementBanner {{
     font-size: 15pt;
     font-weight: 800;
@@ -677,6 +784,13 @@ def _draw_line_icon(painter: QPainter, kind: str, fill: QColor, stroke: QPen) ->
             painter.drawRect(QRectF(6.5, y, 7, 4))
         lines((10, 14.5), (10, 17.5))
         lines((6, 17.5), (14, 17.5))
+    elif kind == "relay":  # I/O module: terminal block with screws and a signal line
+        painter.drawRoundedRect(QRectF(2.5, 6, 15, 10), 1.5, 1.5)
+        for x in (5.5, 10, 14.5):
+            dot(x, 9.5, 1.6)
+        lines((5.5, 2.5), (5.5, 6))
+        lines((14.5, 2.5), (14.5, 6))
+        lines((5, 13), (15, 13))
     elif kind == "snapshot":  # frozen frame: picture with a pause mark
         painter.drawRoundedRect(QRectF(2.5, 4, 15, 12), 1.5, 1.5)
         lines((8.5, 7.5), (8.5, 12.5))

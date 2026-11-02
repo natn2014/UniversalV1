@@ -1,4 +1,3 @@
-import html
 import time
 from pathlib import Path
 from typing import Callable, Optional
@@ -7,6 +6,7 @@ from PySide6.QtCore import QRect, QRectF, QSize, Qt, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -29,7 +29,10 @@ from ..autocapture import (
     qimage_to_array,
 )
 from ..context import AppContext
-from ..judgement import JudgementLatch
+from ..i18n import tr, translator, trf
+from ..jobs import inspection_types
+from ..marking.short_name import pad_box
+from ..judgement import InspectionCycle
 from ..ng_log import save_ng_image
 from ..paths import CAPTURES_IMAGES_DIR, CAPTURES_LABELS_DIR, NO_PART_NAME
 from ..roi import detections_in_crop, roi_to_pixels
@@ -40,6 +43,7 @@ from ..theme import (
     STANDBY_YELLOW,
     action_button_qss,
     gloss_gradient,
+    inspection_title,
     make_icon,
     set_badge_title,
 )
@@ -71,7 +75,12 @@ class MonitorTab(QWidget):
         self._current_frame_detections: list = []
         self._current_tool_results: list = []
         self._judge_mode_shown: Optional[bool] = None
-        self._latch = JudgementLatch()
+        # NG short name, zoomed on the image until the result is no longer NG:
+        # {"crop": QImage, "box": (x1, y1, x2, y2), "text": caption}.
+        self._short_name_zoom: Optional[dict] = None
+        self._kinds_shown: Optional[list] = None
+        # Held judgement, trigger mode and the Confirm NG latch (relay inputs).
+        self._latch = InspectionCycle()
         self._pending_ng_save: bool = False
         self._stop_requested: bool = False
         self._camera_lost: bool = False
@@ -99,6 +108,9 @@ class MonitorTab(QWidget):
         ctx.worker.camera_connected.connect(self._on_camera_connected)
         ctx.worker.finished.connect(self._clear_camera_lost)
         ctx.tower.connection_text_changed.connect(self._on_tower_connection_text)
+        ctx.relay.connection_changed.connect(self._refresh_monitor_info)
+        ctx.relay.input_pressed.connect(self._on_relay_input)
+        translator().language_changed.connect(self._on_language_changed)
         self._refresh_run_button()
 
         self.capture_button = QPushButton("Capture")
@@ -137,6 +149,30 @@ class MonitorTab(QWidget):
         self.layout_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.layout_label.setToolTip("Marks printed out of the usual layout. A warning: the verdict is not changed.")
 
+        # Trigger mode / Confirm NG (relay inputs): what the cycle waits for.
+        self.cycle_label = QLabel()
+        self.cycle_label.setObjectName("cycleState")
+        self.cycle_label.setStyleSheet(f"color: {STANDBY_YELLOW}; font-weight: 800;")
+        self.cycle_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.cycle_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.confirm_button = QPushButton("Confirm NG")
+        self.confirm_button.setIcon(make_icon("check", "#ffffff"))
+        self.confirm_button.setMinimumHeight(44)
+        self.confirm_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["stop"]))
+        self.confirm_button.setToolTip("The NG part was taken aside: clear the NG and go on with the next part.")
+        self.confirm_button.clicked.connect(self.confirm_ng)
+        self.confirm_button.hide()
+        for label in (self.missing_label, self.layout_label, self.cycle_label):
+            label.hide()  # shown only while they have something to say
+
+        # Part and model large enough to read from the line, one per row; the
+        # rest of the info (kind of inspection, top view, tower) at normal size.
+        self.part_label = QLabel()
+        self.model_label = QLabel()
+        for label in (self.part_label, self.model_label):
+            label.setObjectName("monitorPartModel")
+            label.setTextFormat(Qt.PlainText)
+            label.setMinimumWidth(1)  # full text when it fits, clipped (never widening the window) when not
         self.monitor_info_label = QLabel()
         self.monitor_info_label.setObjectName("monitorInfo")
         self.monitor_info_label.setTextFormat(Qt.RichText)
@@ -248,10 +284,21 @@ class MonitorTab(QWidget):
         # top, framed image with a light side panel, action bar at the bottom
         # with Run on the far right.
         top, top_layout = top_bar()
-        top_layout.addWidget(self.monitor_info_label)
-        top_layout.addWidget(self.missing_label, 1)
-        top_layout.addWidget(self.layout_label, 1)
-        top_layout.addWidget(self.judgement_banner)
+        info_grid = QGridLayout()
+        info_grid.setVerticalSpacing(0)
+        info_grid.addWidget(self.part_label, 0, 0)
+        info_grid.addWidget(self.monitor_info_label, 0, 1, Qt.AlignRight)
+        info_grid.addWidget(self.model_label, 1, 0)
+        warnings = QVBoxLayout()
+        warnings.addWidget(self.missing_label)
+        warnings.addWidget(self.layout_label)
+        warnings.addWidget(self.cycle_label)
+        info_grid.addLayout(warnings, 1, 1)
+        # Right under the NG pill, where the operator is already looking.
+        info_grid.addWidget(self.confirm_button, 1, 2)
+        info_grid.setColumnStretch(1, 1)
+        top_layout.addLayout(info_grid, 1)
+        info_grid.addWidget(self.judgement_banner, 0, 2, Qt.AlignRight)
 
         video_frame = QFrame()
         video_frame.setObjectName("videoFrame")
@@ -403,12 +450,27 @@ class MonitorTab(QWidget):
         model = Path(model_path).stem if model_path else "—"
         # Rich text (for the red tower warning) collapses plain spaces.
         sep = "&nbsp;&nbsp;&nbsp;·&nbsp;&nbsp;&nbsp;"
-        parts = [f"Part: {html.escape(part)}", f"Model: {html.escape(model)}"]
+        # Values formatted in after translating: a part number is never translated.
+        self.part_label.setText(tr("Part: {}").format(part))
+        self.model_label.setText(tr("Model: {}").format(model))
+        parts = []
         if self._ctx.filters.perspective:
-            parts.append("Top View")
+            parts.append(tr("Top View"))
+        self._kinds_shown = self._inspection_types()
+        if self._kinds_shown:
+            parts.append(inspection_title(self._kinds_shown))
+        relay = self._ctx.relay
+        if self._ctx.settings["relay_enabled"]:
+            color = "#7ee08a" if relay.connected else "#ff5a4a"
+            parts.append(f'<span style="color:{color};">Relay {"●" if relay.connected else "○"}</span>')
         if self._tower_lost:
-            parts.append('<span style="color:#ff5a4a;">Tower light disconnected</span>')
+            parts.append(f'<span style="color:#ff5a4a;">{tr("Tower light disconnected")}</span>')
         self.monitor_info_label.setText(sep.join(parts))
+
+    def _inspection_types(self) -> list:
+        ctx, filters = self._ctx, self._ctx.filters
+        return inspection_types({"model_path": ctx.model_path, "judge_mode": filters.judge_mode,
+                                 "required_classes": filters.required_classes, "tools": ctx.tools})
 
     # --- Hardware connection (camera / tower light cable) ----------------
 
@@ -443,7 +505,7 @@ class MonitorTab(QWidget):
             "RED": ("NG", NG_RED, "#ffffff"),
             "YELLOW": ("STANDBY", STANDBY_YELLOW, "#1a1a1a"),
         }[state]
-        self.judgement_banner.setText(text)
+        self.judgement_banner.setText(tr(text))
         gloss = gloss_gradient(QColor(bg).lighter(135).name(), bg, QColor(bg).darker(125).name())
         self.judgement_banner.setStyleSheet(
             f"QLabel#judgementBanner {{ background: {gloss}; color: {fg}; }}"
@@ -452,6 +514,56 @@ class MonitorTab(QWidget):
     def _reset_judgement(self) -> None:
         self._latch.reset()
         self._update_judgement_banner("YELLOW")
+        self._refresh_cycle_prompt()
+
+    def _on_language_changed(self, _language: str) -> None:
+        self._judge_mode_shown = None  # re-title the side panel
+        self._show_judge_mode()
+        self._refresh_monitor_info()
+        self._refresh_run_button()
+        self._refresh_cycle_prompt()
+        self._update_judgement_banner(self._latch.state or "YELLOW")
+
+    @staticmethod
+    def _set_warning(label: QLabel, text: str) -> None:
+        """Empty warning lines are hidden, so the top strip keeps its height."""
+        label.setText(text)
+        label.setVisible(bool(text))
+
+    def _show_state(self, state: str) -> None:
+        """Banner, tower light and relay outputs follow the held state."""
+        self._update_judgement_banner(state)
+        self._ctx.tower.update_state(state)
+        self._ctx.relay.update_state(state)
+        self._refresh_cycle_prompt()
+
+    def _refresh_cycle_prompt(self) -> None:
+        cycle, relay = self._latch, self._ctx.relay
+        self.confirm_button.setVisible(cycle.awaiting_confirm)
+        if cycle.awaiting_confirm:
+            text = "NG: confirm to continue"
+        elif relay.has_input("trigger") and self._ctx.worker.isRunning() and not self._preview:
+            text = "Judging…" if cycle.armed else "Waiting for trigger"
+        else:
+            text = ""
+        self._set_warning(self.cycle_label, tr(text))
+
+    @Slot(str)
+    def _on_relay_input(self, role: str) -> None:
+        if self._preview or not self._ctx.worker.isRunning():
+            return
+        if role == "confirm_ng":
+            self.confirm_ng()
+        elif role == "trigger":
+            if not self._latch.trigger():
+                self._ctx.status.emit("Trigger ignored: confirm the NG first.")
+            self._refresh_cycle_prompt()
+
+    @Slot()
+    def confirm_ng(self) -> None:
+        if self._latch.confirm():
+            self._ctx.status.emit("NG confirmed.")
+            self._show_state("YELLOW")
 
     @Slot(bool)
     def _on_buzzer_enabled_changed(self, enabled: bool) -> None:
@@ -632,7 +744,8 @@ class MonitorTab(QWidget):
             status, dot = "Stopped", "#9aa5b1"
 
         self.run_button.setEnabled(not stopping)
-        self.run_button.setText(text)
+        self.run_button.setText(tr(text))
+        status = tr(status)
         self.run_button.setIcon(make_icon(icon))
         self.run_button.setStyleSheet(action_button_qss(*style))
         self.run_status_label.setText(
@@ -679,6 +792,7 @@ class MonitorTab(QWidget):
             self._stop_requested = True
             self._ctx.worker.stop()
         self._ctx.tower.shutdown()
+        self._ctx.relay.update_state(None)
         self._reset_judgement()
         self._refresh_run_button()
 
@@ -874,19 +988,29 @@ class MonitorTab(QWidget):
         self._current_tool_results = tool_results
         self._ctx.last_detections = detections
         self._live = True
-        missing = self._ctx.filters.missing(detections)
-        self.missing_label.setText(f"Missing: {', '.join(missing)}" if missing else "")
+        filters = self._ctx.filters
+        missing = filters.missing(detections)
+        issue = filters.short_name_issue(detections)
+        warning = [tr(f"Missing: {', '.join(missing)}")] if missing else []
+        if issue:
+            warning.append(tr(issue))
+        self._set_warning(self.missing_label, "   ·   ".join(warning))
         layout = self._ctx.filters.layout_warnings(detections)
-        self.layout_label.setText(f"Layout: {'; '.join(layout)}" if layout else "")
+        self._set_warning(self.layout_label, tr(f"Layout: {'; '.join(layout)}") if layout else "")
 
         if not self._preview:
-            # One cycle = each time the held judgement becomes OK or NG.
-            raw_state = self._raw_state(detections, tool_results)
-            if self._latch.update(raw_state, self._ctx.settings["state_hold_ms"]):
-                self._count_cycle(raw_state)
-            state = self._latch.state
-            self._update_judgement_banner(state)
-            self._ctx.tower.update_state(state)
+            # One cycle = each time the held judgement becomes OK or NG, or
+            # one per trigger in trigger mode.
+            relay = self._ctx.relay
+            ocr = filters.short_name_ocr(detections)
+            state, counted = self._latch.update(
+                self._raw_state(detections, tool_results), self._ctx.settings["state_hold_ms"],
+                trigger_mode=relay.has_input("trigger"), confirm_ng=relay.has_input("confirm_ng"),
+                pending=ocr is not None and ocr["state"] == "pending")
+            if counted:
+                self._count_cycle(counted)
+            self._keep_short_name_zoom(image, detections, ocr, issue, state)
+            self._show_state(state)
 
         self._show_frame(image, detections, tool_results)
         self._show_judge_mode()
@@ -913,6 +1037,46 @@ class MonitorTab(QWidget):
             yolo_state = None  # no model: the tools alone decide
         position_found = all(r.ok for r in tool_results if r.kind == "position")
         return total_state(tool_results, yolo_state, self._ctx.tools_gate, position_found)
+
+    def _keep_short_name_zoom(self, image: QImage, detections: list, ocr: Optional[dict], issue: str,
+                              state: str) -> None:
+        """While the short name is wrong / unreadable, remember a crop of it to
+        show zoomed; it stays as long as the result is NG (e.g. waiting for
+        Confirm NG after the part was taken away)."""
+        if issue:
+            det = max((d for d in detections if d.get("class_name") == "short_name"), key=lambda d: d.get("conf", 0.0))
+            box = tuple(int(det[k]) for k in ("x1", "y1", "x2", "y2"))
+            x1, y1, x2, y2 = pad_box(box, image.width(), image.height())
+            if ocr["state"] == "unreadable":
+                caption = trf("Unreadable  ·  expected {}", ocr["expected"])
+            else:
+                caption = trf("Read {}  ≠  expected {}", ocr["text"], ocr["expected"])
+            self._short_name_zoom = {"crop": image.copy(QRect(x1, y1, x2 - x1, y2 - y1)), "box": box, "text": caption}
+        elif state != "RED":
+            self._short_name_zoom = None
+
+    def _draw_short_name_zoom(self, painter: QPainter, image: QImage) -> None:
+        """The NG short name magnified (at least 3x, ~38 % of the frame wide) in
+        the corner furthest from it, framed red, with what was read."""
+        zoom = self._short_name_zoom
+        if zoom is None or zoom["crop"].isNull():
+            return
+        crop, (x1, y1, x2, y2) = zoom["crop"], zoom["box"]
+        w, h = image.width(), image.height()
+        scale = max(3.0, 0.38 * w / max(1, crop.width()))
+        scale = min(scale, 0.45 * h / max(1, crop.height()), 0.6 * w / max(1, crop.width()))
+        zw, zh = crop.width() * scale, crop.height() * scale
+        margin = 0.02 * w
+        zx = margin if (x1 + x2) / 2 > w / 2 else w - zw - margin
+        zy = h - zh - margin if (y1 + y2) / 2 < h / 2 else margin + 0.05 * h
+        target = QRectF(zx, zy, zw, zh)
+        painter.drawImage(target, crop)
+        painter.setPen(overlay_pen(painter, NG_RED, 4))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRect(target)
+        painter.setPen(overlay_pen(painter, NG_RED, 2, Qt.DashLine))
+        painter.drawRect(QRectF(x1, y1, x2 - x1, y2 - y1))  # where it is on the part
+        draw_label(painter, zx, zy, zoom["text"], NG_RED)
 
     def _render_frame(self, image: QImage, detections: list, tool_results: Optional[list] = None) -> QPixmap:
         """Frame with the overlay burned in: what the NG log saves."""
@@ -947,6 +1111,7 @@ class MonitorTab(QWidget):
             x1, y1, x2, y2 = det["x1"], det["y1"], det["x2"], det["y2"]
             painter.drawRect(QRectF(x1, y1, x2 - x1, y2 - y1))
             draw_label(painter, x1, y1, det["label"], color)
+        self._draw_short_name_zoom(painter, image)
 
     def _save_ng_image(self, pixmap: QPixmap) -> None:
         try:
@@ -981,11 +1146,13 @@ class MonitorTab(QWidget):
 
     def _show_judge_mode(self) -> None:
         """Required Marks mode: the mark table instead of the class counts."""
+        if self._inspection_types() != self._kinds_shown:
+            self._refresh_monitor_info()
         by_marks = self._ctx.filters.by_marks
         if self._judge_mode_shown == by_marks:
             return
         self._judge_mode_shown = by_marks
-        set_badge_title(self.ai_header, "ai", "Required Marks" if by_marks else "AI Detections")
+        set_badge_title(self.ai_header, "mark" if by_marks else "ai", tr("Required Marks" if by_marks else "AI Detections"))
         self.table.setVisible(not by_marks)
         self.mark_table.setVisible(by_marks)
         if by_marks:
@@ -996,6 +1163,11 @@ class MonitorTab(QWidget):
         for row, mark in enumerate(marks):
             conf = mark["conf"]
             name = QTableWidgetItem(mark["class_name"])
+            if "read" in mark:  # the short name as read by OCR
+                shown = {"ok": mark["read"], "ng": f"{mark['read']} ≠ {mark['expected']}",
+                         "unreadable": "?", "pending": "…"}[mark["ocr_state"]]
+                name.setText(f"{mark['class_name']}  {shown}")
+                name.setToolTip(trf("Expected {}", mark["expected"]))
             value = QTableWidgetItem("—" if conf is None else f"{conf:.2f}")
             value.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             minimum = QTableWidgetItem(f"{mark['min_conf']:.2f}")
@@ -1006,8 +1178,8 @@ class MonitorTab(QWidget):
                 verdict = QTableWidgetItem("OK" if mark["ok"] else "NG")
                 verdict.setBackground(QBrush(QColor(OK_GREEN if mark["ok"] else NG_RED)))
                 verdict.setForeground(QBrush(QColor("#ffffff")))
-                verdict.setToolTip("Found at or above Min" if mark["ok"] else
-                                   "Not found" if conf is None else "Found below Min")
+                verdict.setToolTip(tr("Found at or above Min" if mark["ok"] else
+                                      "Not found" if conf is None else "Found below Min"))
             verdict.setTextAlignment(Qt.AlignCenter)
             font = verdict.font()
             font.setBold(True)
@@ -1022,6 +1194,7 @@ class MonitorTab(QWidget):
         self.tool_table.setVisible(visible)
 
     def _on_tools_changed(self, tools: list) -> None:
+        self._refresh_monitor_info()
         self._set_tool_panel_visible(bool(tools))
         if not tools:
             self._current_tool_results = []

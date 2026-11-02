@@ -25,6 +25,8 @@ MASTERS_DIR = PART_CONFIGS_DIR / "masters"
 TOOLS_DIR = PART_CONFIGS_DIR / "tools"
 LAST_PART_FILE = PART_CONFIGS_DIR / ".last_part"
 APP_SETTINGS_FILE = ROOT_DIR / "app_settings.json"
+# Standard-mark model: loaded whenever a job judges by Required Marks.
+MARK_MODEL_PATH = ROOT_DIR / "weights" / "standard_marks_v8.pt"
 _SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 

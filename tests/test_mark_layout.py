@@ -13,6 +13,7 @@ import cv2  # noqa: E402
 from PySide6.QtGui import QColor, QImage  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+import app.paths as paths_mod  # noqa: E402
 import app.settings as settings_mod  # noqa: E402
 import app.tabs.monitor_tab as monitor_mod  # noqa: E402
 from app.context import AppContext  # noqa: E402
@@ -104,6 +105,8 @@ class Tabs(unittest.TestCase):
         self.patches = [
             mock.patch.object(settings_mod, "APP_SETTINGS_FILE", Path(self.tmp.name) / "app_settings.json"),
             mock.patch.object(monitor_mod, "save_ng_image", mock.Mock()),
+            # No mark model: switching to Required Marks keeps the test's classes.
+            mock.patch.object(paths_mod, "MARK_MODEL_PATH", Path(self.tmp.name) / "missing.pt"),
         ]
         for p in self.patches:
             p.start()

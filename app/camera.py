@@ -13,10 +13,13 @@ import cv2  # noqa: E402
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtGui import QImage
 
+from .image_adjust import ImageAdjust
+from .marking.short_name import ShortNameReader, pad_box, valid_short_name
 from .optional_deps import YOLO
 from .perspective import PerspectiveWarp, Quad
 from .roi import Roi, offset_detections, roi_to_pixels
 from .vision.runner import run_tools_with_offset
+from .vision.ocr import get_engine
 from .vision.slow_runner import SlowToolRunner
 
 
@@ -119,6 +122,10 @@ class VideoWorker(QThread):
         self.last_raw_frame = None
         self._camera_ok: Optional[bool] = None  # last camera_connected value sent
         self._resolution: Tuple[int, int] = parse_resolution(DEFAULT_RESOLUTION)
+        self._adjust = ImageAdjust()
+        # Required Marks short name check: read in its own thread (OCR is slow).
+        self._short_name_expected = ""
+        self._short_name = ShortNameReader(get_engine)
 
     def set_camera_index(self, index: Optional[int]) -> None:
         self._camera_index = index
@@ -135,6 +142,32 @@ class VideoWorker(QThread):
         """Top view: frames are straightened before anything else sees them.
         Read once per frame, so it takes effect on the next frame."""
         self._warp = PerspectiveWarp(quad) if quad else None
+
+    def set_image_adjust(self, adjust: ImageAdjust) -> None:
+        """Mirror / flip / colour, applied to each frame as it is read. Read
+        once per frame, so it takes effect on the next frame."""
+        self._adjust = adjust
+
+    def set_short_name_expected(self, expected: str) -> None:
+        """The value the detected short name must read as; "" = don't read it."""
+        self._short_name_expected = expected if valid_short_name(expected) else ""
+
+    def _read_short_name(self, frame, detections: list) -> None:
+        """Puts this part's short-name read (see ShortNameReader) into the
+        most confident short_name detection, and hands the reader a new crop
+        when it is due."""
+        expected = self._short_name_expected
+        boxes = [d for d in detections if d["class_name"] == "short_name"]
+        if not expected or not boxes:
+            return
+        det = max(boxes, key=lambda d: d["conf"])
+        now = time.monotonic()
+        reader = self._short_name
+        reader.seen(now)
+        if reader.due(now, self._slow_hz):
+            x1, y1, x2, y2 = pad_box((det["x1"], det["y1"], det["x2"], det["y2"]), frame.shape[1], frame.shape[0])
+            reader.submit(frame[y1:y2, x1:x2].copy(), expected, now)
+        det["ocr"] = reader.result(expected, now)
 
     def set_roi(self, roi: Optional[Roi]) -> None:
         """Detection area; the model only sees this part of the frame.
@@ -340,6 +373,9 @@ class VideoWorker(QThread):
                 continue
             failures = 0
             last_ok = time.monotonic()
+            adjust = self._adjust
+            if not adjust.is_neutral:
+                frame = adjust.apply(frame)
             self.last_raw_frame = frame
             warp = self._warp
             if warp is not None:
@@ -367,6 +403,7 @@ class VideoWorker(QThread):
                     results = None
                 detections = self._extract_detections(results)
                 offset_detections(detections, x1, y1)
+                self._read_short_name(frame, detections)
 
             elapsed = time.perf_counter() - start_time
 

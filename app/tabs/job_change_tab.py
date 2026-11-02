@@ -16,7 +16,8 @@ from PySide6.QtWidgets import (
 
 from .. import jobs
 from ..context import AppContext
-from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
+from ..i18n import tr, translator
+from ..theme import INSPECTION_TITLES, RUN_BUTTON_STYLES, action_button_qss, badges_icon, make_icon
 from ..widgets.layout import bottom_bar, make_card, top_bar
 from ..widgets.remove_job_dialog import RemoveJobDialog
 
@@ -49,6 +50,7 @@ class JobChangeTab(QWidget):
         self._build_layout()
         self.refresh_job_buttons()
         ctx.part_changed.connect(self._on_part_changed)
+        translator().language_changed.connect(lambda _: self.refresh_job_buttons())
 
     def _build_layout(self) -> None:
         top, top_layout = top_bar(margins=(10, 4, 10, 4))
@@ -142,10 +144,16 @@ class JobChangeTab(QWidget):
         position = 0
         for part_no, _, config in saved:
             model_path = config.get("model_path")
-            model = Path(model_path).stem if model_path else "no model"
-            # Tile shows the part and its model; the active job is highlighted.
+            model = Path(model_path).stem if model_path else tr("no model")
+            # Tile shows the part, its model and a badge per kind of inspection;
+            # the active job is highlighted.
             button = QPushButton(f"{part_no}\n{model}")
             button.setObjectName("jobButton")
+            kinds = jobs.inspection_types(config)
+            if kinds:
+                button.setIcon(badges_icon(kinds))
+                button.setIconSize(badges_icon(kinds).availableSizes()[0])
+                button.setToolTip(" + ".join(tr(INSPECTION_TITLES[k]) for k in kinds))
             button.setCheckable(True)
             button.setChecked(part_no == self._ctx.current_part_no)
             button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)

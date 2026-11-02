@@ -1,19 +1,55 @@
 {
   "part_no": "8850304144380",
-  "model_path": "/home/orin_nano/dev/Wire_harness_module/RR00_undertest.pt",
+  "model_path": "/home/jetson/dev/UniversalV1/weights/standard_marks_v8.pt",
   "confidence_threshold": 0.6,
   "max_detections": 3,
-  "target_class_1": "Lead",
-  "target_class_2": "NoTape",
+  "target_class_1": null,
+  "target_class_2": null,
   "target_gate": "OR",
   "selected_classes": [
-    "Backside",
-    "Lead",
-    "LeadFree",
-    "NoTape",
-    "WhiteTape"
+    "as_class",
+    "asnzs",
+    "bis_isi",
+    "ccc_mark",
+    "date_code",
+    "dot",
+    "e_mark",
+    "glass_class",
+    "inmetro",
+    "laminated",
+    "lamisafe",
+    "letter_l",
+    "letter_t",
+    "logo_agc",
+    "logo_honda",
+    "logo_nissan",
+    "logo_toyota",
+    "m_code",
+    "plant_code",
+    "short_name",
+    "sni_mark",
+    "temperlite",
+    "tis_mark",
+    "type_code"
   ],
-  "roi": null,
+  "judge_mode": "required",
+  "required_classes": [
+    "e_mark",
+    "logo_agc",
+    "m_code",
+    "short_name",
+    "tis_mark",
+    "type_code"
+  ],
+  "mark_conf": {
+    "e_mark": 0.4,
+    "logo_agc": 0.4,
+    "m_code": 0.4,
+    "short_name": 0.4,
+    "tis_mark": 0.4,
+    "type_code": 0.4
+  },
+  "check_layout": false,
   "perspective": [
     [
       0.1302,
@@ -31,5 +67,11 @@
       0.1399,
       0.9802
     ]
-  ]
+  ],
+  "roi": null,
+  "autocapture_masters": [],
+  "tools": [],
+  "tools_gate": "AND",
+  "mm_per_px": null,
+  "short_name_expected": "48"
 }

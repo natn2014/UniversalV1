@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QToolButton, QVBoxLayout, QWidget
 
+from ..i18n import tr, translator
 from ..ng_log import collect_ng_log, full_image_for_thumb, ng_stamp_text
 from ..paths import NG_THUMB_SIZE, NG_THUMBS_PER_PART
 from ..theme import make_icon
@@ -40,6 +41,7 @@ class LogTab(QWidget):
         layout = QVBoxLayout(self)
         layout.addLayout(open_row)
         layout.addWidget(scroll, 1)
+        translator().language_changed.connect(lambda _: self.mark_dirty())
 
     def mark_dirty(self) -> None:
         # Rebuild only if the operator is looking at the Log tab right now;
@@ -65,7 +67,7 @@ class LogTab(QWidget):
         groups = collect_ng_log()
         total = sum(g[2] for g in groups)
         self.ng_log_summary_label.setText(
-            f"NG images: {total}   ·   Parts: {len(groups)}   (latest part on top)")
+            tr(f"NG images: {total}   ·   Parts: {len(groups)}   (latest part on top)"))
 
         if not groups:
             empty = QLabel("No NG recorded yet.")
