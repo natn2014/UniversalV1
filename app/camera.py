@@ -165,7 +165,8 @@ class VideoWorker(QThread):
         reader = self._short_name
         reader.seen(now)
         if reader.due(now, self._slow_hz):
-            x1, y1, x2, y2 = pad_box((det["x1"], det["y1"], det["x2"], det["y2"]), frame.shape[1], frame.shape[0])
+            others = [(d["x1"], d["y1"], d["x2"], d["y2"]) for d in detections if d is not det]
+            x1, y1, x2, y2 = pad_box((det["x1"], det["y1"], det["x2"], det["y2"]), frame.shape[1], frame.shape[0], others)
             reader.submit(frame[y1:y2, x1:x2].copy(), expected, now)
         det["ocr"] = reader.result(expected, now)
 

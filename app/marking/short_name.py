@@ -21,7 +21,7 @@ import re
 import threading
 import time
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 import cv2
 import numpy as np
@@ -56,13 +56,37 @@ def position_sets(expected: str) -> Tuple[str, str]:
     return (LETTERS if expected[:1].isalpha() else DIGITS), DIGITS
 
 
-def pad_box(box: Tuple[float, float, float, float], width: int, height: int) -> Tuple[int, int, int, int]:
-    """Detection box grown so a character cut by a tight box is whole:
-    35 % of the height on every side (wider print needs it in x)."""
+PAD_X = 0.5  # x box height, left and right: a tight or off-centre box must not cut a character
+PAD_Y = 0.3  # x box height, above and below
+
+
+def pad_box(box: Tuple[float, float, float, float], width: int, height: int,
+            others: Sequence[Tuple[float, float, float, float]] = ()) -> Tuple[int, int, int, int]:
+    """The short name's box grown by PAD_X / PAD_Y (relative to its height, so
+    it suits any camera distance), then cut back so no other detected mark
+    (SNI beside it, the // or the type code) comes into the crop: its letters
+    would be taken for the short name's. A box overlapping the short name
+    itself (a frame round the whole marking) is not a neighbour."""
     x1, y1, x2, y2 = box
-    pad = 0.35 * (y2 - y1)
-    return (max(0, int(x1 - pad)), max(0, int(y1 - pad)),
-            min(width, int(x2 + pad)), min(height, int(y2 + pad)))
+    h = y2 - y1
+    cx1, cy1, cx2, cy2 = x1 - PAD_X * h, y1 - PAD_Y * h, x2 + PAD_X * h, y2 + PAD_Y * h
+    for ox1, oy1, ox2, oy2 in others:
+        if ox1 < x2 and ox2 > x1 and oy1 < y2 and oy2 > y1:
+            continue  # overlaps the short name: not beside it
+        if ox2 <= cx1 or ox1 >= cx2 or oy2 <= cy1 or oy1 >= cy2:
+            continue  # outside the grown crop
+        # Cut on the side the neighbour is on (the widest gap to the short name).
+        gaps = {"left": x1 - ox2, "right": ox1 - x2, "top": y1 - oy2, "bottom": oy1 - y2}
+        side = max(gaps, key=gaps.get)
+        if side == "left":
+            cx1 = max(cx1, ox2)
+        elif side == "right":
+            cx2 = min(cx2, ox1)
+        elif side == "top":
+            cy1 = max(cy1, oy2)
+        else:
+            cy2 = min(cy2, oy1)
+    return (max(0, int(cx1)), max(0, int(cy1)), min(width, int(cx2)), min(height, int(cy2)))
 
 
 def _line_mask(bgr: np.ndarray) -> np.ndarray:

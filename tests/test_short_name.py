@@ -71,8 +71,17 @@ class Format(unittest.TestCase):
             self.assertFalse(valid_short_name(bad), bad)
 
     def test_pad_box_grows_and_clips(self):
-        self.assertEqual(pad_box((100, 100, 140, 120), 1000, 1000), (93, 93, 147, 127))
+        self.assertEqual(pad_box((100, 100, 140, 120), 1000, 1000), (90, 94, 150, 126))  # 0.5 h sideways, 0.3 h up / down
         self.assertEqual(pad_box((0, 0, 40, 20), 30, 15), (0, 0, 30, 15))
+
+    def test_pad_box_stops_at_neighbours(self):
+        short = (100, 100, 140, 120)
+        sni = (146, 98, 180, 124)  # SNI just right of it
+        slashes = (80, 102, 96, 118)  # // just left
+        below = (100, 123, 140, 140)  # type code just below
+        self.assertEqual(pad_box(short, 1000, 1000, [sni, slashes, below]), (96, 94, 146, 123))
+        self.assertEqual(pad_box(short, 1000, 1000, [(50, 50, 300, 300)]), (90, 94, 150, 126))  # frame round it: ignored
+        self.assertEqual(pad_box(short, 1000, 1000, [(400, 400, 450, 450)]), (90, 94, 150, 126))  # far away
 
 
 @unittest.skipIf(ENGINE is None, "Tesseract not installed")

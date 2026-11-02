@@ -27,6 +27,22 @@ try:
 except Exception:
     zbar_decode = None
 
+# Tesseract inside the process (tesserocr): the model stays loaded, ~10 ms a
+# read instead of ~190 ms for pytesseract starting a new tesseract per call.
+# Its wheel brings its own Tesseract but no language data: use the system's.
+try:
+    import glob
+
+    import tesserocr
+
+    _tessdata = sorted(glob.glob("/usr/share/tesseract-ocr/*/tessdata"))
+    TESSDATA = _tessdata[-1] if _tessdata else None
+    if TESSDATA is None or "eng" not in tesserocr.get_languages(TESSDATA)[1]:
+        raise RuntimeError("no English Tesseract data")
+    TESSEROCR = tesserocr
+except Exception:
+    TESSEROCR = TESSDATA = None
+
 try:
     import pytesseract
 

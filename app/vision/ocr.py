@@ -8,11 +8,13 @@ has to implement `OcrEngine.read`.
 
 import math
 import re
+import threading
 from datetime import datetime
 from typing import Optional, Protocol, Tuple
 
 import cv2
 import numpy as np
+from PIL import Image
 
 from .base import Tool, register
 
@@ -49,9 +51,45 @@ class TesseractEngine:
         return text, float(np.mean(confs)) if confs else 0.0
 
 
+class TesserocrEngine:
+    """Tesseract in this process (tesserocr): the model is loaded once, so a
+    read takes ~10 ms instead of ~190 ms. Tesseract's API is not thread-safe:
+    each thread (camera loop, slow tools, short name) gets its own."""
+
+    def __init__(self, module, tessdata: str) -> None:
+        self._tr = module
+        self._tessdata = tessdata
+        self._local = threading.local()
+
+    def _api(self):
+        api = getattr(self._local, "api", None)
+        if api is None:
+            api = self._local.api = self._tr.PyTessBaseAPI(path=self._tessdata, lang="eng")
+        return api
+
+    def read(self, binary: np.ndarray, psm: int = 7, whitelist: str = "") -> Tuple[str, float]:
+        api = self._api()
+        api.SetPageSegMode(int(psm))
+        api.SetVariable("tessedit_char_whitelist", whitelist)  # "" = any; set every call, it persists
+        api.SetImage(Image.fromarray(np.ascontiguousarray(binary)))
+        lines = [" ".join(line.split()) for line in api.GetUTF8Text().splitlines() if line.strip()]
+        return "\n".join(lines), float(api.MeanTextConf()) if lines else 0.0
+
+
+_ENGINE: Optional[OcrEngine] = None
+
+
 def get_engine() -> Optional[OcrEngine]:
-    from ..optional_deps import TESSERACT
-    return TesseractEngine(TESSERACT) if TESSERACT is not None else None
+    """In-process Tesseract when tesserocr is installed, else pytesseract,
+    else None (OCR tools report the engine is missing)."""
+    global _ENGINE
+    if _ENGINE is None:
+        from ..optional_deps import TESSDATA, TESSERACT, TESSEROCR
+        if TESSEROCR is not None:
+            _ENGINE = TesserocrEngine(TESSEROCR, TESSDATA)
+        elif TESSERACT is not None:
+            _ENGINE = TesseractEngine(TESSERACT)
+    return _ENGINE
 
 
 def _binarize_dark_on_light(gray: np.ndarray) -> np.ndarray:

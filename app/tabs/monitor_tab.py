@@ -1081,7 +1081,8 @@ class MonitorTab(QWidget):
         if issue:
             det = max((d for d in detections if d.get("class_name") == "short_name"), key=lambda d: d.get("conf", 0.0))
             box = tuple(int(det[k]) for k in ("x1", "y1", "x2", "y2"))
-            x1, y1, x2, y2 = pad_box(box, image.width(), image.height())
+            others = [tuple(d[k] for k in ("x1", "y1", "x2", "y2")) for d in detections if d is not det]
+            x1, y1, x2, y2 = pad_box(box, image.width(), image.height(), others)
             if ocr["state"] == "unreadable":
                 caption = trf("Unreadable  ·  expected {}", ocr["expected"])
             else:
