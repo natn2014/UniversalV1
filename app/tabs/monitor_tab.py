@@ -32,7 +32,7 @@ from ..context import AppContext
 from ..i18n import tr, translator, trf
 from ..jobs import inspection_types
 from ..marking.short_name import pad_box
-from ..judgement import InspectionCycle, MarkHold, held_missing, held_short_name, held_state
+from ..judgement import InspectionCycle, MarkHold, held_short_name, held_state
 from ..ng_log import save_ng_image
 from ..paths import CAPTURES_IMAGES_DIR, CAPTURES_LABELS_DIR, NO_PART_NAME
 from ..roi import detections_in_crop, roi_to_pixels
@@ -1011,15 +1011,11 @@ class MonitorTab(QWidget):
         # Required Marks held steady: a mark OK in the last mark_hold_ms stays OK.
         marks = self._mark_hold.update(marks, bool(detections), time.monotonic(),
                                        self._ctx.settings["mark_hold_ms"] / 1000.0)
-        missing = held_missing(marks)
         ocr = held_short_name(marks)
         # NG (zoom) only for a clear wrong read; not read is STANDBY with an amber note.
         issue = f"Short name: read {ocr['text']} ≠ {ocr['expected']}" if ocr and ocr["state"] == "ng" else ""
         unread = bool(ocr) and ocr["state"] == "unreadable"
-        warning = [tr(f"Missing: {', '.join(missing)}")] if missing else []
-        if issue:
-            warning.append(tr(issue))
-        self._set_warning(self.missing_label, "   ·   ".join(warning))
+        self._set_warning(self.missing_label, tr(issue) if issue else "")
         layout = self._ctx.filters.layout_warnings(detections)
         notes = [tr(f"Layout: {'; '.join(layout)}")] if layout else []
         if unread:

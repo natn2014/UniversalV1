@@ -448,13 +448,15 @@ class MarkHoldMonitor(TabsTest):
             clock[0] = 101.6
             tab.on_frame(image, [det("e_mark")], [])  # gone for more than a second
             self.assertEqual(tab._latch.state, "RED")
-            self.assertEqual(tab.missing_label.text(), "Missing: tis_mark")
+            self.assertEqual(tab.missing_label.text(), "")  # the per-class list was dropped; verdict still flips
             self.assertEqual(tab.mark_table.item(1, 3).text(), "NG")
         tab.deleteLater()
 
 
 class MonitorMissing(TabsTest):
-    def test_missing_marks_shown_and_ng(self):
+    def test_missing_marks_still_ng_without_a_label(self):
+        """The Monitor no longer lists missing classes as text (removed per request),
+        but the Required Marks table and verdict still reflect them."""
         tab = MonitorTab(self.ctx)
         image = QImage(200, 100, QImage.Format_RGB888)
         image.fill(QColor("#202020"))
@@ -464,7 +466,7 @@ class MonitorMissing(TabsTest):
         tab._reset_judgement()
         tab.on_frame(image, [det("e_mark")], [])
         self.assertEqual(tab._latch.state, "RED")
-        self.assertEqual(tab.missing_label.text(), "Missing: tis_mark")
+        self.assertEqual(tab.missing_label.text(), "")
         self.assertEqual([d["class_name"] for d in self.ctx.last_detections], ["e_mark"])
         tab._reset_judgement()
         tab.on_frame(image, [det("e_mark"), det("tis_mark")], [])
