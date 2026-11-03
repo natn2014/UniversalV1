@@ -29,6 +29,7 @@ from ..paths import ROOT_DIR
 from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
 from ..vision.base import Tool
 from .layout import bottom_bar, make_card, top_bar
+from .touch_input import attach_keyboard, attach_numpad
 
 TOUCH_HEIGHT = 48
 
@@ -572,6 +573,7 @@ class ToolParamsForm(QWidget):
             spin.setRange(-10 ** 9, 10 ** 9)
             spin.setValue(value)
             spin.valueChanged.connect(lambda v, k=key: self._write(k, int(v)))
+            attach_numpad(spin, _title(key))
             return spin
         if isinstance(value, float):
             spin = QDoubleSpinBox()
@@ -580,10 +582,12 @@ class ToolParamsForm(QWidget):
             spin.setSingleStep(0.1 if abs(value) < 10 else 1.0)
             spin.setValue(value)
             spin.valueChanged.connect(lambda v, k=key: self._write(k, float(v)))
+            attach_numpad(spin, _title(key))
             return spin
         if isinstance(value, str):
             edit = QLineEdit(value)
             edit.textChanged.connect(lambda v, k=key: self._write(k, v))
+            attach_keyboard(edit, _title(key))
             return edit
         return None
 

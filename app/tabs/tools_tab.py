@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
-    QInputDialog,
     QLabel,
     QPushButton,
     QScrollArea,
@@ -52,6 +51,7 @@ from ..vision.calibration import calibrate_from_width
 from ..vision.runner import run_tools
 from ..vision.total import total_state
 from ..widgets.layout import SIDE_PANEL_WIDTH, VIDEO_MIN_SIZE, bottom_bar, make_card, top_bar
+from ..widgets.touch_input import attach_numpad, get_double
 from ..widgets.tool_overlay import draw_overlay, overlay_pen, tool_value_text
 from ..widgets.tool_params import (
     TOUCH_HEIGHT,
@@ -241,6 +241,7 @@ class ToolsTab(QWidget):
         spin.setMinimumHeight(TOUCH_HEIGHT)
         check.toggled.connect(handler)
         spin.valueChanged.connect(handler)
+        attach_numpad(spin, f"{caption} Limit")
         return check, spin
 
     def _build_layout(self) -> None:
@@ -813,7 +814,7 @@ class ToolsTab(QWidget):
         self._update_pick_text()
 
     def _on_calibrate_clicked(self) -> None:
-        mm, ok = QInputDialog.getDouble(self, "Calibrate mm", "Known size of the feature (mm):", 5.0, 0.01, 10000.0, 2)
+        mm, ok = get_double(self, "Calibrate mm", "Known size of the feature (mm):", 5.0, 0.01, 10000.0, 2)
         if ok and mm > 0:
             self._pending_mm = mm
             self._enter_mode("calibrate", "Drag across the feature of known size (edge to edge)")

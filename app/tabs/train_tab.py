@@ -9,7 +9,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QListWidget,
     QMessageBox,
@@ -28,6 +27,7 @@ from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
 from ..training import TrainingWorker
 from ..widgets.annotated_image import AnnotatedImageWidget
 from ..widgets.layout import bottom_bar, top_bar
+from ..widgets.touch_input import get_text
 from ..yolo_labels import pixel_box_to_yolo, read_yolo_label_file, write_yolo_label_file, yolo_box_to_pixel
 
 
@@ -219,7 +219,7 @@ class TrainTab(QWidget):
     def _ask_class_name(self, title: str, text: str, others: list) -> Optional[str]:
         """Asks until the name is valid against `others`; None if cancelled."""
         while True:
-            name, ok = QInputDialog.getText(self, title, "Class name:", text=text)
+            name, ok = get_text(self, title, "Class name:", text=text)
             if not ok:
                 return None
             problem = validate_class_name(name, others)

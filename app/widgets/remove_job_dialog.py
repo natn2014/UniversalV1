@@ -3,6 +3,7 @@ from typing import Callable, Optional
 from PySide6.QtWidgets import QComboBox, QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout
 
 from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
+from .touch_input import attach_keyboard
 
 
 class RemoveJobDialog(QDialog):
@@ -42,6 +43,7 @@ class RemoveJobDialog(QDialog):
         self.prompt_label.setWordWrap(True)
         self.confirm_field = QLineEdit()
         self.confirm_field.setPlaceholderText("Type the part number here")
+        attach_keyboard(self.confirm_field, "Type to Confirm")
 
         card = QFrame()
         card.setObjectName("card")

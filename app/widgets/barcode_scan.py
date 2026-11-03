@@ -9,6 +9,7 @@ from ..barcode import decode_scanned_text
 from ..camera import CAMERA_BACKEND
 from ..optional_deps import zbar_decode
 from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
+from .touch_input import attach_keyboard
 
 
 class BarcodeWorker(QThread):
@@ -126,6 +127,7 @@ class BarcodeScanDialog(QDialog):
 
         self.manual_field = QLineEdit()
         self.manual_field.setPlaceholderText("Or type part number manually")
+        attach_keyboard(self.manual_field, "Part Number")
         self.manual_load_button = QPushButton("Load")
         self.manual_load_button.setIcon(make_icon("folder", "#ffffff"))
         self.manual_load_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["start"]))

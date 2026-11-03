@@ -39,6 +39,7 @@ from ..roi import roi_to_pixels
 from ..theme import AI_COLOR, NG_RED, OK_GREEN, RUN_BUTTON_STYLES, STANDBY_YELLOW, action_button_qss, badge_icon, make_icon
 from ..widgets.layout import bottom_bar, make_card, row, tip_label, top_bar
 from ..widgets.tool_overlay import draw_label, overlay_pen
+from ..widgets.touch_input import attach_keyboard, attach_numpad
 from ..widgets.video_view import VideoView
 from .settings.image_card import make_image_card
 from .settings.relay_card import make_relay_card
@@ -135,6 +136,7 @@ class SettingsTab(QWidget):
         if self.ok_beep_duration_spinbox.value() != settings["ok_beep_ms"]:
             settings.set(ok_beep_ms=self.ok_beep_duration_spinbox.value())
         self.ok_beep_duration_spinbox.valueChanged.connect(tower.set_ok_beep_ms)
+        attach_numpad(self.ok_beep_duration_spinbox, "OK Beep Duration")
 
         self.ok_beep_test_button = QPushButton("Test")
         self.ok_beep_test_button.setIcon(make_icon("speaker_on", "#e0e0e0"))
@@ -149,6 +151,7 @@ class SettingsTab(QWidget):
             settings.set(state_hold_ms=self.state_hold_spinbox.value())
         self.state_hold_spinbox.valueChanged.connect(
             lambda value: settings.set(state_hold_ms=value))
+        attach_numpad(self.state_hold_spinbox, "State Hold")
 
         self.mark_hold_spinbox = self._make_setting_spinbox("mark_hold_ms", 0, 5000, 100, " ms")
 
@@ -159,6 +162,7 @@ class SettingsTab(QWidget):
         self.slow_tool_spinbox.setSuffix(" Hz")
         self.slow_tool_spinbox.setValue(settings["slow_tool_hz"])
         self.slow_tool_spinbox.valueChanged.connect(self._on_slow_tool_hz_changed)
+        attach_numpad(self.slow_tool_spinbox, "Slow Tool Rate")
 
         self.autocapture_max_spinbox = self._make_setting_spinbox(
             "autocapture_max_images", 1, 100000, 50, " images")
@@ -188,6 +192,7 @@ class SettingsTab(QWidget):
         self.max_detections_spinbox.setMaximum(100)
         self.max_detections_spinbox.setValue(0)
         self.max_detections_spinbox.valueChanged.connect(self.on_max_detections_changed)
+        attach_numpad(self.max_detections_spinbox, "Max Detections")
 
         self.target_class_label = QLabel("Target Classes:")
         self.target_class_combo_1 = QComboBox()
@@ -265,6 +270,7 @@ class SettingsTab(QWidget):
             "What the short name must read (OCR): an uppercase letter and a digit, or two digits. "
             "A different or unreadable short name is NG. Empty = only check that it is there.")
         self.short_name_edit.textEdited.connect(self._on_short_name_edited)
+        attach_keyboard(self.short_name_edit, "Short Name")
         self.short_name_edit.setEnabled(False)
         self.short_name_status = QLabel()
         self.short_name_status.setObjectName("hint")
@@ -509,6 +515,7 @@ class SettingsTab(QWidget):
         self.ng_log_limit_spinbox.setSpecialValueText("No limit")
         self.ng_log_limit_spinbox.setValue(settings["ng_log_max_gb"])
         self.ng_log_limit_spinbox.valueChanged.connect(lambda v: settings.set(ng_log_max_gb=round(v, 1)))
+        attach_numpad(self.ng_log_limit_spinbox, "NG Log Limit")
         self._machine_reloaders.append(lambda: self.ng_log_limit_spinbox.setValue(settings["ng_log_max_gb"]))
         body.addLayout(row(tip_label("Keep at most:", "The NG images in the Log are kept under this size: when "
                                      "it is exceeded, the oldest are deleted first. 0 = no limit.",
@@ -720,6 +727,7 @@ class SettingsTab(QWidget):
         spinbox.setSuffix(suffix)
         spinbox.setValue(settings[key])
         spinbox.valueChanged.connect(lambda value: settings.set(**{key: value}))
+        attach_numpad(spinbox, key.replace("_", " ").title())
         return spinbox
 
     @staticmethod
@@ -847,6 +855,7 @@ class SettingsTab(QWidget):
             filters.mark_conf[class_name] = DEFAULT_MARK_CONF / 100.0
             checkbox.toggled.connect(lambda checked, cn=class_name: self._toggle_required(cn, checked))
             spin.valueChanged.connect(lambda value, cn=class_name: self._on_mark_conf_changed(cn, value))
+            attach_numpad(spin, f"{class_name} Confidence")
             self.required_table.insertRow(row_index)
             self.required_table.setCellWidget(row_index, 0, checkbox)
             self.required_table.setCellWidget(row_index, 1, spin)

@@ -20,6 +20,7 @@ from ...i18n import tr, translator
 from ...relay_io import CHANNELS, DI_ROLES, DO_ROLES, PROTOCOLS
 from ...theme import make_icon
 from ...widgets.layout import make_card, row, tip_label
+from ...widgets.touch_input import attach_keyboard, attach_numpad
 
 # I/O lamps: light blue when on, so they never read as the OK green / NG red.
 LAMP_ON = "#4fc3f7"
@@ -36,6 +37,15 @@ def _lamp() -> QLabel:
 
 def _set_lamp(lamp: QLabel, on: bool) -> None:
     lamp.setStyleSheet(f"background: {LAMP_ON if on else LAMP_OFF}; border: 2px solid #15181c; border-radius: 11px;")
+
+
+def _ip_error(text: str) -> str:
+    """None if `text` is a valid IPv4/IPv6 address, else a message explaining why."""
+    try:
+        ipaddress.ip_address(text)
+    except ValueError:
+        return "Not an IP address, e.g. 192.168.1.201"
+    return None
 
 
 def make_relay_card(ctx: AppContext, parent: QWidget):
@@ -55,10 +65,13 @@ def make_relay_card(ctx: AppContext, parent: QWidget):
     status.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
     host = QLineEdit()
     host.setPlaceholderText("192.168.1.201")
+    attach_keyboard(host, "Relay Board IP Address", allowed_chars="0123456789.", validate=_ip_error)
     port = QSpinBox()
     port.setRange(1, 65535)
+    attach_numpad(port, "Relay Board Port")
     address = QSpinBox()
     address.setRange(1, 247)
+    attach_numpad(address, "Relay Board Address")
     protocol = QComboBox()
     for value, text in PROTOCOLS:
         protocol.addItem(text, value)
@@ -79,11 +92,10 @@ def make_relay_card(ctx: AppContext, parent: QWidget):
 
     def host_done() -> None:
         text = host.text().strip()
-        try:
-            ipaddress.ip_address(text)
-        except ValueError:
+        error = _ip_error(text)
+        if error:
             host.setStyleSheet("border: 2px solid #c0392b;")
-            host.setToolTip("Not an IP address, e.g. 192.168.1.201")
+            host.setToolTip(error)
             return
         host.setStyleSheet("")
         settings.set(relay_host=text)
@@ -147,6 +159,7 @@ def make_relay_card(ctx: AppContext, parent: QWidget):
         "Outputs (DO)", "OK / NG: on while the Monitor shows that result (or a pulse, below).", DO_ROLES, "do", True)
     pulse = QSpinBox()
     pulse.setRange(0, 10000)
+    attach_numpad(pulse, "DO Pulse Duration")
     pulse.setSingleStep(100)
     pulse.setSuffix(" ms")
     pulse.setSpecialValueText("Hold")
