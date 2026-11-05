@@ -31,8 +31,9 @@ from ..autocapture import (
 from ..context import AppContext
 from ..i18n import tr, translator, trf
 from ..jobs import inspection_types
+from ..barcode import part_label
 from ..marking.short_name import pad_box
-from ..judgement import InspectionCycle, MarkHold, held_short_name, held_state
+from ..judgement import InspectionCycle, MarkHold, held_missing, held_short_name, held_state
 from ..ng_log import save_ng_image
 from ..paths import CAPTURES_IMAGES_DIR, CAPTURES_LABELS_DIR, NO_PART_NAME
 from ..roi import detections_in_crop, roi_to_pixels
@@ -78,6 +79,7 @@ class MonitorTab(QWidget):
         # NG short name, zoomed on the image until the result is no longer NG:
         # {"crop": QImage, "box": (x1, y1, x2, y2), "text": caption}.
         self._short_name_zoom: Optional[dict] = None
+        self._short_name_ng = False  # this NG is the short name's alone (relay "NG: short name")
         self._kinds_shown: Optional[list] = None
         # Held judgement, trigger mode and the Confirm NG latch (relay inputs).
         self._latch = InspectionCycle()
@@ -458,7 +460,7 @@ class MonitorTab(QWidget):
     # --- Info strip, judgement and buzzer toggle ------------------------
 
     def _refresh_monitor_info(self, *_) -> None:
-        part = self._ctx.current_part_no or "—"
+        part = part_label(self._ctx.current_part_no) or "—"
         model_path = self._ctx.model_path
         model = Path(model_path).stem if model_path else "—"
         # Rich text (for the red tower warning) collapses plain spaces.
@@ -528,6 +530,7 @@ class MonitorTab(QWidget):
         self._latch.reset()
         self._mark_hold.reset()
         self._short_name_zoom = None
+        self._short_name_ng = False
         self._set_short_name_tile(None)
         self._update_judgement_banner("YELLOW")
         self._refresh_cycle_prompt()
@@ -551,7 +554,7 @@ class MonitorTab(QWidget):
         """Banner, tower light and relay outputs follow the held state."""
         self._update_judgement_banner(state)
         self._ctx.tower.update_state(state)
-        self._ctx.relay.update_state(state)
+        self._ctx.relay.update_state(state, short_name_ng=self._short_name_ng)
         self._refresh_cycle_prompt()
 
     def _refresh_cycle_prompt(self) -> None:
@@ -1034,6 +1037,11 @@ class MonitorTab(QWidget):
             if counted:
                 self._count_cycle(counted)
             self._keep_short_name_zoom(image, detections, ocr, issue, state)
+            # Required marks all OK but the short name read wrong: kept while the NG lasts.
+            if state != "RED":
+                self._short_name_ng = False
+            elif issue and not held_missing(marks):
+                self._short_name_ng = True
             if self._short_name_zoom is not None:
                 self._set_short_name_tile("RED")  # wrong / unreadable: red while the NG lasts
             else:

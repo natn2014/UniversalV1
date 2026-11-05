@@ -1,0 +1,45 @@
+{
+  "part_no": "1500D/H24/I-MM-3EFHX-A3/D12",
+  "model_path": "/home/jetson/dev/UniversalV1/weights/MarkV9_best.pt",
+  "confidence_threshold": 0.6,
+  "max_detections": 3,
+  "target_class_1": null,
+  "target_class_2": null,
+  "target_gate": "OR",
+  "selected_classes": [
+    "short_name",
+    "sni_mark"
+  ],
+  "judge_mode": "required",
+  "required_classes": [
+    "short_name"
+  ],
+  "mark_conf": {
+    "short_name": 0.35
+  },
+  "check_layout": false,
+  "short_name_expected": "24",
+  "perspective": [
+    [
+      0.2374,
+      0.0
+    ],
+    [
+      0.8398,
+      0.0
+    ],
+    [
+      0.8739,
+      0.8956
+    ],
+    [
+      0.1677,
+      0.9299
+    ]
+  ],
+  "roi": null,
+  "autocapture_masters": [],
+  "tools": [],
+  "tools_gate": "AND",
+  "mm_per_px": null
+}

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import jobs
+from ..barcode import part_label
 from ..context import AppContext
 from ..i18n import tr, translator
 from ..theme import INSPECTION_TITLES, RUN_BUTTON_STYLES, action_button_qss, badges_icon, make_icon
@@ -98,7 +99,7 @@ class JobChangeTab(QWidget):
 
     @Slot(object)
     def _on_part_changed(self, part_no: Optional[str]) -> None:
-        self.part_config_label.setText(part_no if part_no is not None else "No part selected")
+        self.part_config_label.setText(part_label(part_no) if part_no is not None else "No part selected")
         self.refresh_job_buttons()
 
     @Slot()
@@ -147,7 +148,7 @@ class JobChangeTab(QWidget):
             model = Path(model_path).stem if model_path else tr("no model")
             # Tile shows the part, its model and a badge per kind of inspection;
             # the active job is highlighted.
-            button = QPushButton(f"{part_no}\n{model}")
+            button = QPushButton(f"{part_label(part_no)}\n{model}")
             button.setObjectName("jobButton")
             kinds = jobs.inspection_types(config)
             if kinds:

@@ -156,7 +156,8 @@ def make_relay_card(ctx: AppContext, parent: QWidget):
         "Inputs (DI)", "Trigger: judge one part per pulse. Confirm NG: an NG stays on until this input "
         "(or Confirm NG on the Monitor). Not used: ignored.", DI_ROLES, "di", False)
     do_card, do_body, do_lamps, do_combos = io_card(
-        "Outputs (DO)", "OK / NG: on while the Monitor shows that result (or a pulse, below).", DO_ROLES, "do", True)
+        "Outputs (DO)", "OK / NG: on while the Monitor shows that result (or a pulse, below). NG: short name: on "
+        "with NG only when every required mark is OK but the short name OCR read it wrong.", DO_ROLES, "do", True)
     pulse = QSpinBox()
     pulse.setRange(0, 10000)
     attach_numpad(pulse, "DO Pulse Duration")

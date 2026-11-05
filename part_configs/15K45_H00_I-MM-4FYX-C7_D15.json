@@ -1,8 +1,8 @@
 {
-  "part_no": "500D(23)",
+  "part_no": "15K45/H00/I-MM-4FYX-C7/D15",
   "model_path": "/home/jetson/dev/UniversalV1/weights/MarkV9_best.pt",
-  "confidence_threshold": 0.6,
-  "max_detections": 3,
+  "confidence_threshold": 0.0,
+  "max_detections": 0,
   "target_class_1": null,
   "target_class_2": null,
   "target_gate": "OR",
@@ -34,41 +34,39 @@
   ],
   "judge_mode": "required",
   "required_classes": [
-    "e_mark",
     "logo_agc",
     "m_code",
     "short_name",
     "tis_mark"
   ],
   "mark_conf": {
-    "e_mark": 0.4,
     "logo_agc": 0.4,
     "m_code": 0.4,
     "short_name": 0.4,
     "tis_mark": 0.4
   },
   "check_layout": false,
-  "short_name_expected": "23",
+  "short_name_expected": "00",
   "perspective": [
     [
-      0.1302,
-      0.2885
+      0.1662,
+      0.0463
     ],
     [
-      0.8424,
-      0.2885
+      0.7285,
+      0.0
     ],
     [
-      0.8264,
-      0.983
+      0.776,
+      0.7559
     ],
     [
-      0.1399,
-      0.9802
+      0.178,
+      0.806
     ]
   ],
   "roi": null,
-  "autocapture_masters": [],
+  "autocapture_masters": null,
   "tools": [],
   "tools_gate": "AND",
   "mm_per_px": null

@@ -1,5 +1,5 @@
 {
-  "part_no": "8850304144380",
+  "part_no": "1581D/H58/I-MM-4LFIMNX-A5/D15",
   "model_path": "/home/jetson/dev/UniversalV1/weights/MarkV9_best.pt",
   "confidence_threshold": 0.6,
   "max_detections": 3,
@@ -34,42 +34,40 @@
   ],
   "judge_mode": "required",
   "required_classes": [
-    "e_mark",
     "logo_agc",
     "m_code",
     "short_name",
     "tis_mark"
   ],
   "mark_conf": {
-    "e_mark": 0.4,
     "logo_agc": 0.4,
     "m_code": 0.4,
     "short_name": 0.4,
     "tis_mark": 0.4
   },
   "check_layout": false,
+  "short_name_expected": "58",
   "perspective": [
     [
-      0.1302,
-      0.2885
+      0.0786,
+      0.0806
     ],
     [
-      0.8424,
-      0.2885
+      0.7923,
+      0.0
     ],
     [
-      0.8264,
-      0.983
+      0.8175,
+      0.9062
     ],
     [
-      0.1399,
-      0.9802
+      0.1914,
+      0.9774
     ]
   ],
   "roi": null,
-  "autocapture_masters": [],
+  "autocapture_masters": null,
   "tools": [],
   "tools_gate": "AND",
-  "mm_per_px": null,
-  "short_name_expected": "23"
+  "mm_per_px": null
 }

@@ -244,6 +244,15 @@ class WithBoard(unittest.TestCase):
         self.relay.update_state(None)
         self.assertTrue(wait_for(lambda: self.fake.coils == 0))
 
+    def test_short_name_ng_output(self):
+        self.ctx.settings.set(relay_do_roles={"1": "ok", "2": "ng", "3": "ng_short_name"})
+        self.relay.update_state("RED")  # a missing mark: NG only
+        self.assertTrue(wait_for(lambda: self.fake.coils == 0b010))
+        self.relay.update_state("RED", short_name_ng=True)  # marks OK, short name wrong
+        self.assertTrue(wait_for(lambda: self.fake.coils == 0b110))
+        self.relay.update_state("GREEN", short_name_ng=True)  # ignored off NG
+        self.assertTrue(wait_for(lambda: self.fake.coils == 0b001))
+
     def test_pulse_outputs(self):
         self.ctx.settings.set(relay_do_pulse_ms=100)
         self.relay.update_state("GREEN")

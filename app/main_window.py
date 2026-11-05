@@ -241,6 +241,9 @@ class MainWindow(QWidget):
 
     @Slot(str)
     def _on_part_load_requested(self, part_no: str) -> None:
+        if part_no == self.ctx.current_part_no:
+            self.ctx.status.emit(f"'{part_no}' is already the current job.")
+            return
         config = jobs.load_part_config(part_no)
         if config is None:
             answer = QMessageBox.question(

@@ -25,7 +25,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 
 CHANNELS = range(1, 9)
 DI_ROLES = (("none", "Not used"), ("trigger", "Trigger"), ("confirm_ng", "Confirm NG"))
-DO_ROLES = (("none", "Not used"), ("ok", "OK"), ("ng", "NG"))
+DO_ROLES = (("none", "Not used"), ("ok", "OK"), ("ng", "NG"), ("ng_short_name", "NG: short name"))
 PROTOCOLS = (("rtu_tcp", "Modbus RTU over TCP"), ("tcp", "Modbus TCP"))
 POLL_S = 0.05
 RECONNECT_S = 3.0
@@ -228,7 +228,7 @@ class RelayIOController(QObject):
         self.di = 0
         self.do = 0
         self._wanted: Dict[int, bool] = {}
-        self._state: Optional[str] = None
+        self._state: Optional[tuple] = None  # (state, short_name_ng) last driven
         self._reported.connect(self._on_reported)
         settings.changed.connect(self._on_settings_changed)
 
@@ -253,8 +253,14 @@ class RelayIOController(QObject):
                     del self._wanted[channel]
                     if on:
                         self.write(channel, False)
-            state, self._state = self._state, None
-            self.update_state(state)
+            self._redrive()
+
+    def _redrive(self) -> None:
+        last, self._state = self._state, None
+        if last is not None:
+            self.update_state(*last)
+        else:
+            self.update_state(None)
 
     # --- Connection -----------------------------------------------------
 
@@ -284,9 +290,8 @@ class RelayIOController(QObject):
             self._set_connection(connected, text or self.text)
             if connected:
                 # Outputs back to the current result after a (re)connect.
-                state, self._state = self._state, None
                 self._wanted.clear()
-                self.update_state(state)
+                self._redrive()
         if do is not None and do != self.do:
             self.do = do
             self.do_changed.emit(do)
@@ -308,18 +313,21 @@ class RelayIOController(QObject):
         if self._thread is not None:
             self._thread.writes.put((channel, on))
 
-    def update_state(self, state: Optional[str]) -> None:
-        """OK DOs on while GREEN, NG DOs on while RED (or a pulse of
-        relay_do_pulse_ms when it is above 0)."""
-        if state == self._state:
+    def update_state(self, state: Optional[str], short_name_ng: bool = False) -> None:
+        """OK DOs on while GREEN, NG DOs on while RED, "NG: short name" DOs on
+        while RED because the short name read wrong with every other required
+        mark OK (or a pulse of relay_do_pulse_ms when it is above 0)."""
+        short_name_ng = short_name_ng and state == "RED"
+        if (state, short_name_ng) == self._state:
             return
-        self._state = state
+        self._state = (state, short_name_ng)
         pulse = self._settings["relay_do_pulse_ms"]
         for channel in CHANNELS:
             role = self.do_role(channel)
             if role == "none":
                 continue
-            on = (role == "ok" and state == "GREEN") or (role == "ng" and state == "RED")
+            on = ((role == "ok" and state == "GREEN") or (role == "ng" and state == "RED")
+                  or (role == "ng_short_name" and short_name_ng))
             if self._wanted.get(channel) != on:
                 self._wanted[channel] = on
                 self.write(channel, on)

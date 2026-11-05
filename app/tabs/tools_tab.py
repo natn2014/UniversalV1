@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..barcode import part_label
 from ..autocapture import qimage_to_array
 from ..context import AppContext
 from ..i18n import tr, translator
@@ -605,7 +606,7 @@ class ToolsTab(QWidget):
     def _refresh_info(self) -> None:
         mm = self._ctx.mm_per_px
         calibration = f"{mm:.4f} mm/px" if mm else tr("not calibrated")
-        part = self._ctx.current_part_no or "—"
+        part = part_label(self._ctx.current_part_no) or "—"
         self.info_label.setText(tr("Part: {}   ·   Tools: {}   ·   Scale: {}").format(part, len(self.tools), calibration))
         self.gate_button.setText(tr("Gate: {}").format(self._ctx.tools_gate))
         if self._mode is None:

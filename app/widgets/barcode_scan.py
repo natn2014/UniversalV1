@@ -5,7 +5,8 @@ from PySide6.QtCore import QRectF, QThread, Signal, Slot
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
-from ..barcode import decode_scanned_text
+from .. import jobs
+from ..barcode import match_part_no, part_label
 from ..camera import CAMERA_BACKEND
 from ..optional_deps import zbar_decode
 from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
@@ -53,8 +54,8 @@ class BarcodeWorker(QThread):
                 except Exception:
                     results = []
                 if results:
-                    raw_text = results[0].data.decode("utf-8", errors="ignore").strip()
-                    text = decode_scanned_text(raw_text)
+                    # Raw: the dialog turns it into a part number (match_part_no).
+                    text = results[0].data.decode("utf-8", errors="ignore").strip()
                     if text and text != self._last_emitted:
                         self._last_emitted = text
                         self.barcode_found.emit(text)
@@ -204,9 +205,16 @@ class BarcodeScanDialog(QDialog):
     def _on_frame(self, image: QImage) -> None:
         self.preview_widget.set_image(QPixmap.fromImage(image))
 
+    @staticmethod
+    def resolve(raw: str) -> str:
+        """A scan (camera, or a USB scanner typing into the field) as the saved
+        job it names, decoded from Code 39 whichever way it was encoded."""
+        return match_part_no(raw, [part for part, _, _ in jobs.list_saved_jobs()])
+
     @Slot(str)
-    def _on_barcode_found(self, text: str) -> None:
-        self.detected_field.setText(text)
+    def _on_barcode_found(self, raw: str) -> None:
+        text = self.resolve(raw)
+        self.detected_field.setText(part_label(text))  # the field below keeps the job's own name
         self.manual_field.setText(text)
         self.load_requested.emit(text)
 
@@ -216,8 +224,9 @@ class BarcodeScanDialog(QDialog):
 
     @Slot()
     def _on_manual_load(self) -> None:
-        text = self.manual_field.text().strip()
+        text = self.resolve(self.manual_field.text())
         if text:
+            self.manual_field.setText(text)
             self.load_requested.emit(text)
 
     @Slot()

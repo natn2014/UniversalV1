@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 
 from .. import optional_deps
-from ..barcode import decode_scanned_text
+from ..barcode import decode_scanned_text, match_part_no
 from .base import Tool, overlay_item, register
 
 Decoded = Tuple[str, str, List[List[float]]]  # text, symbology, polygon
@@ -66,8 +66,9 @@ class CodeTool(Tool):
         if found is None:
             return self.result(0, text="", extra={"reason": "no code"})
         raw, kind, poly = found
-        text = decode_scanned_text(raw)
         expected = self.part_no if self.use_job_part_no else self.expected
+        # A Code 39 '/' may be literal or an escape: read it as the expected text when one way gives it.
+        text = match_part_no(raw, [expected]) if expected else decode_scanned_text(raw)
         reason = ""
         if self.use_job_part_no and not expected:
             reason = "no job part number"

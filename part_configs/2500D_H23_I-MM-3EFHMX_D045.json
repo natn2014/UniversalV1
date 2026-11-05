@@ -7,45 +7,15 @@
   "target_class_2": null,
   "target_gate": "OR",
   "selected_classes": [
-    "as_class",
-    "asnzs",
-    "bis_isi",
-    "ccc_mark",
-    "date_code",
-    "dot",
-    "e_mark",
-    "glass_class",
-    "inmetro",
-    "laminated",
-    "lamisafe",
-    "letter_l",
-    "letter_t",
-    "logo_agc",
-    "logo_honda",
-    "logo_nissan",
-    "logo_toyota",
-    "m_code",
-    "plant_code",
     "short_name",
-    "sni_mark",
-    "temperlite",
-    "tis_mark",
-    "type_code"
+    "sni_mark"
   ],
   "judge_mode": "required",
   "required_classes": [
-    "e_mark",
-    "logo_agc",
-    "m_code",
-    "short_name",
-    "tis_mark"
+    "short_name"
   ],
   "mark_conf": {
-    "e_mark": 0.4,
-    "logo_agc": 0.4,
-    "m_code": 0.4,
-    "short_name": 0.4,
-    "tis_mark": 0.4
+    "short_name": 0.8
   },
   "check_layout": false,
   "short_name_expected": "23",

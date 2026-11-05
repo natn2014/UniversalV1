@@ -288,6 +288,8 @@ TH = {
     "Trigger: judge one part per pulse. Confirm NG: an NG stays on until this input (or Confirm NG on the Monitor). Not used: ignored.":
         "ทริกเกอร์: ตัดสินหนึ่งชิ้นต่อหนึ่งพัลส์ ยืนยัน NG: NG ค้างไว้จนกว่าจะมีสัญญาณนี้ (หรือกด ยืนยัน NG ที่หน้าตรวจ) ไม่ใช้: ไม่สนใจ",
     "OK / NG: on while the Monitor shows that result (or a pulse, below).": "OK / NG: เปิดขณะหน้าตรวจแสดงผลนั้น (หรือเป็นพัลส์ ตั้งด้านล่าง)",
+    "OK / NG: on while the Monitor shows that result (or a pulse, below). NG: short name: on with NG only when every required mark is OK but the short name OCR read it wrong.": "OK / NG: เปิดขณะหน้าตรวจแสดงผลนั้น (หรือเป็นพัลส์ ตั้งด้านล่าง) NG: ชื่อย่อ: เปิดพร้อม NG เฉพาะเมื่อเครื่องหมายที่ต้องมีครบทุกตัว แต่ OCR อ่านชื่อย่อผิด",
+    "NG: short name": "NG: ชื่อย่อ",
     "Hold = on while the result lasts. A time = a pulse of that length per result.": "ค้างไว้ = เปิดตลอดที่ผลยังอยู่ ตั้งเวลา = เปิดเป็นพัลส์ตามเวลานั้นต่อหนึ่งผล",
 
     # --- Settings: auto capture ----------------------------------------------

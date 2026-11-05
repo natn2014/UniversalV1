@@ -6,6 +6,7 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QToolButton, QVBoxLayout, QWidget
 
 from ..i18n import tr, translator
+from ..barcode import part_label
 from ..ng_log import collect_ng_log, full_image_for_thumb, ng_stamp_text
 from ..paths import NG_THUMB_SIZE, NG_THUMBS_PER_PART
 from ..theme import make_icon
@@ -80,7 +81,7 @@ class LogTab(QWidget):
             group_layout = QVBoxLayout(group)
             group_layout.setContentsMargins(0, 0, 0, 8)
             header = QLabel(
-                f"Part: {part_name}   ·   NG {count}   ·   Last: {ng_stamp_text(thumbs[0])}")
+                f"Part: {part_label(part_name)}   ·   NG {count}   ·   Last: {ng_stamp_text(thumbs[0])}")
             header.setObjectName("ngPartHeader")
             group_layout.addWidget(header)
 
@@ -105,5 +106,5 @@ class LogTab(QWidget):
         button.setText(stamp_text)
         button.setCursor(Qt.PointingHandCursor)
         button.clicked.connect(
-            lambda: self.image_requested.emit(full_image, f"NG  ·  {part_name}  ·  {stamp_text}"))
+            lambda: self.image_requested.emit(full_image, f"NG  ·  {part_label(part_name)}  ·  {stamp_text}"))
         return button

@@ -378,7 +378,7 @@ class Tabs(unittest.TestCase):
         tab = MonitorTab(self.ctx)
         tower, relay = [], []
         self.ctx.tower.update_state = tower.append
-        self.ctx.relay.update_state = relay.append
+        self.ctx.relay.update_state = lambda st, short_name_ng=False: relay.append((st, short_name_ng))
         image = QImage(400, 300, QImage.Format_RGB888)
         image.fill(QColor("#ffffff"))
         tab._reset_judgement()
@@ -389,10 +389,10 @@ class Tabs(unittest.TestCase):
                 clock[0] = t
                 tab.on_frame(image, part(o), [])
                 self.assertNotEqual(tower[-1], "GREEN", t)
-            self.assertEqual(tower[-1], "RED")
+            self.assertEqual((tower[-1], relay[-1]), ("RED", ("RED", True)))  # NG from the short name alone
             clock[0] = 1.4
             tab.on_frame(image, part(ocr("ok", "48", "48")), [])
-            self.assertEqual((tower[-1], relay[-1]), ("GREEN", "GREEN"))
+            self.assertEqual((tower[-1], relay[-1]), ("GREEN", ("GREEN", False)))
         tab.deleteLater()
 
     def test_monitor_ng_zoom(self):
