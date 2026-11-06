@@ -14,6 +14,12 @@ DEFAULT_APP_SETTINGS = {
     "state_hold_ms": 1000,
     # Camera capture size "WxH"; falls back to 640x480 if the camera can't.
     "camera_resolution": "1920x1080",
+    # Training options (Train tab): augmentation preset, flips, epochs.
+    # Mirror defaults off: it breaks printed text and left/right parts.
+    "train_augment": "light",
+    "train_mirror": False,
+    "train_flip_ud": False,
+    "train_epochs": 50,
     # OK/NG cycle counters, persisted so a kiosk restart doesn't lose them.
     "ok_count": 0,
     "ng_count": 0,

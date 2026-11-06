@@ -13,7 +13,12 @@
     "NoTape",
     "WhiteTape"
   ],
-  "roi": null,
+  "roi": [
+    0.1324,
+    0.0603,
+    0.9254,
+    0.9166
+  ],
   "perspective": [
     [
       0.1302,

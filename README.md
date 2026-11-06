@@ -37,7 +37,8 @@ Recorded on the real station, with the live camera and a real harness.
   - Jobs are switched with touch tiles or a barcode scanned by the camera (Code 39 / AIM extended).
 - **Capture and Train:**
   - **Capture** saves frames with YOLO labels.
-  - The Train tab lets you correct a box's class and fine-tune the model on the device.
+  - The Train tab lets you draw, delete and correct boxes, and fine-tune the model on the device.
+  - **Training Options**: augmentation preset (Off / Light / Strong), mirror and upside-down flips (off by default), epochs, and a preview of the images exactly as the trainer sees them.
 - **Kiosk mode:**
   - Starts full screen on boot through a systemd user service.
   - Reloads the last job automatically.
@@ -91,34 +92,30 @@ The window opens full screen. Choose a model and camera in **Settings**, or pick
 
 ## Kiosk autostart (boot → app)
 
-1. Install the user service:
+Run once, as the station user (not with `sudo`):
 
-   ```bash
-   mkdir -p ~/.config/systemd/user
-   cp deploy/wire-harness-detector.service ~/.config/systemd/user/
-   systemctl --user daemon-reload
-   systemctl --user enable --now wire-harness-detector.service
-   ```
+```bash
+./deploy/install-autostart.sh --now
+```
 
-   The service file contains absolute paths (`/home/orin_nano/dev/Wire_harness_module`). Edit them if you clone the repo somewhere else.
+This:
+- installs and enables a systemd **user** service (`wire-harness-detector`) that starts the app full screen when the desktop session comes up, and restarts it if it crashes;
+- sets the screen to never blank, dim, lock or sleep;
+- checks that GDM autologin is on for this user. If it isn't, it prints the two lines to add under `[daemon]` in `/etc/gdm3/custom.conf`: `AutomaticLoginEnable=true` and `AutomaticLogin=<user>`.
 
-2. Enable automatic login, so the desktop session and the app start without a keyboard. In `/etc/gdm3/custom.conf`, under `[daemon]`:
+The service file is a template (`deploy/wire-harness-detector.service`); the script fills in this repo's path, so the repo can live anywhere. It has no `DISPLAY` line on purpose, because the X display number can change between boots.
 
-   ```ini
-   AutomaticLoginEnable = true
-   AutomaticLogin = orin_nano
-   ```
+Useful commands:
 
-3. Useful commands:
+```bash
+./deploy/install-autostart.sh status                    # state + last log lines
+systemctl --user restart wire-harness-detector          # restart the app
+systemctl --user stop    wire-harness-detector          # before running main.py by hand
+journalctl --user-unit wire-harness-detector -f         # live log
+./deploy/install-autostart.sh uninstall                 # remove autostart
+```
 
-   ```bash
-   systemctl --user status  wire-harness-detector.service
-   systemctl --user restart wire-harness-detector.service
-   systemctl --user stop    wire-harness-detector.service   # before running main.py by hand
-   journalctl --user -u wire-harness-detector.service -f    # live log
-   ```
-
-Only one copy of the app can use the camera and tower light at a time. Stop the service before starting `main.py` manually.
+Only one copy of the app can run at a time, because only one can use the camera and tower light. A second copy shows "already running" and exits, so stop the service before starting `main.py` manually.
 
 ## Project layout
 
@@ -192,7 +189,8 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
   - เลือกงานด้วยปุ่มบนจอ หรือสแกนบาร์โค้ดผ่านกล้อง (Code 39 / AIM extended)
 - **Capture และ Train:**
   - ปุ่ม **Capture** บันทึกภาพพร้อม Label รูปแบบ YOLO
-  - แท็บ Train ใช้แก้ไขคลาสของกรอบ และเทรนโมเดลต่อ (Fine-tune) บนเครื่องได้
+  - แท็บ Train ใช้วาด ลบ และแก้ไขคลาสของกรอบ และเทรนโมเดลต่อ (Fine-tune) บนเครื่องได้
+  - **Training Options:** เลือก Augmentation (Off / Light / Strong), กลับภาพซ้าย-ขวา / บน-ล่าง (ปิดไว้เป็นค่าเริ่มต้น), จำนวน Epoch และดูตัวอย่างภาพที่ใช้เทรนจริง
 - **โหมด Kiosk:**
   - เปิดเต็มจอเองเมื่อบูตเครื่อง ผ่าน systemd user service
   - โหลดงานล่าสุดให้อัตโนมัติ
@@ -235,30 +233,28 @@ python3 main.py
 
 ### เปิดโปรแกรมอัตโนมัติเมื่อบูตเครื่อง (Kiosk)
 
+รันครั้งเดียวด้วยผู้ใช้ของเครื่อง (ไม่ต้องใช้ `sudo`):
+
 ```bash
-mkdir -p ~/.config/systemd/user
-cp deploy/wire-harness-detector.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now wire-harness-detector.service
+./deploy/install-autostart.sh --now
 ```
 
-เปิด Auto Login ในไฟล์ `/etc/gdm3/custom.conf` ใต้หัวข้อ `[daemon]`:
-
-```ini
-AutomaticLoginEnable = true
-AutomaticLogin = orin_nano
-```
+สคริปต์จะ:
+- ติดตั้งและเปิดใช้ systemd user service (`wire-harness-detector`) ให้เปิดโปรแกรมเต็มจอเมื่อเข้าสู่หน้าจอ และเปิดใหม่เองหากโปรแกรมปิดตัวผิดปกติ
+- ตั้งหน้าจอไม่ให้ดับ ไม่หรี่ ไม่ล็อก และไม่พักเครื่อง
+- ตรวจว่าเปิด Auto Login ของ GDM แล้วหรือยัง หากยัง จะแสดง 2 บรรทัดที่ต้องเพิ่มใต้ `[daemon]` ในไฟล์ `/etc/gdm3/custom.conf`
 
 คำสั่งที่ใช้บ่อย:
 
 ```bash
-systemctl --user status  wire-harness-detector.service   # ดูสถานะ
-systemctl --user restart wire-harness-detector.service   # รีสตาร์ทโปรแกรม
-systemctl --user stop    wire-harness-detector.service   # หยุดก่อนเปิด main.py เอง
-journalctl --user -u wire-harness-detector.service -f    # ดู Log
+./deploy/install-autostart.sh status                    # ดูสถานะและ Log ล่าสุด
+systemctl --user restart wire-harness-detector          # รีสตาร์ทโปรแกรม
+systemctl --user stop    wire-harness-detector          # หยุดก่อนเปิด main.py เอง
+journalctl --user-unit wire-harness-detector -f         # ดู Log สด
+./deploy/install-autostart.sh uninstall                 # ยกเลิกการเปิดอัตโนมัติ
 ```
 
-> ไฟล์ service ระบุ path เต็ม (`/home/orin_nano/dev/Wire_harness_module`) หากติดตั้งไว้ที่อื่นต้องแก้ path ในไฟล์ด้วย และกล้องกับไฟสัญญาณใช้งานได้ครั้งละ 1 โปรแกรมเท่านั้น
+> เปิดโปรแกรมได้ครั้งละ 1 ตัวเท่านั้น (กล้องและไฟสัญญาณใช้ได้ทีละโปรแกรม) หากเปิดซ้ำจะขึ้นข้อความ "already running" แล้วปิดเอง
 
 ### การแก้ปัญหาเบื้องต้น
 

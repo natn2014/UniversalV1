@@ -1,13 +1,26 @@
+# systemd *user* unit: starts UniversalV1 full screen when user jetson's
+# desktop session comes up (GDM autologin). Template: install it with
+#   ./deploy/install-autostart.sh --now
+# which replaces @REPO@ with this repository's path.
+#
+# No DISPLAY line on purpose: the X display number can change between boots
+# (:0 / :1) and GNOME imports the right DISPLAY/XAUTHORITY into the user
+# manager before graphical-session.target is reached.
+
 [Unit]
-Description=Wire Harness Detection App
+Description=UniversalV1 vision inspection (kiosk)
 After=graphical-session.target
 PartOf=graphical-session.target
+# Stop retrying after 10 crashes in 5 minutes instead of looping forever.
+StartLimitIntervalSec=300
+StartLimitBurst=10
 
 [Service]
 Type=simple
+WorkingDirectory=@REPO@
+ExecStart=@REPO@/.venv/bin/python3 @REPO@/main.py
 Environment=QT_QPA_PLATFORM=xcb
-WorkingDirectory=/home/orin_nano/dev/Wire_harness_module
-ExecStart=/home/orin_nano/dev/Wire_harness_module/.venv/bin/python3 /home/orin_nano/dev/Wire_harness_module/main.py
+Environment=PYTHONUNBUFFERED=1
 Restart=on-failure
 RestartSec=5
 

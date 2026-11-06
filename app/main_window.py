@@ -1,10 +1,10 @@
 import sys
 from typing import Optional
 
-from PySide6.QtCore import Slot
+from PySide6.QtCore import QTimer, Slot
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QTabWidget, QVBoxLayout, QWidget
 
-from . import jobs
+from . import jobs, single_instance
 from .context import AppContext
 from .tabs.job_change_tab import JobChangeTab
 from .tabs.log_tab import LogTab
@@ -168,10 +168,32 @@ class MainWindow(QWidget):
         super().closeEvent(event)
 
 
+ALREADY_RUNNING_TEXT = (
+    "UniversalV1 is already running.\n\n"
+    "If it was started automatically, stop it first:\n"
+    "systemctl --user stop wire-harness-detector"
+)
+
+
+def _show_already_running(app: QApplication) -> None:
+    """Tells the user, then exits 0 (so systemd doesn't restart-loop). The
+    box closes itself, so a copy started without anyone watching can't hang."""
+    box = QMessageBox(QMessageBox.Warning, "UniversalV1", ALREADY_RUNNING_TEXT)
+    QTimer.singleShot(10000, box.accept)
+    box.exec()
+
+
 def main() -> None:
     app = QApplication(sys.argv)
     app.setStyleSheet(DARK_INDUSTRIAL_QSS)
+    lock = single_instance.acquire()
+    if lock is None:
+        print(ALREADY_RUNNING_TEXT.replace("\n\n", " ").replace("\n", " "), file=sys.stderr)
+        _show_already_running(app)
+        sys.exit(0)
     window = MainWindow()
     window.resize(1050, 720)
     window.showFullScreen()
-    sys.exit(app.exec())
+    code = app.exec()
+    lock.close()
+    sys.exit(code)

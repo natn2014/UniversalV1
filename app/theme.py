@@ -52,6 +52,22 @@ def _write_arrow_svgs() -> tuple:
 
 ARROW_UP_SVG, ARROW_DOWN_SVG = _write_arrow_svgs()
 
+
+def _write_check_svg() -> str:
+    """White tick for checked checkboxes (same reason as the arrows)."""
+    path = UI_ASSETS_DIR / "check.svg"
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">'
+        '<polyline points="3,8.5 6.5,12 13,4.5" fill="none" stroke="#ffffff" '
+        'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    )
+    if not path.exists() or path.read_text() != svg:
+        path.write_text(svg)
+    return path.as_posix()
+
+
+CHECK_SVG = _write_check_svg()
+
 DARK_INDUSTRIAL_QSS = f"""
 QWidget {{
     background-color: #15181c;
@@ -60,6 +76,26 @@ QWidget {{
 }}
 QLabel, QCheckBox, QRadioButton {{
     background: transparent;
+}}
+/* A visible box when unchecked too: an empty state must not look like
+   plain text (e.g. the "Mirror left-right" training switch). */
+QCheckBox {{
+    spacing: 10px;
+}}
+QCheckBox::indicator {{
+    width: 22px;
+    height: 22px;
+    border: 2px solid #7d8794;
+    border-radius: 4px;
+    background: #0b0d10;
+}}
+QCheckBox::indicator:checked {{
+    border-color: #5a9be6;
+    background: #1f5fb8;
+    image: url({CHECK_SVG});
+}}
+QCheckBox::indicator:disabled {{
+    border-color: #3a4048;
 }}
 QTabWidget::pane {{
     border: 1px solid #0b0d10;
