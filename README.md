@@ -63,7 +63,7 @@ A job can judge a dial gauge instead of marks: **Settings > AI Model > Judge by 
 - **No reading** (any of the four points not found): STANDBY, never NG.
 - **Images:** saved to the Log tab, annotated and tagged OVER or UNDER: one when it goes out of spec, and one more if it swings straight from OVER to UNDER or back. A gauge that stays out of spec saves nothing more.
 - **Position check:** the points must run left to right as Start, then Center and Tip, then End. The model's Start and End labels aren't trusted, only their positions. If no set of points fits, the job shows STANDBY with a note.
-- **Gauge Data tab** (gauge jobs only): one reading a second is saved to `gauge_logs/<part>/YYYY_MM_DD_log.csv` (Timestamp, Converted Value, QR Code Data). The tab shows a box plot for Box No.1-43 and each box's average from the last 1000 readings. The box number comes from the QR label in view.
+- **Gauge Data tab** (gauge jobs only): one reading a second is saved to `gauge_logs/<part>/YYYY_MM_DD_log.csv` (Timestamp, Converted Value, QR Code Data). The tab shows a box plot for Box No.1-43 and each box's average from every reading of the chosen day. Tap up to 3 days in the Days list to compare them side by side, one colour per day. The box number comes from the QR label in view.
 - Set an ROI around the gauge so it fills the model's view. If the camera is mounted upside down, turn on mirror and flip under Settings > Camera.
 
 The Train tab's **Training Options** set the augmentation preset, flips and epochs, with a preview of what the trainer sees.

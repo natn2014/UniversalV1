@@ -7,7 +7,7 @@ import math
 import os
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from unittest import mock
 
@@ -450,14 +450,17 @@ class App(unittest.TestCase):
         self.assertEqual(self.ctx.settings["ng_count"], 1)
 
     def test_readings_are_recorded_but_not_in_preview(self):
-        before = len(self.ctx.gauge_log.rows)
+        path = gauge_log_mod.daily_log_path(None, datetime.now())
+        def recorded():
+            return sum(len(v) for v in gauge_log_mod.read_day(path).values())
+        before = recorded()
         self.frames(50, 5)
-        self.assertEqual(len(self.ctx.gauge_log.rows), before + 1)  # 1 a second, not 1 a frame
+        self.assertEqual(recorded(), before + 1)  # 1 a second, not 1 a frame
         self.ctx.gauge_log._last_at = float("-inf")
         self.monitor._reset_judgement()
         self.monitor._preview = True
         self.frames(50, 5)
-        self.assertEqual(len(self.ctx.gauge_log.rows), before + 1)
+        self.assertEqual(recorded(), before + 1)
 
     def test_gauge_data_tab_only_for_gauge_jobs(self):
         index = self.win.tabs.indexOf(self.win.gauge_data_tab)
@@ -522,6 +525,10 @@ class DataRecord(unittest.TestCase):
         self.log = gauge_log_mod.GaugeDataLog()
         self.log.set_part("P1")
 
+    def today_values(self, box):
+        path = gauge_log_mod.daily_log_path(self.log.part, datetime.now())
+        return gauge_log_mod.read_day(path).get(box, [])
+
     def test_box_label_matches_the_original(self):
         self.assertEqual(gauge_log_mod.next_box_label("Box No.38"), "Box No.39")
         self.assertEqual(gauge_log_mod.next_box_label("Box No.43"), "Box No.1")
@@ -540,7 +547,7 @@ class DataRecord(unittest.TestCase):
         self.assertTrue(self.log.record(1.0, 10.0))
         self.assertFalse(self.log.record(2.0, 10.5))
         self.assertTrue(self.log.record(3.0, 11.0))
-        self.assertEqual([r[1] for r in self.log.rows], [1.0, 3.0])
+        self.assertEqual(self.today_values("N/A"), [1.0, 3.0])
 
     def test_qr_ignored_until_the_gauge_is_read(self):
         self.log.set_qr("Box No.7")
@@ -549,31 +556,84 @@ class DataRecord(unittest.TestCase):
         self.log.set_qr("Box No.7")
         self.assertEqual(self.log.qr, "Box No.8")
         self.log.record(1.0, 2.0)
-        self.assertEqual(self.log.rows[-1][2], "Box No.8")
+        self.assertEqual(self.today_values("Box No.8"), [1.0])
 
-    def test_buffer_keeps_the_last_1000(self):
+    def test_every_reading_of_the_day_counts(self):
         for i in range(1005):
             self.log.record(float(i), float(i) * 2)
-        self.assertEqual(len(self.log.rows), 1000)
-        self.assertEqual(self.log.rows[0][1], 5.0)
+        cache = gauge_log_mod.DayStatsCache()
+        stats = cache.get("P1", datetime.now().date())
+        self.assertEqual(stats["N/A"]["count"], 1005)
+        self.assertEqual(stats["N/A"]["med"], 502.0)
 
-    def test_restart_brings_back_todays_rows_and_skips_damage(self):
+    def test_damaged_line_is_skipped(self):
         self.log.record(1.5, 0.0)
         path = gauge_log_mod.daily_log_path("P1", datetime.now())
-        with open(path, "a") as f:
-            f.write("2026-01-01 00:00:00,not-a-num")  # power lost mid-line
-        again = gauge_log_mod.GaugeDataLog()
-        again.set_part("P1")
-        self.assertEqual([r[1] for r in again.rows], [1.5])
+        with open(path, "ab") as f:
+            f.write(b"2026-01-01 00:00:00,not-a-num\n\xff\xfe,1\n2026-01-01 00:00:0")  # power lost mid-line
+        self.assertEqual(gauge_log_mod.read_day(path), {"N/A": [1.5]})
 
     def test_jobs_are_separate(self):
         self.log.record(1.0, 0.0)
         self.log.set_part("P2")
-        self.assertEqual(len(self.log.rows), 0)
+        self.assertEqual(self.today_values("N/A"), [])
+
+    def test_days_newest_first_and_other_files_ignored(self):
+        self.log.record(1.0, 0.0, datetime(2026, 11, 7, 8))
+        self.log.record(1.0, 2.0, datetime(2026, 11, 9, 8))
+        self.log.record(1.0, 4.0, datetime(2026, 11, 8, 8))
+        (Path(self.tmp.name) / "P1" / "notes_log.csv").write_text("x")
+        self.assertEqual(gauge_log_mod.available_days("P1"), [date(2026, 11, 9), date(2026, 11, 8), date(2026, 11, 7)])
+        self.assertEqual(gauge_log_mod.available_days("no such job"), [])
+
+    def test_cache_reads_a_day_again_only_when_it_changed(self):
+        day = datetime(2026, 11, 9, 8)
+        self.log.record(1.0, 0.0, day)
+        cache = gauge_log_mod.DayStatsCache()
+        with mock.patch.object(gauge_log_mod, "read_day", wraps=gauge_log_mod.read_day) as reads:
+            cache.get("P1", day.date())
+            cache.get("P1", day.date())
+            self.assertEqual(reads.call_count, 1)
+            self.log.record(3.0, 2.0, day)
+            self.assertEqual(cache.get("P1", day.date())["N/A"]["count"], 2)
+            self.assertEqual(reads.call_count, 2)
+        self.assertEqual(cache.get("P1", date(2026, 1, 1)), {})
 
     def test_summary_lowest_first(self):
-        rows = [("t", 3.0, "Box No.1"), ("t", 1.0, "Box No.2"), ("t", 2.0, "Box No.2")]
-        self.assertEqual(gauge_log_mod.box_summary(rows), [("Box No.2", 1.5), ("Box No.1", 3.0)])
+        stats = gauge_log_mod.day_stats({"Box No.1": [3.0], "Box No.2": [1.0, 2.0]})
+        self.assertEqual(gauge_log_mod.box_summary(stats), [("Box No.2", 1.5), ("Box No.1", 3.0)])
+
+    def test_compare_table_is_in_box_order_with_a_gap_for_a_missing_box(self):
+        from app.tabs.gauge_data_tab import summary_table
+        first = gauge_log_mod.day_stats({"Box No.10": [1.0], "Box No.2": [9.0], "N/A": [5.0]})
+        second = gauge_log_mod.day_stats({"Box No.2": [3.0]})
+        headers, rows = summary_table([(0, date(2026, 11, 8), first), (1, date(2026, 11, 9), second)])
+        self.assertEqual(headers, ["#", "11-08", "11-09"])
+        self.assertEqual(rows, [("2", [9.0, 3.0]), ("10", [1.0, None]), ("N/A", [5.0, None])])
+
+    def test_day_keeps_its_colour_and_a_fourth_is_refused(self):
+        from app.tabs.gauge_data_tab import DaySelection
+        one, two, three, four = (date(2026, 11, d) for d in (6, 7, 8, 9))
+        chosen = DaySelection(one)
+        self.assertFalse(chosen.toggle(one))  # the last one stays
+        self.assertTrue(chosen.toggle(two))
+        self.assertTrue(chosen.toggle(three))
+        self.assertTrue(chosen.full)
+        self.assertFalse(chosen.toggle(four))
+        self.assertTrue(chosen.toggle(two))
+        self.assertEqual(chosen.chosen(), [(0, one), (2, three)])  # three's colour is unchanged
+        self.assertTrue(chosen.toggle(four))
+        self.assertEqual(chosen.chosen(), [(0, one), (1, four), (2, three)])
+
+    def test_today_stays_today_after_midnight(self):
+        from app.tabs.gauge_data_tab import DaySelection
+        old, new = date(2026, 11, 8), date(2026, 11, 9)
+        chosen = DaySelection(old)
+        chosen.follow(old, new)
+        self.assertEqual(chosen.chosen(), [(0, new)])
+        chosen.toggle(old)
+        chosen.follow(old, new)  # both selected, e.g. the clock was set at boot
+        self.assertEqual(chosen.chosen(), [(0, new)])
 
     def test_real_qr_label(self):
         import cv2
@@ -582,8 +642,11 @@ class DataRecord(unittest.TestCase):
 
     def test_chart_renders_with_data_and_empty(self):
         from app.tabs.gauge_data_tab import render_box_plot
-        for rows in ([], [("t", 0.05 + i / 1000, "Box No.3") for i in range(20)] + [("t", 0.07, "N/A")]):
-            image = render_box_plot(rows, 700, 400, "MPa")
+        stats = gauge_log_mod.day_stats({"Box No.3": [0.05 + i / 1000 for i in range(20)], "N/A": [0.07]})
+        today = date(2026, 11, 9)
+        cases = ([(0, today, {})], [(0, today, stats)], [(0, today, stats), (1, date(2026, 11, 8), {}), (2, date(2026, 11, 7), stats)])
+        for days in cases:
+            image = render_box_plot(days, 700, 400, "MPa")
             self.assertEqual((image.width(), image.height()), (700, 400))
 
 

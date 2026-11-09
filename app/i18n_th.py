@@ -609,7 +609,10 @@ TH = {
     "Box No.": "กล่องที่",
     "Avg Value": "ค่าเฉลี่ย",
     "Gauge: points out of position (STANDBY)": "เกจ: ตำแหน่งจุดไม่ถูกต้อง (STANDBY)",
-    "One reading a second, saved per job and day. The chart shows the last 1000.": "บันทึกค่าทุกวินาที แยกตามงานและวัน กราฟแสดง 1000 ค่าล่าสุด",
+    "Every reading of the day. Tap up to 3 days to compare.": "ทุกค่าของวัน แตะเลือกได้สูงสุด 3 วันเพื่อเปรียบเทียบ",
+    "Days": "วัน",
+    "Today": "วันนี้",
+    "Up to {} days at once: tap one to remove it first.": "เลือกได้สูงสุด {} วัน: แตะวันที่เลือกไว้เพื่อนำออกก่อน",
     # --- Training Options ----------------------------------------------------
     "Training Options": "ตัวเลือกการเทรน",
     "Augmentation": "การเพิ่มข้อมูลภาพ",

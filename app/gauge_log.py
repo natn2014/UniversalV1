@@ -1,5 +1,6 @@
 """Gauge data record: one reading a second to a daily CSV per job, tagged with
-the box number from the QR label, and the recent rows for the Gauge Data chart.
+the box number from the QR label, and a per-box summary of a day for the
+Gauge Data chart.
 
 gauge_logs/<part>/YYYY_MM_DD_log.csv, same columns as Gauge_reader-main:
 Timestamp, Converted Value, QR Code Data.
@@ -7,11 +8,12 @@ Timestamp, Converted Value, QR Code Data.
 
 import csv
 import re
-from collections import deque
-from datetime import datetime
-from typing import Deque, Dict, List, Optional, Tuple
+from datetime import date, datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import cv2
+import numpy as np
 
 from . import optional_deps, paths
 
@@ -19,11 +21,11 @@ BOX_COUNT = 43  # boxes on the line; Box No.43 wraps back to Box No.1
 NO_QR = "N/A"
 RECORD_INTERVAL_S = 1.0
 QR_SCAN_INTERVAL_S = 2.0
-BUFFER_ROWS = 1000  # what the chart and summary show
 CSV_HEADER = ["Timestamp", "Converted Value", "QR Code Data"]
+_DAY_FILE_FORMAT = "%Y_%m_%d_log.csv"
 _BOX_QR_RE = re.compile(r"Box\s+No\.(\d+)", re.IGNORECASE)
 
-Row = Tuple[str, float, str]
+DayStats = Dict[str, dict]  # box -> matplotlib boxplot stats, plus "count"
 
 
 def box_labels() -> List[str]:
@@ -53,59 +55,96 @@ def read_qr(frame_bgr) -> str:
     return cv2.QRCodeDetector().detectAndDecode(gray)[0].strip()
 
 
-def values_by_box(rows: List[Row]) -> Dict[str, List[float]]:
-    grouped: Dict[str, List[float]] = {}
-    for _, value, box in rows:
-        grouped.setdefault(box, []).append(value)
-    return grouped
-
-
-def box_summary(rows: List[Row]) -> List[Tuple[str, float]]:
-    """(box, average), lowest average first."""
-    averages = [(box, sum(values) / len(values)) for box, values in values_by_box(rows).items()]
-    return sorted(averages, key=lambda item: item[1])
-
-
-def _part_dir(part: Optional[str]):
+def _part_dir(part: Optional[str]) -> Path:
     return paths.GAUGE_LOGS_DIR / paths.sanitize_part_no(part or paths.NO_PART_NAME)
 
 
-def daily_log_path(part: Optional[str], when: datetime):
-    return _part_dir(part) / f"{when.strftime('%Y_%m_%d')}_log.csv"
+def daily_log_path(part: Optional[str], when: date) -> Path:
+    return _part_dir(part) / when.strftime(_DAY_FILE_FORMAT)
 
 
-def _read_tail(path) -> List[Row]:
-    """The last rows of a day's file; a damaged line is skipped."""
-    rows: Deque[Row] = deque(maxlen=BUFFER_ROWS)
+def available_days(part: Optional[str]) -> List[date]:
+    """The days this job has a log for, newest first."""
+    days = []
+    for path in _part_dir(part).glob("*_log.csv"):
+        try:
+            days.append(datetime.strptime(path.name, _DAY_FILE_FORMAT).date())
+        except ValueError:
+            continue
+    return sorted(days, reverse=True)
+
+
+def read_day(path: Path) -> Dict[str, List[float]]:
+    """A day's values by box; damaged lines are skipped."""
+    grouped: Dict[str, List[float]] = {}
     try:
-        with open(path, newline="") as f:
+        with open(path, newline="", errors="replace") as f:
             for record in csv.reader(f):
                 try:
-                    rows.append((record[0], float(record[1]), record[2]))
+                    value, box = float(record[1]), record[2]
                 except (IndexError, ValueError):
                     continue  # the header, or a line cut short by a power loss
-    except OSError:
-        return []
-    return list(rows)
+                grouped.setdefault(box, []).append(value)
+    except (OSError, csv.Error):
+        pass  # what was read so far still counts
+    return grouped
+
+
+def day_stats(grouped: Dict[str, List[float]]) -> DayStats:
+    """All a box plot and the averages need, however many readings a day has."""
+    from matplotlib.cbook import boxplot_stats
+
+    summary: DayStats = {}
+    for box, values in grouped.items():
+        stats = boxplot_stats(np.asarray(values))[0]
+        stats["fliers"] = []  # not drawn, and can be thousands of values
+        stats["count"] = len(values)
+        summary[box] = stats
+    return summary
+
+
+def box_summary(stats: DayStats) -> List[Tuple[str, float]]:
+    """(box, average), lowest average first."""
+    return sorted(((box, float(s["mean"])) for box, s in stats.items()), key=lambda item: item[1])
+
+
+class DayStatsCache:
+    """Each day's summary until its file changes, so a finished day is read
+    once. Holds no raw readings. Used by one chart worker at a time."""
+
+    def __init__(self) -> None:
+        self._days: Dict[Path, Tuple[Tuple[int, int], DayStats]] = {}
+
+    def get(self, part: Optional[str], day: date) -> DayStats:
+        path = daily_log_path(part, day)
+        try:
+            info = path.stat()
+        except OSError:
+            return {}
+        stamp = (info.st_size, info.st_mtime_ns)
+        cached = self._days.get(path)
+        if cached is not None and cached[0] == stamp:
+            return cached[1]
+        stats = day_stats(read_day(path))
+        self._days[path] = (stamp, stats)
+        return stats
 
 
 class GaugeDataLog:
-    """Not thread-safe: used from the UI thread (the chart takes a snapshot)."""
+    """Not thread-safe: used from the UI thread."""
 
     def __init__(self) -> None:
-        self.rows: Deque[Row] = deque(maxlen=BUFFER_ROWS)
         self.qr = NO_QR
         self.part: Optional[str] = None
         self._gauge_seen = False
         self._last_at = float("-inf")
 
     def set_part(self, part: Optional[str]) -> None:
-        """Another job: its own file, and today's rows so a restart keeps the chart."""
+        """Another job: its own file, and no box number carried over."""
         self.part = part
         self.qr = NO_QR
         self._gauge_seen = False
         self._last_at = float("-inf")
-        self.rows = deque(_read_tail(daily_log_path(part, datetime.now())), maxlen=BUFFER_ROWS)
 
     def set_qr(self, raw: str) -> None:
         """Ignored until the gauge has been read, like the original: a label
@@ -130,5 +169,4 @@ class GaugeDataLog:
             if new_file:
                 writer.writerow(CSV_HEADER)
             writer.writerow([stamp, value, self.qr])
-        self.rows.append((stamp, value, self.qr))
         return True
