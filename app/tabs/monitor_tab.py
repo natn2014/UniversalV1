@@ -71,6 +71,8 @@ from ..yolo_labels import pixel_box_to_yolo, write_yolo_label_file
 
 TOOLBAR_HEIGHT = 40
 ICON_SIZE = QSize(20, 20)
+GAUGE_POINT_COLOR = "#2f8fff"
+GAUGE_POINT_SIZE = 10.0  # screen pixels across
 
 
 class MonitorTab(QWidget):
@@ -1206,7 +1208,7 @@ class MonitorTab(QWidget):
         for result in tool_results or []:
             draw_overlay(painter, result.overlay)
         if self._ctx.filters.by_gauge:
-            self._draw_gauge(painter)
+            self._draw_gauge(painter, detections)
             detections = []  # the points are drawn as a gauge, not as boxes
         for det in detections:
             # Each class keeps its own color.
@@ -1229,20 +1231,32 @@ class MonitorTab(QWidget):
         except OSError as exc:
             self._ctx.status.emit(f"Gauge data save failed: {exc}")
 
-    def _draw_gauge(self, painter: QPainter) -> None:
-        """Scale ends in yellow, needle green / red, and the value with its limit."""
+    @staticmethod
+    def _draw_gauge_point(painter: QPainter, point: QPointF, name: str, color) -> None:
+        pen = overlay_pen(painter, color, GAUGE_POINT_SIZE)
+        pen.setCapStyle(Qt.RoundCap)  # a pen this wide draws a point as a filled dot
+        painter.setPen(pen)
+        painter.drawPoint(point)
+        draw_label(painter, point.x(), point.y(), name, color)
+
+    def _draw_gauge(self, painter: QPainter, detections: list) -> None:
+        """Each detection as a dot at its centre, as in Gauge_reader-main, and
+        the needle from Center to Tip in green / red with the value and limit.
+        Without a reading, what the model sees, to show why there is none."""
         reading, spec = self._gauge_reading, self._ctx.filters.gauge
+        painter.setBrush(Qt.NoBrush)
         if not reading.read:
+            for det in detections:
+                center = QPointF((det["x1"] + det["x2"]) / 2, (det["y1"] + det["y2"]) / 2)
+                self._draw_gauge_point(painter, center, det.get("class_name", "unknown"), GAUGE_POINT_COLOR)
             return
         color = QColor(OK_GREEN if reading.side == GAUGE_OK else NG_RED)
         points = {k: QPointF(*p) for k, p in reading.points.items()}
-        painter.setBrush(Qt.NoBrush)
-        painter.setPen(overlay_pen(painter, QColor("#ffcf73")))
-        painter.drawLine(points["center"], points["start"])
-        painter.drawLine(points["center"], points["end"])
         painter.setPen(overlay_pen(painter, color, 3.0))
         painter.drawLine(points["center"], points["tip"])
-        text = tr(out_of_spec_text(reading, spec)) or format_value(reading.value, spec)
+        for key, point in points.items():
+            self._draw_gauge_point(painter, point, key.capitalize(), color if key == "tip" else GAUGE_POINT_COLOR)
+        text =tr(out_of_spec_text(reading, spec)) or format_value(reading.value, spec)
         # Above the dial, clear of the needle.
         radius = QLineF(points["center"], points["start"]).length()
         draw_label(painter, points["center"].x(), points["center"].y() - radius, text, color)

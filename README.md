@@ -53,6 +53,13 @@ The tool design and the per-tool details are in [core_function.md](core_function
 
 A job can judge a dial gauge instead of marks: **Settings > AI Model > Judge by > Gauge Reader**, then set the limits on the **Gauge Reader** page. It uses `weights/gauge_epoch-100.pt`, which finds the dial's Center, Start, End and needle Tip; the value comes from the needle's angle.
 
+| 1. Reading and judging | 2. Comparing days |
+|---|---|
+| ![Gauge reading demo](docs/gifs/gauge_reading.gif) | ![Gauge data demo](docs/gifs/gauge_data.gif) |
+| **Monitor** tab: the value is read from the needle and checked against MIN and MAX. Out of spec is NG, and the image is saved tagged OVER or UNDER. | **Gauge Data** tab: a box plot for each box from every reading of the day. Tap up to 3 days to compare them in different colours. |
+
+These two GIFs use a drawn dial and made-up readings, with the dial's points supplied directly instead of found by the model. Everything after detection is the real app. Remake them with `tools/make_readme_gifs.py gauge`.
+
 | Setting | Meaning |
 |---|---|
 | Value at Start / End | What the dial shows at the left / right end of its scale (default 0.1 and 0 MPa) |
@@ -228,6 +235,13 @@ Only one copy of the app runs at a time: a second start says "already running" a
 ### การอ่านเกจ (Gauge Reader)
 
 ตั้งค่าได้ที่ **ตั้งค่า > โมเดล AI > ตัดสินโดย > อ่านเกจ** แล้วกำหนดค่าในหน้า **อ่านเกจ** โปรแกรมใช้โมเดล `weights/gauge_epoch-100.pt`
+
+| 1. การอ่านค่าและตัดสินผล | 2. เปรียบเทียบข้อมูลแต่ละวัน |
+|---|---|
+| ![ตัวอย่างการอ่านเกจ](docs/gifs/gauge_reading.gif) | ![ตัวอย่างแท็บ Gauge Data](docs/gifs/gauge_data.gif) |
+| แท็บ **Monitor** อ่านค่าจากเข็มแล้วเทียบกับ MIN และ MAX หากเกินช่วงจะเป็น NG และบันทึกภาพพร้อมป้าย OVER หรือ UNDER | แท็บ **Gauge Data** แสดง Box plot ของแต่ละกล่องจากทุกค่าของวัน แตะเลือกได้สูงสุด 3 วันเพื่อเปรียบเทียบด้วยสีที่ต่างกัน |
+
+GIF ทั้งสองนี้ใช้หน้าปัดที่วาดขึ้นและข้อมูลสมมติ โดยป้อนตำแหน่งจุดบนหน้าปัดให้โดยตรง ไม่ได้ให้โมเดลตรวจจับ ขั้นตอนหลังการตรวจจับทั้งหมดเป็นโปรแกรมจริง
 
 - ค่าอยู่ระหว่าง MIN ถึง MAX (รวมค่าขอบ): OK
 - เกิน MAX หรือต่ำกว่า MIN: NG พร้อมไฟสัญญาณ เสียงเตือน รีเลย์ และตัวนับ NG

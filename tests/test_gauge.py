@@ -462,6 +462,35 @@ class App(unittest.TestCase):
         self.frames(50, 5)
         self.assertEqual(recorded(), before + 1)
 
+    def paint_overlay(self, detections):
+        from PySide6.QtGui import QPainter
+        canvas = QImage(1000, 1000, QImage.Format_RGB32)
+        canvas.fill(0)
+        painter = QPainter(canvas)
+        self.monitor._paint_overlay(painter, canvas, detections, [])
+        painter.end()
+        return lambda x, y: canvas.pixelColor(x, y).name()
+
+    def test_overlay_is_points_and_a_center_to_tip_line(self):
+        from app.tabs.monitor_tab import GAUGE_POINT_COLOR
+        from app.theme import OK_GREEN
+        self.frames(50, 5)  # needle straight up
+        pixel = self.paint_overlay(dial(50))
+        self.assertEqual(pixel(500, 500), GAUGE_POINT_COLOR)  # Center
+        x, y = on_dial(START_ANGLE)
+        self.assertEqual(pixel(round(x), round(y)), GAUGE_POINT_COLOR)  # Start
+        self.assertEqual(pixel(500, 370), OK_GREEN.lower())  # Tip
+        self.assertEqual(pixel(500, 440), OK_GREEN.lower())  # the line between them
+        self.assertEqual(pixel(430, 570), "#000000")  # no line from Center to Start
+        self.assertEqual(pixel(495 - 12, 495 - 12), "#000000")  # no box
+
+    def test_without_a_reading_the_detections_still_show_as_points(self):
+        from app.tabs.monitor_tab import GAUGE_POINT_COLOR
+        self.monitor._reset_judgement()
+        pixel = self.paint_overlay(dial(50))
+        self.assertEqual(pixel(500, 370), GAUGE_POINT_COLOR)
+        self.assertEqual(pixel(500, 440), "#000000")  # no needle until it is read
+
     def test_gauge_data_tab_only_for_gauge_jobs(self):
         index = self.win.tabs.indexOf(self.win.gauge_data_tab)
         self.assertTrue(self.win.tabs.isTabVisible(index))
