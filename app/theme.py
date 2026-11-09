@@ -69,6 +69,7 @@ ARROW_UP_SVG, ARROW_DOWN_SVG = _write_arrow_svgs()
 AI_COLOR = "#8b5cf6"
 VISION_COLOR = "#0ea5c6"
 MARK_COLOR = "#d946ef"  # mark inspection (AI judging by Required Marks)
+GAUGE_COLOR = "#3b82f6"  # gauge reading (AI reading a dial)
 BADGE_SVGS = {
     # Chip with pins and "AI" on it.
     "ai": (
@@ -86,6 +87,15 @@ BADGE_SVGS = {
         '<circle cx="10" cy="10" r="6.2" fill="none" stroke="#ffffff" stroke-width="1.6"/>'
         '<text x="10" y="13.4" font-family="sans-serif" font-size="9.5" font-weight="800" '
         'fill="#ffffff" text-anchor="middle">E</text></svg>'
+    ),
+    # A dial with its scale arc and needle: AI reading a gauge.
+    "gauge": (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">'
+        f'<rect x="1" y="1" width="18" height="18" rx="3" fill="{GAUGE_COLOR}"/>'
+        '<path d="M5.2 14.8a6.8 6.8 0 1 1 9.6 0" fill="none" stroke="#ffffff" stroke-width="1.7" '
+        'stroke-linecap="round"/>'
+        '<path d="M10 10.2l3.4-3.6" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round"/>'
+        '<circle cx="10" cy="10.2" r="1.5" fill="#ffffff"/></svg>'
     ),
     # Magnifier over an ROI frame: measuring the image itself.
     "vision": (
@@ -112,12 +122,13 @@ BADGE_PATHS = _write_badges()
 
 
 def badge_icon(kind: str) -> QIcon:
-    """"ai", "mark" or "vision" badge as an icon, e.g. for a tab."""
+    """"ai", "mark", "gauge" or "vision" badge as an icon, e.g. for a tab."""
     return QIcon(BADGE_PATHS[kind])
 
 
 # Kinds of inspection a job runs, each with its badge (see jobs.inspection_types).
-INSPECTION_TITLES = {"mark": "Mark Inspection", "ai": "AI Detection", "vision": "Image Processing"}
+INSPECTION_TITLES = {"mark": "Mark Inspection", "gauge": "Gauge Reader", "ai": "AI Detection",
+                     "vision": "Image Processing"}
 
 
 def badges_icon(kinds, size: int = 24, gap: int = 4) -> QIcon:

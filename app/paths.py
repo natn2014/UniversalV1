@@ -27,6 +27,8 @@ LAST_PART_FILE = PART_CONFIGS_DIR / ".last_part"
 APP_SETTINGS_FILE = ROOT_DIR / "app_settings.json"
 # Standard-mark model: loaded whenever a job judges by Required Marks.
 MARK_MODEL_PATH = ROOT_DIR / "weights" / "MarkV9_best.pt"
+# Gauge model (app/gauge.py): loaded whenever a job judges by Gauge Reader.
+GAUGE_MODEL_PATH = ROOT_DIR / "weights" / "gauge_epoch-100.pt"
 _SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 

@@ -126,9 +126,15 @@ class VideoWorker(QThread):
         # Required Marks short name check: read in its own thread (OCR is slow).
         self._short_name_expected = ""
         self._short_name = ShortNameReader(get_engine)
+        self._inference_args: dict = {}
 
     def set_camera_index(self, index: Optional[int]) -> None:
         self._camera_index = index
+
+    def set_inference_args(self, args: Optional[dict]) -> None:
+        """Extra arguments for the model call (a gauge job's conf / iou / imgsz);
+        none = Ultralytics' defaults. Read once per frame."""
+        self._inference_args = dict(args or {})
 
     def set_model_path(self, path: Optional[Path]) -> None:
         self._model_path = path
@@ -403,7 +409,7 @@ class VideoWorker(QThread):
                     x1, y1, x2, y2 = roi_to_pixels(roi, frame.shape[1], frame.shape[0])
                     model_input = frame[y1:y2, x1:x2]
                 try:
-                    results = self._model(model_input, verbose=False)[0]
+                    results = self._model(model_input, verbose=False, **self._inference_args)[0]
                 except Exception as exc:
                     self.status.emit(f"Inference error: {exc}")
                     results = None

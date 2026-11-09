@@ -22,14 +22,14 @@ def list_saved_jobs() -> list:
 
 def inspection_types(config: dict) -> list:
     """What a job inspects, in display order: "mark" (the AI judges by Required
-    Marks), "ai" (the AI judges by Target Classes) and / or "vision" (image
-    processing tools). Older jobs without "judge_mode" judged by Required Marks
+    Marks), "gauge" (the AI reads a dial gauge), "ai" (the AI judges by Target
+    Classes) and / or "vision" (image processing tools). Older jobs without "judge_mode" judged by Required Marks
     whenever any were ticked."""
     kinds = []
     if config.get("model_path"):
         required = config.get("required_classes") or []
         mode = config.get("judge_mode") or ("required" if required else "detection")
-        kinds.append("mark" if mode == "required" and required else "ai")
+        kinds.append("gauge" if mode == "gauge" else "mark" if mode == "required" and required else "ai")
     if config.get("tools"):
         kinds.append("vision")
     return kinds

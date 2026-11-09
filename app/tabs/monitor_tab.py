@@ -2,7 +2,7 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from PySide6.QtCore import QRect, QRectF, QSize, Qt, Signal, Slot
+from PySide6.QtCore import QLineF, QPointF, QRect, QRectF, QSize, Qt, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
@@ -34,6 +34,17 @@ from ..jobs import inspection_types
 from ..barcode import part_label
 from ..marking.short_name import pad_box
 from ..judgement import InspectionCycle, MarkHold, held_missing, held_short_name, held_state
+from ..gauge import (
+    OK as GAUGE_OK,
+    OUT_OF_SPEC,
+    GaugeCaptureGate,
+    GaugeHold,
+    GaugeReading,
+    format_value,
+    gauge_state,
+    out_of_spec_text,
+    read_gauge,
+)
 from ..ng_log import save_ng_image
 from ..paths import CAPTURES_IMAGES_DIR, CAPTURES_LABELS_DIR, NO_PART_NAME
 from ..roi import detections_in_crop, roi_to_pixels
@@ -75,7 +86,7 @@ class MonitorTab(QWidget):
         self._current_frame_image: Optional[QImage] = None
         self._current_frame_detections: list = []
         self._current_tool_results: list = []
-        self._judge_mode_shown: Optional[bool] = None
+        self._judge_mode_shown: Optional[str] = None
         # NG short name, zoomed on the image until the result is no longer NG:
         # {"crop": QImage, "box": (x1, y1, x2, y2), "text": caption}.
         self._short_name_zoom: Optional[dict] = None
@@ -85,6 +96,9 @@ class MonitorTab(QWidget):
         self._latch = InspectionCycle()
         self._mark_hold = MarkHold()
         self._pending_ng_save: bool = False
+        self._gauge_hold = GaugeHold()
+        self._gauge_gate = GaugeCaptureGate()
+        self._gauge_reading = GaugeReading()
         self._stop_requested: bool = False
         self._camera_lost: bool = False
         self._tower_lost: bool = False
@@ -261,6 +275,19 @@ class MonitorTab(QWidget):
         header.setSectionResizeMode(QHeaderView.ResizeToContents)
         header.setSectionResizeMode(0, QHeaderView.Stretch)
 
+        # Judge by Gauge Reader: the reading against the job's limits.
+        self.gauge_table = QTableWidget(1, 4)
+        self.gauge_table.setHorizontalHeaderLabels(["Value", "MIN", "MAX", "Result"])
+        self.gauge_table.verticalHeader().setVisible(False)
+        self.gauge_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.gauge_table.setSelectionMode(QTableWidget.NoSelection)
+        self.gauge_table.setMinimumWidth(220)
+        self.gauge_table.setMinimumHeight(60)
+        self.gauge_table.setVisible(False)
+        header = self.gauge_table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+
         # Rule-based vision tools (app/vision): one row per tool, hidden when
         # the job has none.
         self.tool_header = QLabel()
@@ -332,6 +359,7 @@ class MonitorTab(QWidget):
         side_layout.addWidget(self.ai_header)
         side_layout.addWidget(self.table, 1)
         side_layout.addWidget(self.mark_table, 1)
+        side_layout.addWidget(self.gauge_table, 1)
         self._show_judge_mode()
         side_layout.addWidget(self.tool_header)
         side_layout.addWidget(self.tool_table)
@@ -529,6 +557,9 @@ class MonitorTab(QWidget):
     def _reset_judgement(self) -> None:
         self._latch.reset()
         self._mark_hold.reset()
+        self._gauge_hold.reset()
+        self._gauge_gate.reset()
+        self._gauge_reading = GaugeReading()
         self._short_name_zoom = None
         self._short_name_ng = False
         self._set_short_name_tile(None)
@@ -1019,6 +1050,11 @@ class MonitorTab(QWidget):
         issue = f"Short name: read {ocr['text']} ≠ {ocr['expected']}" if ocr and ocr["state"] == "ng" else ""
         unread = bool(ocr) and ocr["state"] == "unreadable"
         self._set_warning(self.missing_label, tr(issue) if issue else "")
+        if filters.by_gauge:
+            self._gauge_reading = self._gauge_hold.update(
+                read_gauge(detections, filters.gauge), time.monotonic(), self._ctx.settings["mark_hold_ms"] / 1000.0)
+            self._ctx.gauge_reading_changed.emit(self._gauge_reading)
+            self._set_warning(self.missing_label, tr(out_of_spec_text(self._gauge_reading, filters.gauge)))
         layout = self._ctx.filters.layout_warnings(detections)
         notes = [tr(f"Layout: {'; '.join(layout)}")] if layout else []
         if unread:
@@ -1030,12 +1066,18 @@ class MonitorTab(QWidget):
             # one per trigger in trigger mode.
             relay = self._ctx.relay
             yolo_state = held_state(marks) if filters.by_marks and filters.required_classes else None
+            if filters.by_gauge:
+                yolo_state = gauge_state(self._gauge_reading)
             state, counted = self._latch.update(
                 self._raw_state(detections, tool_results, yolo_state), self._ctx.settings["state_hold_ms"],
                 trigger_mode=relay.has_input("trigger"), confirm_ng=relay.has_input("confirm_ng"),
-                pending=bool(detections) and any(m["ok"] is None for m in marks))
+                pending=(bool(detections) and any(m["ok"] is None for m in marks))
+                or (filters.by_gauge and not self._gauge_reading.read))
             if counted:
                 self._count_cycle(counted)
+            if filters.by_gauge and self._gauge_gate.update(
+                    self._gauge_reading.side, state == "RED" and not relay.has_input("trigger"), counted == "RED"):
+                self._pending_ng_save = True
             self._keep_short_name_zoom(image, detections, ocr, issue, state)
             # Required marks all OK but the short name read wrong: kept while the NG lasts.
             if state != "RED":
@@ -1052,12 +1094,16 @@ class MonitorTab(QWidget):
         self._show_judge_mode()
         self._update_class_table(detections)
         self._update_mark_table(marks)
+        if filters.by_gauge:
+            self._update_gauge_table()
         self._update_tool_table(tool_results)
         if self._ctx.masters:
             self._match_masters(image, detections)
         if self._pending_ng_save:
             self._pending_ng_save = False
-            self._save_ng_image(self._render_frame(image, detections, tool_results))
+            side = self._gauge_reading.side if filters.by_gauge else ""
+            self._save_ng_image(self._render_frame(image, detections, tool_results),
+                                side.upper() if side in OUT_OF_SPEC else "")
         if self._on_first_frame:
             pending, self._on_first_frame = self._on_first_frame, []
             for then in pending:
@@ -1154,6 +1200,9 @@ class MonitorTab(QWidget):
         self._draw_roi(painter, image)
         for result in tool_results or []:
             draw_overlay(painter, result.overlay)
+        if self._ctx.filters.by_gauge:
+            self._draw_gauge(painter)
+            detections = []  # the points are drawn as a gauge, not as boxes
         for det in detections:
             # Each class keeps its own color.
             class_name = det.get("class_name", "unknown")
@@ -1169,10 +1218,46 @@ class MonitorTab(QWidget):
             draw_label(painter, x1, y1, det["label"], color)
         self._draw_short_name_zoom(painter, image)
 
-    def _save_ng_image(self, pixmap: QPixmap) -> None:
+    def _draw_gauge(self, painter: QPainter) -> None:
+        """Scale ends in yellow, needle green / red, and the value with its limit."""
+        reading, spec = self._gauge_reading, self._ctx.filters.gauge
+        if not reading.read:
+            return
+        color = QColor(OK_GREEN if reading.side == GAUGE_OK else NG_RED)
+        points = {k: QPointF(*p) for k, p in reading.points.items()}
+        painter.setBrush(Qt.NoBrush)
+        painter.setPen(overlay_pen(painter, QColor("#ffcf73")))
+        painter.drawLine(points["center"], points["start"])
+        painter.drawLine(points["center"], points["end"])
+        painter.setPen(overlay_pen(painter, color, 3.0))
+        painter.drawLine(points["center"], points["tip"])
+        text = tr(out_of_spec_text(reading, spec)) or format_value(reading.value, spec)
+        # Above the dial, clear of the needle.
+        radius = QLineF(points["center"], points["start"]).length()
+        draw_label(painter, points["center"].x(), points["center"].y() - radius, text, color)
+
+    def _update_gauge_table(self) -> None:
+        reading, spec = self._gauge_reading, self._ctx.filters.gauge
+        value = QTableWidgetItem(format_value(reading.value, spec) if reading.read else "—")
+        low = QTableWidgetItem(f"{spec.spec_min:.4f}")
+        high = QTableWidgetItem(f"{spec.spec_max:.4f}")
+        verdict = QTableWidgetItem("—" if not reading.read else "OK" if reading.side == GAUGE_OK else reading.side.upper())
+        verdict.setTextAlignment(Qt.AlignCenter)
+        if reading.read:
+            verdict.setBackground(QBrush(QColor(OK_GREEN if reading.side == GAUGE_OK else NG_RED)))
+            verdict.setForeground(QBrush(QColor("#ffffff")))
+        font = verdict.font()
+        font.setBold(True)
+        verdict.setFont(font)
+        for col, item in enumerate((value, low, high, verdict)):
+            if col < 3:
+                item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            self.gauge_table.setItem(0, col, item)
+
+    def _save_ng_image(self, pixmap: QPixmap, tag: str = "") -> None:
         max_bytes = int(self._ctx.settings["ng_log_max_gb"] * 1024 ** 3)
         try:
-            deleted = save_ng_image(pixmap, self._ctx.current_part_no or NO_PART_NAME, max_bytes)
+            deleted = save_ng_image(pixmap, self._ctx.current_part_no or NO_PART_NAME, max_bytes, tag)
         except OSError as exc:
             self._ctx.status.emit(f"NG image save failed: {exc}")
             return
@@ -1208,13 +1293,20 @@ class MonitorTab(QWidget):
         """Required Marks mode: the mark table instead of the class counts."""
         if self._inspection_types() != self._kinds_shown:
             self._refresh_monitor_info()
-        by_marks = self._ctx.filters.by_marks
-        if self._judge_mode_shown == by_marks:
+        filters = self._ctx.filters
+        by_marks = filters.by_marks
+        if self._judge_mode_shown == filters.judge_mode:
             return
-        self._judge_mode_shown = by_marks
-        set_badge_title(self.ai_header, "mark" if by_marks else "ai", tr("Required Marks" if by_marks else "AI Detections"))
-        self.table.setVisible(not by_marks)
+        self._judge_mode_shown = filters.judge_mode
+        badge, title = (("gauge", "Gauge Reader") if filters.by_gauge else
+                        ("mark", "Required Marks") if by_marks else ("ai", "AI Detections"))
+        set_badge_title(self.ai_header, badge, tr(title))
+        self.table.setVisible(not by_marks and not filters.by_gauge)
         self.mark_table.setVisible(by_marks)
+        self.gauge_table.setVisible(filters.by_gauge)
+        self._gauge_hold.reset()
+        self._gauge_gate.reset()
+        self._gauge_reading = GaugeReading()
         if by_marks:
             self._update_mark_table(self._ctx.filters.mark_results(self._current_frame_detections))
 

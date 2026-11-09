@@ -6,6 +6,7 @@ from PySide6.QtCore import QObject, Signal
 from . import jobs
 from .autocapture import load_masters
 from .camera import VideoWorker, parse_resolution
+from .gauge import GAUGE_INFERENCE
 from .image_adjust import ImageAdjust
 from .judgement import DetectionFilters
 from .optional_deps import YOLO
@@ -30,6 +31,7 @@ class AppContext(QObject):
     perspective_changed = Signal(object)  # Optional[Quad]
     masters_changed = Signal(list)  # [Master]
     tools_changed = Signal(list)  # [vision.base.Tool]
+    gauge_reading_changed = Signal(object)  # gauge.GaugeReading, each frame of a gauge job
     mm_per_px_changed = Signal(object)  # Optional[float]
     # Requests one tab makes of another, so a missing step can be done for
     # the user instead of telling them to go and do it.
@@ -68,6 +70,10 @@ class AppContext(QObject):
     def _on_settings_changed(self, keys: list) -> None:
         if any(k.startswith("camera_") and k != "camera_resolution" for k in keys):
             self.worker.set_image_adjust(ImageAdjust.from_settings(self.settings))
+
+    def apply_judge_mode(self) -> None:
+        """The model call that goes with the judge mode: only a gauge job differs."""
+        self.worker.set_inference_args(GAUGE_INFERENCE if self.filters.by_gauge else None)
 
     def load_model(self, model_path: Path) -> None:
         self.worker.set_model_path(model_path)

@@ -4,6 +4,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, Tuple
 
+from .gauge import GaugeSpec, gauge_state, read_gauge
 from .marking.layout import check_layout
 from .marking.short_name import valid_short_name
 from .roi import Roi
@@ -21,8 +22,10 @@ class DetectionFilters:
     selected_classes: Set[str] = field(default_factory=set)
     # What decides the AI verdict (Settings switch): "detection" = the Target
     # Classes; "required" = Required Marks, OK only when every ticked mark is
-    # found at or above its own minimum confidence (none ticked: Target Classes).
+    # found at or above its own minimum confidence (none ticked: Target Classes);
+    # "gauge" = Gauge Reader, OK while the reading is inside the job's MIN-MAX.
     judge_mode: str = "detection"
+    gauge: GaugeSpec = field(default_factory=GaugeSpec)
     required_classes: Set[str] = field(default_factory=set)
     mark_conf: Dict[str, float] = field(default_factory=dict)  # per required mark; missing = confidence_threshold
     # Required Marks: the short name must read as this (app/marking/short_name.py,
@@ -37,6 +40,10 @@ class DetectionFilters:
     def by_marks(self) -> bool:
         return self.judge_mode == "required"
 
+    @property
+    def by_gauge(self) -> bool:
+        return self.judge_mode == "gauge"
+
     def class_threshold(self, class_name: str) -> float:
         """Minimum confidence for a class: its own for a required mark, else the slider's."""
         if self.by_marks and class_name in self.required_classes:
@@ -45,6 +52,8 @@ class DetectionFilters:
 
     def apply(self, detections: list) -> list:
         """Drops unselected / low-confidence detections, highest-confidence first."""
+        if self.by_gauge:  # every point is needed; the reading picks the best of each
+            return sorted(detections, key=lambda d: d.get("conf", 0.0), reverse=True)
         filtered = [
             det for det in detections
             if det.get("class_name", "unknown") in self.selected_classes
@@ -126,6 +135,8 @@ class DetectionFilters:
         return check_layout(filtered_detections)
 
     def judge(self, filtered_detections: list) -> str:
+        if self.by_gauge:
+            return gauge_state(read_gauge(filtered_detections, self.gauge))
         present_classes = {d.get("class_name") for d in filtered_detections}
         if self.by_marks and self.required_classes:
             if not filtered_detections:

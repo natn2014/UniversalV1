@@ -31,6 +31,7 @@ from .. import jobs
 from .. import paths
 from ..camera import RESOLUTION_CHOICES, find_cameras, parse_resolution
 from ..context import AppContext
+from ..gauge import GaugeSpec, format_value
 from ..i18n import tr, translator, trf
 from ..judgement import MarkHold
 from ..marking.short_name import valid_short_name
@@ -44,14 +45,16 @@ from ..widgets.video_view import VideoView
 from .settings.image_card import make_image_card
 from .settings.relay_card import make_relay_card
 
+GAUGE_INVALID_TEXT = "Gauge: MAX must be above MIN, and Value at Start must differ from Value at End."
 DEFAULT_MARK_CONF = 40  # % for a newly ticked mark (the standard-mark model is checked at 0.4)
-JUDGE_MODES = (("detection", "AI Detection"), ("required", "Required Marks"))
+JUDGE_MODES = (("detection", "AI Detection"), ("required", "Required Marks"), ("gauge", "Gauge Reader"))
 # Nav rail: (group, [(key, title, icon)]). Machine = this station, the same for
 # every job (app settings); This Job = saved with the current job.
 SECTIONS = (
     ("Machine", (("camera", "Camera", "camera"), ("tower", "Tower & Buzzer", "tower"),
                  ("relay", "Relay I/O", "relay"), ("autocapture", "Auto Capture", "autocapture"))),
-    ("This Job", (("model", "AI Model", "ai"), ("marks", "Required Marks", "mark"))),
+    ("This Job", (("model", "AI Model", "ai"), ("marks", "Required Marks", "mark"),
+                  ("gauge", "Gauge Reader", "gauge"))),
 )
 MACHINE_SECTIONS = {k for k, _, _ in SECTIONS[0][1]}
 NAV_WIDTH = 186
@@ -59,7 +62,7 @@ FORM_WIDTH = 436
 # The job config keys this tab owns; Save writes these into the job file.
 JOB_KEYS = ("model_path", "confidence_threshold", "max_detections", "target_class_1", "target_class_2",
             "target_gate", "selected_classes", "judge_mode", "required_classes", "mark_conf", "check_layout",
-            "short_name_expected")
+            "short_name_expected", "gauge")
 
 
 class SettingsTab(QWidget):
@@ -222,7 +225,7 @@ class SettingsTab(QWidget):
         self.judge_mode_buttons = {}
         for mode, text in JUDGE_MODES:
             button = QPushButton(text)
-            button.setIcon(badge_icon("mark" if mode == "required" else "ai"))
+            button.setIcon(badge_icon({"required": "mark", "gauge": "gauge"}.get(mode, "ai")))
             button.setCheckable(True)
             button.setMinimumHeight(44)
             self.judge_mode_group.addButton(button)
@@ -232,7 +235,27 @@ class SettingsTab(QWidget):
             "OK / NG from the Target Classes below (OR / AND).")
         self.judge_mode_buttons["required"].setToolTip(
             "OK only when every ticked mark is found at or above its own confidence; a missing mark is NG.")
+        self.judge_mode_buttons["gauge"].setToolTip(
+            "OK while the gauge reading is inside MIN-MAX; over MAX or under MIN is NG and saves an image.")
         self.judge_mode_group.buttonToggled.connect(self._on_judge_mode_toggled)
+
+        # Gauge Reader: what the dial shows at each end, and the job's OK range.
+        self.gauge_start_spin = self._make_gauge_spin("Value at Start")
+        self.gauge_end_spin = self._make_gauge_spin("Value at End")
+        self.gauge_min_spin = self._make_gauge_spin("MIN")
+        self.gauge_max_spin = self._make_gauge_spin("MAX")
+        self.gauge_unit_edit = QLineEdit()
+        self.gauge_unit_edit.setMaxLength(12)
+        self.gauge_unit_edit.setFixedWidth(130)
+        attach_keyboard(self.gauge_unit_edit, "Unit")
+        self.gauge_unit_edit.textChanged.connect(self._on_gauge_edited)
+        self.gauge_reading_label = QLabel("—")
+        self.gauge_reading_label.setStyleSheet("color: #ffcf73; font-size: 20px; font-weight: 700;")
+        self.gauge_status_label = QLabel()
+        self.gauge_status_label.setObjectName("hint")
+        self.gauge_status_label.setWordWrap(True)
+        ctx.gauge_reading_changed.connect(self._show_gauge_reading)
+        self.set_gauge(None)
 
         # Required marks: the classes a part of this job must show (NG if one is missing),
         # each with its own minimum confidence.
@@ -353,10 +376,11 @@ class SettingsTab(QWidget):
         ):
             widget.setToolTip(hint)
         self.confidence_label.setStyleSheet("color: #ffcf73; font-weight: 700;")
-        filters_body.addLayout(row(
-            tip_label("Judge by:", "What decides OK / NG for the AI: Target Classes, or the Required Marks list "
-                      "(missing mark = NG, each mark with its own confidence)."),
-            self.judge_mode_buttons["detection"], self.judge_mode_buttons["required"]))
+        filters_body.addWidget(
+            tip_label("Judge by:", "What decides OK / NG for the AI: Target Classes, the Required Marks list "
+                      "(missing mark = NG, each mark with its own confidence), or a gauge reading against MIN-MAX."))
+        filters_body.addLayout(row(self.judge_mode_buttons["detection"], self.judge_mode_buttons["required"]))
+        filters_body.addWidget(self.judge_mode_buttons["gauge"])
         filters_body.addSpacing(6)
         filters_body.addLayout(row(tip_label("Confidence threshold", "AI detections less sure than this are ignored. Raise it if wrong things are found; lower it if real ones are missed.", self.confidence_slider, self.confidence_label), None, self.confidence_label))
         filters_body.addWidget(self.confidence_slider)
@@ -388,6 +412,26 @@ class SettingsTab(QWidget):
                                     self.short_name_edit, self.short_name_status, None))
         required_body.addWidget(self.layout_check_checkbox)
 
+        self.gauge_card, gauge_body = make_card("Gauge Reader", badge="gauge")
+        gauge_hint = QLabel("Reads the dial with the gauge model. OK while the value is from MIN to MAX; "
+                            "over MAX or under MIN is NG and saves an image to the Log, tagged OVER or UNDER.")
+        gauge_hint.setObjectName("hint")
+        gauge_hint.setWordWrap(True)
+        gauge_body.addWidget(gauge_hint)
+        gauge_body.addLayout(row(QLabel("Reading now:"), None, self.gauge_reading_label))
+        gauge_body.addLayout(row(tip_label("MIN (OK from):", "Below this is NG, tagged UNDER.", self.gauge_min_spin),
+                                 None, self.gauge_min_spin))
+        gauge_body.addLayout(row(tip_label("MAX (OK up to):", "Above this is NG, tagged OVER.", self.gauge_max_spin),
+                                 None, self.gauge_max_spin))
+        gauge_body.addSpacing(6)
+        gauge_body.addLayout(row(tip_label("Value at Start:", "What the dial shows at the left end of its scale.",
+                                           self.gauge_start_spin), None, self.gauge_start_spin))
+        gauge_body.addLayout(row(tip_label("Value at End:", "What the dial shows at the right end of its scale.",
+                                           self.gauge_end_spin), None, self.gauge_end_spin))
+        gauge_body.addLayout(row(QLabel("Unit:"), None, self.gauge_unit_edit))
+        gauge_body.addWidget(self.gauge_status_label)
+        gauge_body.addStretch(1)
+
         # Three bands like the other tabs: what is being set up on top, a nav
         # rail + the section's form + the live camera in the middle (every
         # change shows on the image at once), Revert / Save at the bottom.
@@ -418,8 +462,13 @@ class SettingsTab(QWidget):
             "autocapture": [autocapture_card],
             "model": [model_card, filters_card],
             "marks": [self.required_card],
+            "gauge": [self.gauge_card],
         }
-        self.marks_off_hint = QLabel("Judge by is set to AI Detection. Choose Required Marks on the "
+        self.gauge_off_hint = QLabel("Judge by is not set to Gauge Reader. Choose it on the AI Model page to use this.")
+        self.gauge_off_hint.setObjectName("hint")
+        self.gauge_off_hint.setWordWrap(True)
+        self.section_cards["gauge"].insert(0, self.gauge_off_hint)
+        self.marks_off_hint = QLabel("Judge by is not set to Required Marks. Choose it on the "
                                      "AI Model page to use this list.")
         self.marks_off_hint.setObjectName("hint")
         self.marks_off_hint.setWordWrap(True)
@@ -432,7 +481,7 @@ class SettingsTab(QWidget):
                 button = QPushButton(title.replace("&", "&&"))  # a lone & would be a shortcut mark
                 button.setObjectName("navTile")
                 button.setCheckable(True)
-                button.setIcon(badge_icon(icon) if icon in ("ai", "mark") else make_icon(icon, "#e0e0e0"))
+                button.setIcon(badge_icon(icon) if icon in ("ai", "mark", "gauge") else make_icon(icon, "#e0e0e0"))
                 button.setMinimumHeight(48)
                 button.clicked.connect(lambda _=False, k=key: self.show_section(k))
                 self.nav_group.addButton(button)
@@ -595,17 +644,17 @@ class SettingsTab(QWidget):
             return
         filters = self._ctx.filters
         section = getattr(self, "current_section", "camera")
-        shown = filters.apply(detections) if section in ("model", "marks") else []
+        shown = filters.apply(detections) if section in ("model", "marks", "gauge") else []
         marks = {}
         if section == "marks":  # held like the Monitor's table (Mark OK hold), so it doesn't flicker either
             rows = self._preview_hold.update(filters.mark_results(detections), bool(shown), time.monotonic(),
                                              self._ctx.settings["mark_hold_ms"] / 1000.0)
             marks = {m["class_name"]: m for m in rows}
         self.preview_info.setText(tr(f"Live camera  ·  {image.width()} × {image.height()}"
-                                     + (f"  ·  {len(shown)} detections" if section in ("model", "marks") else "")))
+                                     + (f"  ·  {len(shown)} detections" if section in ("model", "marks", "gauge") else "")))
 
         def overlay(painter: QPainter) -> None:
-            if section in ("model", "marks") and filters.roi:
+            if section in ("model", "marks", "gauge") and filters.roi:
                 x1, y1, x2, y2 = roi_to_pixels(filters.roi, image.width(), image.height())
                 painter.setPen(overlay_pen(painter, "#ffd54f", 2, Qt.DashLine))
                 painter.setBrush(Qt.NoBrush)
@@ -649,6 +698,7 @@ class SettingsTab(QWidget):
             "mark_conf": {c: filters.mark_conf[c] for c in sorted(filters.required_classes) if c in filters.mark_conf},
             "check_layout": filters.check_layout,
             "short_name_expected": filters.short_name_expected,
+            "gauge": filters.gauge.to_dict(),
         }
 
     def unsaved_changes(self) -> list:
@@ -672,6 +722,10 @@ class SettingsTab(QWidget):
 
     def save(self) -> None:
         """Writes the machine settings and this job's settings to disk."""
+        if self._ctx.filters.by_gauge and not self._ctx.filters.gauge.valid:
+            self._ctx.status.emit(tr(GAUGE_INVALID_TEXT))
+            self.show_section("gauge")
+            return
         self._ctx.settings.commit()
         part_no = self._ctx.current_part_no
         if part_no:
@@ -878,6 +932,56 @@ class SettingsTab(QWidget):
             self._ctx.load_model(path)
         return True
 
+    def _load_gauge_model(self) -> bool:
+        """Gauge Reader reads with the gauge model; loads it unless it is
+        already loaded. False when the file is missing."""
+        path = paths.GAUGE_MODEL_PATH
+        if not path.exists():
+            self._ctx.status.emit(f"Gauge model not found: {path.name}")
+            return False
+        if self._ctx.model_path != path:
+            self._ctx.load_model(path)
+        return True
+
+    def _make_gauge_spin(self, title: str) -> QDoubleSpinBox:
+        spin = QDoubleSpinBox()
+        spin.setDecimals(4)
+        spin.setRange(-1000000.0, 1000000.0)
+        spin.setSingleStep(0.01)
+        spin.setFixedWidth(130)
+        attach_numpad(spin, title)
+        spin.valueChanged.connect(self._on_gauge_edited)
+        return spin
+
+    def _gauge_widgets(self) -> tuple:
+        return (self.gauge_start_spin, self.gauge_end_spin, self.gauge_min_spin, self.gauge_max_spin,
+                self.gauge_unit_edit)
+
+    def _on_gauge_edited(self, *_) -> None:
+        self._ctx.filters.gauge = GaugeSpec(
+            self.gauge_start_spin.value(), self.gauge_end_spin.value(), self.gauge_unit_edit.text().strip(),
+            self.gauge_min_spin.value(), self.gauge_max_spin.value())
+        self.gauge_status_label.setText("" if self._ctx.filters.gauge.valid else tr(GAUGE_INVALID_TEXT))
+        self._job_edited()
+
+    def set_gauge(self, config: Optional[dict]) -> None:
+        """Shows a job's gauge settings (older jobs: the defaults)."""
+        spec = GaugeSpec.from_dict(config)
+        for widget in self._gauge_widgets():
+            widget.blockSignals(True)
+        self.gauge_start_spin.setValue(spec.value_at_start)
+        self.gauge_end_spin.setValue(spec.value_at_end)
+        self.gauge_min_spin.setValue(spec.spec_min)
+        self.gauge_max_spin.setValue(spec.spec_max)
+        self.gauge_unit_edit.setText(spec.unit)
+        for widget in self._gauge_widgets():
+            widget.blockSignals(False)
+        self._on_gauge_edited()
+
+    def _show_gauge_reading(self, reading) -> None:
+        spec = self._ctx.filters.gauge
+        self.gauge_reading_label.setText(format_value(reading.value, spec) if reading.read else "—")
+
     def _required_checkboxes(self) -> list:
         return [self.required_table.cellWidget(r, 0) for r in range(self.required_table.rowCount())]
 
@@ -934,19 +1038,27 @@ class SettingsTab(QWidget):
     def _on_judge_mode_toggled(self, button, checked: bool) -> None:
         if checked:
             self._ctx.filters.judge_mode = next(m for m, b in self.judge_mode_buttons.items() if b is button)
+            self._ctx.apply_judge_mode()
             if self._ctx.filters.by_marks and not self._applying:
                 self._load_mark_model()
+            if self._ctx.filters.by_gauge and not self._applying:
+                self._load_gauge_model()
             self._sync_short_name()
             self._show_judge_mode()
             self._job_edited()
 
     def _show_judge_mode(self) -> None:
         """Only the controls that decide OK / NG in this mode are shown."""
-        by_marks = self._ctx.filters.by_marks
-        self.target_box.setVisible(not by_marks)
+        by_marks, by_gauge = self._ctx.filters.by_marks, self._ctx.filters.by_gauge
+        self.target_box.setVisible(not by_marks and not by_gauge)
+        # The gauge model's four points are always all used.
+        for widget in (self.confidence_slider, self.max_detections_spinbox, self.class_filters_scroll):
+            widget.setEnabled(not by_gauge)
         self.required_card.setVisible(by_marks)
+        self.gauge_card.setVisible(by_gauge)
         if hasattr(self, "marks_off_hint"):
             self.marks_off_hint.setVisible(not by_marks)
+            self.gauge_off_hint.setVisible(not by_gauge)
 
     def _toggle_layout_check(self, checked: bool) -> None:
         self._ctx.filters.check_layout = checked
@@ -1051,6 +1163,8 @@ class SettingsTab(QWidget):
         saved_model = model_path_str
         if judge_mode == "required" and paths.MARK_MODEL_PATH.exists():
             model_path_str = str(paths.MARK_MODEL_PATH)  # always the current mark model
+        if judge_mode == "gauge" and paths.GAUGE_MODEL_PATH.exists():
+            model_path_str = str(paths.GAUGE_MODEL_PATH)
         if model_path_str:
             model_path = Path(model_path_str)
             current = self._ctx.model_path
@@ -1089,6 +1203,7 @@ class SettingsTab(QWidget):
         threshold = config.get("confidence_threshold", 0.0)
         self.set_mark_conf({c: threshold for c in required})
         self.set_mark_conf(config.get("mark_conf", {}))
+        self.set_gauge(config.get("gauge"))
         self.set_judge_mode(judge_mode)
         self.set_short_name(config.get("short_name_expected", ""))  # older jobs: presence only
         self.layout_check_checkbox.setChecked(bool(config.get("check_layout", False)))

@@ -49,6 +49,23 @@ How to set up a tool:
 
 The tool design and the per-tool details are in [core_function.md](core_function.md); the development log is in [develop_record.md](develop_record.md). The GIFs above are drawn scenes recorded offscreen by `tools/make_readme_gifs.py`.
 
+## Gauge Reader
+
+A job can judge a dial gauge instead of marks: **Settings > AI Model > Judge by > Gauge Reader**, then set the limits on the **Gauge Reader** page. It uses `weights/gauge_epoch-100.pt`, which finds the dial's Center, Start, End and needle Tip; the value comes from the needle's angle.
+
+| Setting | Meaning |
+|---|---|
+| Value at Start / End | What the dial shows at the left / right end of its scale (default 0.1 and 0 MPa) |
+| Unit | Shown after the value |
+| MIN / MAX | The OK range, limits included |
+
+- **In range:** OK. **Over MAX or under MIN:** NG, with tower light, buzzer, relay and NG count, like a missing Required Mark.
+- **No reading** (any of the four points not found): STANDBY, never NG.
+- **Images:** saved to the Log tab, annotated and tagged OVER or UNDER: one when it goes out of spec, and one more if it swings straight from OVER to UNDER or back. A gauge that stays out of spec saves nothing more.
+- Set an ROI around the gauge so it fills the model's view. If the camera is mounted upside down, turn on mirror and flip under Settings > Camera.
+
+The Train tab's **Training Options** set the augmentation preset, flips and epochs, with a preview of what the trainer sees.
+
 ## Features
 
 - **Live detection:** Ultralytics YOLO runs on the Jetson GPU (CUDA). You can filter by confidence, class and a maximum number of detections.
@@ -205,6 +222,15 @@ Only one copy of the app runs at a time: a second start says "already running" a
 | สอนเครื่องหมาย 1 ตัว (ลากกรอบรอบมัน) ระบบจะค้นหาทุกตัวได้ทุกมุม พร้อมนับจำนวน คะแนน และมุม | Area, Edge Pixels, Blob Count และ Color Prohibit แสดงพิกเซลที่นับจริง เป็นสีเหลืองโปร่ง หรือสีแดงสำหรับสีต้องห้าม |
 
 รายละเอียดเครื่องมือทั้งหมดอยู่ใน [core_function.md](core_function.md)
+
+### การอ่านเกจ (Gauge Reader)
+
+ตั้งค่าได้ที่ **ตั้งค่า > โมเดล AI > ตัดสินโดย > อ่านเกจ** แล้วกำหนดค่าในหน้า **อ่านเกจ** โปรแกรมใช้โมเดล `weights/gauge_epoch-100.pt`
+
+- ค่าอยู่ระหว่าง MIN ถึง MAX (รวมค่าขอบ): OK
+- เกิน MAX หรือต่ำกว่า MIN: NG พร้อมไฟสัญญาณ เสียงเตือน รีเลย์ และตัวนับ NG
+- อ่านค่าไม่ได้: STANDBY ไม่นับเป็น NG
+- บันทึกภาพลงแท็บ Log พร้อมป้าย OVER หรือ UNDER เมื่อค่าออกนอกช่วง 1 ภาพ และอีก 1 ภาพเมื่อค่าเปลี่ยนจาก OVER เป็น UNDER หรือกลับกันโดยตรง
 
 ### ความสามารถหลัก
 

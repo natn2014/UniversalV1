@@ -1,4 +1,5 @@
-"""On-disk NG image log: ng_logs/<part>/<timestamp>.jpg plus a thumbnail.
+"""On-disk NG image log: ng_logs/<part>/<timestamp>[_<tag>].jpg plus a thumbnail
+(tag: why it was saved, e.g. OVER / UNDER for a gauge out of spec).
 
 The log is kept under a size limit (Settings, default 5 GB): when a save takes
 it over, the oldest images (full + thumbnail, any part) are deleted until it
@@ -16,11 +17,12 @@ from .paths import NG_LOGS_DIR, NG_THUMB_SIZE, NG_THUMB_SUFFIX, sanitize_part_no
 
 
 PRUNE_TO = 0.9  # after a clean-up the log is at this share of the limit
+STAMP_LENGTH = len("20260101_120000_000")
 
 _total_bytes: Optional[int] = None  # the log's size, scanned once, then kept up to date
 
 
-def save_ng_image(pixmap: QPixmap, part: str, max_bytes: int = 0) -> int:
+def save_ng_image(pixmap: QPixmap, part: str, max_bytes: int = 0, tag: str = "") -> int:
     """Saves the NG image and its thumbnail; with `max_bytes` > 0 the log is
     then kept under it. Returns how many old images were deleted. Raises
     OSError if the part folder can't be written."""
@@ -29,6 +31,8 @@ def save_ng_image(pixmap: QPixmap, part: str, max_bytes: int = 0) -> int:
     part_dir.mkdir(parents=True, exist_ok=True)
     (part_dir / ".part_name").write_text(part)
     stamp = time.strftime("%Y%m%d_%H%M%S") + f"_{int(time.time() * 1000) % 1000:03d}"
+    if tag:  # after the time, so names still sort oldest first
+        stamp = f"{stamp}_{tag}"
     full, thumb = part_dir / f"{stamp}.jpg", part_dir / f"{stamp}{NG_THUMB_SUFFIX}"
     pixmap.save(str(full), "JPG", 90)
     pixmap.scaled(NG_THUMB_SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation).save(str(thumb), "JPG", 85)
@@ -115,7 +119,8 @@ def ng_stamp_text(thumb_path: Path) -> str:
     stamp = thumb_path.name[: -len(NG_THUMB_SUFFIX)]
     try:
         t = time.strptime(stamp[:15], "%Y%m%d_%H%M%S")
-        return time.strftime("%Y-%m-%d %H:%M:%S", t)
+        tag = stamp[STAMP_LENGTH:].strip("_")
+        return time.strftime("%Y-%m-%d %H:%M:%S", t) + (f"  {tag}" if tag else "")
     except ValueError:
         return stamp
 

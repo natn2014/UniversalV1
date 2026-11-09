@@ -336,15 +336,15 @@ TH = {
     "Second class that must be found for OK.": "คลาสที่สองที่ต้องพบจึงจะ OK",
     "OR: either class is enough.  AND: both must be found.": "OR: พบคลาสใดคลาสหนึ่งก็พอ  AND: ต้องพบทั้งสอง",
     "Only the ticked classes are drawn and counted. None ticked = all classes.": "วาดและนับเฉพาะคลาสที่เลือก ไม่เลือกเลย = ทุกคลาส",
-    "What decides OK / NG for the AI: Target Classes, or the Required Marks list (missing mark = NG, each mark with its own confidence).":
-        "สิ่งที่ใช้ตัดสิน OK / NG ของ AI: คลาสเป้าหมาย หรือรายการเครื่องหมายที่ต้องมี (ขาดเครื่องหมาย = NG แต่ละเครื่องหมายมีความมั่นใจของตัวเอง)",
+    "What decides OK / NG for the AI: Target Classes, the Required Marks list (missing mark = NG, each mark with its own confidence), or a gauge reading against MIN-MAX.":
+        "สิ่งที่ใช้ตัดสิน OK / NG ของ AI: คลาสเป้าหมาย รายการเครื่องหมายบังคับ (ขาดเครื่องหมาย = NG แต่ละเครื่องหมายมีค่าความมั่นใจของตัวเอง) หรือค่าเกจเทียบกับ MIN-MAX",
     "OK / NG from the Target Classes below (OR / AND).": "OK / NG จากคลาสเป้าหมายด้านล่าง (OR / AND)",
     "OK only when every ticked mark is found at or above its own confidence; a missing mark is NG.":
         "OK เมื่อพบทุกเครื่องหมายที่เลือก โดยความมั่นใจไม่ต่ำกว่าค่าของตัวเอง ขาดเครื่องหมาย = NG",
     "OK when every ticked mark is found at or above its Min conf; a missing or weaker mark is NG. None ticked = Target Classes decide.":
         "OK เมื่อพบทุกเครื่องหมายที่เลือก โดยไม่ต่ำกว่าความมั่นใจขั้นต่ำ ขาดหรือต่ำกว่า = NG ไม่เลือกเลย = ใช้คลาสเป้าหมาย",
-    "Judge by is set to AI Detection. Choose Required Marks on the AI Model page to use this list.":
-        "ตอนนี้ตัดสินโดย ตรวจจับ AI เลือก เครื่องหมายที่ต้องมี ในหน้าโมเดล AI เพื่อใช้รายการนี้",
+    "Judge by is not set to Required Marks. Choose it on the AI Model page to use this list.":
+        "ไม่ได้ตั้งให้ตัดสินโดยเครื่องหมายบังคับ เลือกได้ที่หน้าโมเดล AI เพื่อใช้รายการนี้",
     "With a good part on the Monitor, tick exactly the marks the AI finds on it now.": "วางชิ้นงานดีที่หน้าตรวจ แล้วเลือกเครื่องหมายตามที่ AI พบตอนนี้",
     "No AI marks found yet. Start the camera on the Monitor tab with a good part in view, then tap this again.":
         "ยังไม่พบเครื่องหมาย เปิดกล้องที่หน้าตรวจโดยวางชิ้นงานดีไว้ แล้วแตะอีกครั้ง",
@@ -586,6 +586,25 @@ TH = {
     "Training needs the GPU, so monitoring will stop.\n\nStop monitoring and start training?": "การเทรนต้องใช้ GPU การตรวจจะหยุด\n\nหยุดการตรวจและเริ่มเทรน?",
     "Training started...": "เริ่มเทรนแล้ว...",
     "No NG recorded yet.": "ยังไม่มีบันทึก NG",
+    # --- Gauge Reader ---------------------------------------------------------
+    "Gauge Reader": "อ่านเกจ",
+    "OK while the gauge reading is inside MIN-MAX; over MAX or under MIN is NG and saves an image.": "OK เมื่อค่าเกจอยู่ในช่วง MIN-MAX ถ้าเกิน MAX หรือต่ำกว่า MIN เป็น NG และบันทึกภาพ",
+    "Reads the dial with the gauge model. OK while the value is from MIN to MAX; over MAX or under MIN is NG and saves an image to the Log, tagged OVER or UNDER.": "อ่านหน้าปัดด้วยโมเดลเกจ OK เมื่อค่าอยู่ระหว่าง MIN ถึง MAX ถ้าเกิน MAX หรือต่ำกว่า MIN เป็น NG และบันทึกภาพลง Log พร้อมป้าย OVER หรือ UNDER",
+    "Reading now:": "ค่าที่อ่านได้:",
+    "MIN (OK from):": "MIN (OK ตั้งแต่):",
+    "MAX (OK up to):": "MAX (OK ไม่เกิน):",
+    "Below this is NG, tagged UNDER.": "ต่ำกว่านี้เป็น NG ป้าย UNDER",
+    "Above this is NG, tagged OVER.": "สูงกว่านี้เป็น NG ป้าย OVER",
+    "Value at Start:": "ค่าที่จุดเริ่มสเกล:",
+    "Value at End:": "ค่าที่จุดสุดสเกล:",
+    "Value at Start": "ค่าที่จุดเริ่มสเกล",
+    "Value at End": "ค่าที่จุดสุดสเกล",
+    "What the dial shows at the left end of its scale.": "ค่าบนหน้าปัดที่ปลายสเกลด้านซ้าย",
+    "What the dial shows at the right end of its scale.": "ค่าบนหน้าปัดที่ปลายสเกลด้านขวา",
+    "Unit:": "หน่วย:",
+    "Unit": "หน่วย",
+    "Judge by is not set to Gauge Reader. Choose it on the AI Model page to use this.": "ไม่ได้ตั้งให้ตัดสินโดยการอ่านเกจ เลือกได้ที่หน้าโมเดล AI เพื่อใช้งาน",
+    "Gauge: MAX must be above MIN, and Value at Start must differ from Value at End.": "เกจ: MAX ต้องมากกว่า MIN และค่าที่จุดเริ่มกับจุดสุดสเกลต้องต่างกัน",
     # --- Training Options ----------------------------------------------------
     "Training Options": "ตัวเลือกการเทรน",
     "Augmentation": "การเพิ่มข้อมูลภาพ",
@@ -612,6 +631,8 @@ TH = {
 # Strings with values in them: {} is kept as is (a part number, a count...)
 # and translated itself when it is in TH.
 FORMATS = {
+    "OVER: {} > MAX {}": "เกิน: {} > MAX {}",
+    "UNDER: {} < MIN {}": "ต่ำกว่า: {} < MIN {}",
     "Part: {}": "ชิ้นงาน: {}",
     "Model: {}": "โมเดล: {}",
     "Missing: {}": "ขาด: {}",
