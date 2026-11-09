@@ -42,6 +42,7 @@ from ..gauge import (
     GaugeReading,
     format_value,
     gauge_state,
+    labelled_points,
     out_of_spec_text,
     read_gauge,
 )
@@ -1246,9 +1247,8 @@ class MonitorTab(QWidget):
         reading, spec = self._gauge_reading, self._ctx.filters.gauge
         painter.setBrush(Qt.NoBrush)
         if not reading.read:
-            for det in detections:
-                center = QPointF((det["x1"] + det["x2"]) / 2, (det["y1"] + det["y2"]) / 2)
-                self._draw_gauge_point(painter, center, det.get("class_name", "unknown"), GAUGE_POINT_COLOR)
+            for name, point in labelled_points(detections):
+                self._draw_gauge_point(painter, QPointF(*point), name, GAUGE_POINT_COLOR)
             return
         color = QColor(OK_GREEN if reading.side == GAUGE_OK else NG_RED)
         points = {k: QPointF(*p) for k, p in reading.points.items()}

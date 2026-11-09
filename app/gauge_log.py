@@ -7,7 +7,9 @@ Timestamp, Converted Value, QR Code Data.
 """
 
 import csv
+import os
 import re
+import shutil
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -24,6 +26,9 @@ QR_SCAN_INTERVAL_S = 2.0
 CSV_HEADER = ["Timestamp", "Converted Value", "QR Code Data"]
 _DAY_FILE_FORMAT = "%Y_%m_%d_log.csv"
 _BOX_QR_RE = re.compile(r"Box\s+No\.(\d+)", re.IGNORECASE)
+EXPORT_DIR_NAME = "gauge_export"
+_MEDIA_ROOTS = ("/media/", "/run/media/")  # where the desktop mounts USB drives
+_OCTAL_ESCAPE_RE = re.compile(r"\\([0-7]{3})")
 
 DayStats = Dict[str, dict]  # box -> matplotlib boxplot stats, plus "count"
 
@@ -106,6 +111,52 @@ def day_stats(grouped: Dict[str, List[float]]) -> DayStats:
 def box_summary(stats: DayStats) -> List[Tuple[str, float]]:
     """(box, average), lowest average first."""
     return sorted(((box, float(s["mean"])) for box, s in stats.items()), key=lambda item: item[1])
+
+
+def usb_drives(mounts: Path = Path("/proc/mounts")) -> List[Path]:
+    """Writable drives the desktop has mounted, such as USB sticks."""
+    try:
+        text = mounts.read_text(errors="replace")
+    except OSError:
+        return []
+    drives = set()
+    for line in text.splitlines():
+        fields = line.split()
+        if len(fields) < 4:
+            continue
+        mount = _OCTAL_ESCAPE_RE.sub(lambda m: chr(int(m.group(1), 8)), fields[1])  # "\040" is a space
+        if mount.startswith(_MEDIA_ROOTS) and "ro" not in fields[3].split(",") and os.access(mount, os.W_OK):
+            drives.add(Path(mount))
+    return sorted(drives)
+
+
+def days_size(part: Optional[str], days: List[date]) -> int:
+    """Bytes; a file that has gone counts as nothing."""
+    total = 0
+    for day in days:
+        try:
+            total += daily_log_path(part, day).stat().st_size
+        except OSError:
+            pass
+    return total
+
+
+def export_days(part: Optional[str], days: List[date], drive: Path, now: Optional[datetime] = None) -> Path:
+    """Copies the days' CSV files to a new folder on `drive` and returns it.
+    One file per day, as a merged file would pass Excel's row limit in about
+    12 full days. A new folder each time, so nothing on the drive is replaced;
+    a copy that fails leaves nothing half done. Raises OSError."""
+    target = drive / EXPORT_DIR_NAME / f"{_part_dir(part).name}_{(now or datetime.now()):%Y%m%d_%H%M%S}"
+    target.mkdir(parents=True)
+    try:
+        for day in days:
+            source = daily_log_path(part, day)
+            shutil.copyfile(source, target / source.name)
+        os.sync()  # all on the stick before it is reported as safe to pull
+    except OSError:
+        shutil.rmtree(target, ignore_errors=True)
+        raise
+    return target
 
 
 class DayStatsCache:

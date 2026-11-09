@@ -25,7 +25,8 @@ from PySide6.QtWidgets import (
 from ..context import AppContext
 from ..gauge_log import BOX_COUNT, DayStats, DayStatsCache, available_days, box_labels, box_summary
 from ..i18n import tr, translator
-from ..theme import make_icon
+from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
+from ..widgets.gauge_export_dialog import GaugeExportDialog
 from ..widgets.layout import bottom_bar, top_bar
 
 REFRESH_MS = 15000
@@ -221,6 +222,11 @@ class GaugeDataTab(QWidget):
         self.refresh_button.setIcon(make_icon("refresh", "#e0e0e0"))
         self.refresh_button.setFixedHeight(44)
         self.refresh_button.clicked.connect(self.refresh)
+        self.export_button = QPushButton("Export")
+        self.export_button.setIcon(make_icon("save"))
+        self.export_button.setFixedSize(170, 44)
+        self.export_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["start"]))
+        self.export_button.clicked.connect(self._open_export)
 
         top, top_layout = top_bar()
         top_layout.addWidget(self.info_label, 1)
@@ -252,6 +258,8 @@ class GaugeDataTab(QWidget):
         hint.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         bottom_layout.addWidget(hint, 1)
         bottom_layout.addWidget(self.refresh_button)
+        bottom_layout.addSpacing(8)
+        bottom_layout.addWidget(self.export_button)
 
         layout = QVBoxLayout(self)
         layout.addWidget(top)
@@ -328,7 +336,7 @@ class GaugeDataTab(QWidget):
             self._show_days()
             self.refresh()
         elif self._selection.full:
-            self._ctx.status(tr("Up to {} days at once: tap one to remove it first.").format(MAX_DAYS))
+            self._ctx.status.emit(tr("Up to {} days at once: tap one to remove it first.").format(MAX_DAYS))
 
     @Slot()
     def refresh(self) -> None:
@@ -383,6 +391,15 @@ class GaugeDataTab(QWidget):
                 cell.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 cell.setFont(value_font)
                 self.summary_table.setItem(row, column, cell)
+
+    @Slot()
+    def _open_export(self) -> None:
+        part = self._ctx.gauge_log.part
+        days = available_days(part)
+        if days:
+            GaugeExportDialog(part, days, self).exec()
+        else:
+            self._ctx.status.emit(tr("No gauge data for this job yet."))
 
     def shutdown(self) -> None:
         """Before the window closes: Qt aborts on a QThread destroyed while running."""

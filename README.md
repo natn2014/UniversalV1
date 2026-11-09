@@ -69,8 +69,9 @@ These two GIFs use a drawn dial and made-up readings, with the dial's points sup
 - **In range:** OK. **Over MAX or under MIN:** NG, with tower light, buzzer, relay and NG count, like a missing Required Mark.
 - **No reading** (any of the four points not found): STANDBY, never NG.
 - **Images:** saved to the Log tab, annotated and tagged OVER or UNDER: one when it goes out of spec, and one more if it swings straight from OVER to UNDER or back. A gauge that stays out of spec saves nothing more.
-- **Position check:** the points must run left to right as Start, then Center and Tip, then End. The model's Start and End labels aren't trusted, only their positions. If no set of points fits, the job shows STANDBY with a note.
-- **Gauge Data tab** (gauge jobs only): one reading a second is saved to `gauge_logs/<part>/YYYY_MM_DD_log.csv` (Timestamp, Converted Value, QR Code Data). The tab shows a box plot for Box No.1-43 and each box's average from every reading of the chosen day. Tap up to 3 days in the Days list to compare them side by side, one colour per day. The box number comes from the QR label in view.
+- **Position check:** Start must be on the left of Center and End on its right, with the Tip between them. Position decides the name: a scale end the model calls End on the left is treated as Start, and the reverse. If no set of points fits, the job shows STANDBY with a note.
+- **Measurement:** counted from End to Tip, where End to Start is 100%. With the default settings, End is 0 and Start is 0.1 MPa.
+- **Gauge Data tab** (gauge jobs only): one reading a second is saved to `gauge_logs/<part>/YYYY_MM_DD_log.csv` (Timestamp, Converted Value, QR Code Data). The tab shows a box plot for Box No.1-43 and each box's average from every reading of the chosen day. Tap up to 3 days in the Days list to compare them side by side, one colour per day. **Export** copies a From-To date range to a USB drive, one CSV file per day, in a new `gauge_export/` folder. The box number comes from the QR label in view.
 - Set an ROI around the gauge so it fills the model's view. If the camera is mounted upside down, turn on mirror and flip under Settings > Camera.
 
 The Train tab's **Training Options** set the augmentation preset, flips and epochs, with a preview of what the trainer sees.
@@ -246,6 +247,9 @@ GIF ทั้งสองนี้ใช้หน้าปัดที่วา�
 - ค่าอยู่ระหว่าง MIN ถึง MAX (รวมค่าขอบ): OK
 - เกิน MAX หรือต่ำกว่า MIN: NG พร้อมไฟสัญญาณ เสียงเตือน รีเลย์ และตัวนับ NG
 - อ่านค่าไม่ได้: STANDBY ไม่นับเป็น NG
+- ตรวจตำแหน่ง: Start ต้องอยู่ทางซ้ายของ Center และ End ต้องอยู่ทางขวา โดยใช้ตำแหน่งเป็นตัวกำหนดชื่อ หากโมเดลตรวจพบ End ทางซ้ายจะถือเป็น Start และในทางกลับกัน
+- ส่งออกข้อมูล: แท็บ **Gauge Data** กด **Export** เลือกวันที่เริ่มต้น วันที่สิ้นสุด และไดรฟ์ USB ระบบคัดลอกไฟล์ CSV วันละ 1 ไฟล์ไปยังโฟลเดอร์ใหม่ `gauge_export/`
+- การวัด: นับจาก End ไปยัง Tip โดย End ถึง Start เท่ากับ 100% ค่าเริ่มต้นคือ End = 0 และ Start = 0.1 MPa
 - บันทึกภาพลงแท็บ Log พร้อมป้าย OVER หรือ UNDER เมื่อค่าออกนอกช่วง 1 ภาพ และอีก 1 ภาพเมื่อค่าเปลี่ยนจาก OVER เป็น UNDER หรือกลับกันโดยตรง
 
 ### ความสามารถหลัก

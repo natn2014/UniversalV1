@@ -38,6 +38,7 @@ from app.gauge import (  # noqa: E402
     GaugeReading,
     GaugeSpec,
     gauge_state,
+    labelled_points,
     needle_ratio,
     out_of_spec_text,
     read_gauge,
@@ -87,16 +88,23 @@ class Geometry(unittest.TestCase):
             original = max(0, min((1 - percent / 100) / 10, 1))
             self.assertAlmostEqual(read_gauge(dial(percent), spec).value, original, places=4)
 
-    def test_needle_just_below_start_is_low_not_full_scale(self):
-        self.assertEqual(read_gauge(dial(tip_angle=START_ANGLE - 5), SCALE).percent, 0.0)
+    def test_measured_from_end_0_to_start_full_scale(self):
+        spec = GaugeSpec()
+        for percent_from_start, value, percent in ((100, 0.0, 0.0), (50, 0.05, 50.0), (0, 0.1, 100.0)):
+            result = read_gauge(dial(percent_from_start), spec)
+            self.assertAlmostEqual(result.value, value, places=4)
+            self.assertAlmostEqual(result.percent, percent, places=2)
 
-    def test_needle_just_past_end_pins_to_full_scale(self):
-        self.assertEqual(read_gauge(dial(tip_angle=START_ANGLE + SWEEP + 5), SCALE).percent, 100.0)
+    def test_needle_just_past_start_pins_to_full_scale(self):
+        self.assertEqual(read_gauge(dial(tip_angle=START_ANGLE - 5), SCALE).percent, 100.0)
+
+    def test_needle_just_past_end_is_low_not_full_scale(self):
+        self.assertEqual(read_gauge(dial(tip_angle=START_ANGLE + SWEEP + 5), SCALE).percent, 0.0)
 
     def test_dead_zone_splits_at_its_middle(self):
         middle = START_ANGLE + SWEEP + 45
-        self.assertEqual(read_gauge(dial(tip_angle=middle - 1), SCALE).percent, 100.0)
-        self.assertEqual(read_gauge(dial(tip_angle=middle + 1), SCALE).percent, 0.0)
+        self.assertEqual(read_gauge(dial(tip_angle=middle - 1), SCALE).percent, 0.0)
+        self.assertEqual(read_gauge(dial(tip_angle=middle + 1), SCALE).percent, 100.0)
 
     def test_every_point_is_required_center_too(self):
         for missing in (CLASS_CENTER, CLASS_START, CLASS_END, CLASS_TIP):
@@ -170,6 +178,51 @@ class Position(unittest.TestCase):
         start_x = on_dial(START_ANGLE)[0]
         dets[3] = det(CLASS_TIP, (start_x - 3, 400.0))  # within the small margin
         self.assertTrue(read_gauge(dets, SCALE).read)
+
+    def test_position_replaces_the_class(self):
+        dets = dial(25)
+        dets[1]["cls_id"], dets[2]["cls_id"] = CLASS_END, CLASS_START  # "End" on the left
+        points = read_gauge(dets, SCALE).points
+        self.assertLess(points["start"][0], CENTER[0])
+        self.assertGreater(points["end"][0], CENTER[0])
+
+    def test_both_ends_on_one_side_of_center_are_refused(self):
+        for start_point, end_point in (((300.0, 700.0), (400.0, 700.0)),  # both left
+                                       ((600.0, 700.0), (700.0, 700.0)),  # both right
+                                       ((480.0, 700.0), (520.0, 700.0))):  # only just either side
+            dets = dial(50)
+            dets[1], dets[2] = det(CLASS_START, start_point), det(CLASS_END, end_point)
+            result = read_gauge(dets, SCALE)
+            self.assertEqual(result.side, NO_READ, start_point)
+            self.assertTrue(result.problem, start_point)
+
+    def test_one_mark_seen_as_both_leaves_no_second_end(self):
+        dets = dial(50)
+        dets[2] = det(CLASS_END, on_dial(START_ANGLE))
+        self.assertEqual(read_gauge(dets, SCALE).side, NO_READ)
+
+    def test_repeats_of_one_mark_dont_crowd_out_the_other_end(self):
+        x, y = on_dial(START_ANGLE)
+        dets = dial(50)
+        dets[2]["conf"] = 0.2
+        dets += [det(CLASS_END, (x + i, y), conf=0.95) for i in range(1, 5)]
+        self.assertAlmostEqual(read_gauge(dets, SCALE).value, 50.0, delta=0.2)  # Start is up to 1 px off
+
+    def test_labels_for_the_view_go_by_side_of_center(self):
+        dets = dial(50)
+        dets[1]["cls_id"], dets[2]["cls_id"] = CLASS_END, CLASS_START
+        names = dict(labelled_points(dets))
+        self.assertLess(names["Start"][0], CENTER[0])
+        self.assertGreater(names["End"][0], CENTER[0])
+
+    def test_one_mark_seen_as_both_is_labelled_once(self):
+        point = on_dial(START_ANGLE)
+        dets = [det(CLASS_CENTER, CENTER), det(CLASS_START, point), det(CLASS_END, point, conf=0.5)]
+        self.assertEqual([name for name, _ in labelled_points(dets)], ["Center", "Start"])
+
+    def test_without_a_center_the_side_is_unknown(self):
+        dets = [det(CLASS_END, on_dial(START_ANGLE))]
+        self.assertEqual([name for name, _ in labelled_points(dets)], ["Start/End"])
 
     def test_missing_point_is_not_a_position_problem(self):
         self.assertFalse(read_gauge(dial(50)[:3], SCALE).problem)
@@ -491,6 +544,31 @@ class App(unittest.TestCase):
         self.assertEqual(pixel(500, 370), GAUGE_POINT_COLOR)
         self.assertEqual(pixel(500, 440), "#000000")  # no needle until it is read
 
+    def test_one_mark_seen_as_both_shows_one_label(self):
+        self.monitor._reset_judgement()
+        point = on_dial(START_ANGLE)
+        dets = [det(CLASS_CENTER, CENTER), det(CLASS_START, point), det(CLASS_END, point, conf=0.5)]
+        with mock.patch("app.tabs.monitor_tab.draw_label") as label:
+            self.paint_overlay(dets)
+        self.assertEqual([call.args[3] for call in label.call_args_list], ["Center", "Start"])
+
+    def test_fourth_day_is_refused_with_a_message(self):
+        tab = self.win.gauge_data_tab
+        days = [date(2026, 11, d) for d in (9, 8, 7, 6)]
+        tab._days = days
+        tab._selection.slots = days[:3]
+        tab.day_list.clear()
+        tab.day_list.addItems([d.isoformat() for d in days])
+        self.addCleanup(tab.day_list.clear)
+        self.addCleanup(tab._days.clear)
+        messages = []
+        self.ctx.status.connect(messages.append)
+        self.addCleanup(self.ctx.status.disconnect, messages.append)
+        tab._on_day_clicked(tab.day_list.item(3))
+        self.assertEqual(messages, ["Up to 3 days at once: tap one to remove it first."])
+        self.assertEqual(tab._selection.slots, days[:3])
+        tab._selection.reset(date.today())
+
     def test_gauge_data_tab_only_for_gauge_jobs(self):
         index = self.win.tabs.indexOf(self.win.gauge_data_tab)
         self.assertTrue(self.win.tabs.isTabVisible(index))
@@ -631,6 +709,85 @@ class DataRecord(unittest.TestCase):
     def test_summary_lowest_first(self):
         stats = gauge_log_mod.day_stats({"Box No.1": [3.0], "Box No.2": [1.0, 2.0]})
         self.assertEqual(gauge_log_mod.box_summary(stats), [("Box No.2", 1.5), ("Box No.1", 3.0)])
+
+    def make_days(self, *days):
+        for number, day in enumerate(days):
+            self.log.record(1.0, number * 2.0, datetime(2026, 11, day, 8))
+
+    def test_usb_drives_only_writable_media_mounts(self):
+        root = Path(self.tmp.name)
+        (root / "MY USB").mkdir()
+        (root / "RO").mkdir()
+        mounts = root / "mounts"
+        mounts.write_text(f"/dev/sda1 {root}/MY\\040USB vfat rw,nosuid 0 0\n"
+                          f"/dev/sdb1 {root}/RO vfat ro,nosuid 0 0\n"
+                          f"/dev/nvme0 / ext4 rw 0 0\n"
+                          f"/dev/sdc1 {root}/gone vfat rw 0 0\n")
+        with mock.patch.object(gauge_log_mod, "_MEDIA_ROOTS", (str(root),)):
+            self.assertEqual(gauge_log_mod.usb_drives(mounts), [root / "MY USB"])
+        self.assertEqual(gauge_log_mod.usb_drives(root / "no such file"), [])
+
+    def test_export_copies_only_the_days_to_a_new_folder(self):
+        self.make_days(7, 8, 9)
+        drive = Path(tempfile.mkdtemp(dir=self.tmp.name))
+        days = [date(2026, 11, 7), date(2026, 11, 8)]
+        first = gauge_log_mod.export_days("P1", days, drive, datetime(2026, 11, 9, 10, 0, 0))
+        self.assertEqual(first, drive / "gauge_export" / "P1_20261109_100000")
+        self.assertEqual(sorted(f.name for f in first.iterdir()), ["2026_11_07_log.csv", "2026_11_08_log.csv"])
+        self.assertEqual(gauge_log_mod.read_day(first / "2026_11_07_log.csv"), {"N/A": [1.0]})
+        again = gauge_log_mod.export_days("P1", days, drive, datetime(2026, 11, 9, 10, 0, 1))
+        self.assertNotEqual(first, again)
+        self.assertTrue(first.exists())
+
+    def test_failed_export_leaves_nothing_half_done(self):
+        self.make_days(7)
+        drive = Path(tempfile.mkdtemp(dir=self.tmp.name))
+        with self.assertRaises(OSError):
+            gauge_log_mod.export_days("P1", [date(2026, 11, 7), date(2026, 11, 8)], drive)  # no file for the 8th
+        self.assertEqual(list((drive / "gauge_export").iterdir()), [])
+
+    def export_dialog(self, drives):
+        from app.widgets.gauge_export_dialog import GaugeExportDialog
+        patcher = mock.patch("app.widgets.gauge_export_dialog.usb_drives", return_value=drives)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        dialog = GaugeExportDialog("P1", [date(2026, 11, d) for d in (9, 8, 7)])
+        self.addCleanup(dialog._timer.stop)
+        return dialog
+
+    def test_dialog_range_and_drive_decide_export(self):
+        self.make_days(7, 8, 9)
+        drive = Path(tempfile.mkdtemp(dir=self.tmp.name))
+        dialog = self.export_dialog([drive])
+        self.assertEqual(len(dialog._chosen_days()), 3)  # the whole record by default
+        self.assertTrue(dialog.export_button.isEnabled())
+        dialog.from_combo.setCurrentIndex(0)  # the 9th
+        dialog.to_combo.setCurrentIndex(1)  # the 8th
+        self.assertEqual(dialog._chosen_days(), [])
+        self.assertFalse(dialog.export_button.isEnabled())
+        self.assertEqual(dialog.status_label.text(), "From date is after To date.")
+
+    def test_dialog_without_a_drive_cannot_export(self):
+        self.make_days(7, 8, 9)
+        dialog = self.export_dialog([])
+        self.assertFalse(dialog.export_button.isEnabled())
+        self.assertEqual(dialog.status_label.text(), "Plug in a USB drive.")
+
+    def test_dialog_exports_the_range_and_stays_open_while_copying(self):
+        self.make_days(7, 8, 9)
+        drive = Path(tempfile.mkdtemp(dir=self.tmp.name))
+        dialog = self.export_dialog([drive])
+        dialog.from_combo.setCurrentIndex(1)  # the 8th
+        dialog.to_combo.setCurrentIndex(0)  # the 9th
+        dialog._export()
+        dialog.reject()  # ignored while copying
+        self.assertFalse(dialog.close_button.isEnabled())
+        while dialog.busy or not dialog.close_button.isEnabled():
+            APP.processEvents()
+        folders = list((drive / "gauge_export").iterdir())
+        self.assertEqual(sorted(f.name for f in folders[0].iterdir()), ["2026_11_08_log.csv", "2026_11_09_log.csv"])
+        self.assertIn("Saved 2 days", dialog.status_label.text())
+        self.assertTrue(dialog.export_button.isEnabled())
 
     def test_compare_table_is_in_box_order_with_a_gap_for_a_missing_box(self):
         from app.tabs.gauge_data_tab import summary_table
