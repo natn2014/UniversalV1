@@ -1,12 +1,13 @@
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, Slot
 
 from . import jobs
 from .autocapture import load_masters
 from .camera import VideoWorker, parse_resolution
 from .gauge import GAUGE_INFERENCE
+from .gauge_log import GaugeDataLog
 from .image_adjust import ImageAdjust
 from .judgement import DetectionFilters
 from .optional_deps import YOLO
@@ -32,6 +33,7 @@ class AppContext(QObject):
     masters_changed = Signal(list)  # [Master]
     tools_changed = Signal(list)  # [vision.base.Tool]
     gauge_reading_changed = Signal(object)  # gauge.GaugeReading, each frame of a gauge job
+    judge_mode_changed = Signal(str)  # "detection" / "required" / "gauge"
     mm_per_px_changed = Signal(object)  # Optional[float]
     # Requests one tab makes of another, so a missing step can be done for
     # the user instead of telling them to go and do it.
@@ -51,6 +53,8 @@ class AppContext(QObject):
         self.tower = TowerController(self.settings, self)
         self.relay = RelayIOController(self.settings, self)
         self.filters = DetectionFilters()
+        self.gauge_log = GaugeDataLog()
+        self.worker.qr_read.connect(self._on_qr_read)
         self.model_classes: list = []
         self.camera_index: Optional[int] = None
         self.current_part_no: Optional[str] = None
@@ -74,6 +78,12 @@ class AppContext(QObject):
     def apply_judge_mode(self) -> None:
         """The model call that goes with the judge mode: only a gauge job differs."""
         self.worker.set_inference_args(GAUGE_INFERENCE if self.filters.by_gauge else None)
+        self.worker.set_qr_scan(self.filters.by_gauge)
+        self.judge_mode_changed.emit(self.filters.judge_mode)
+
+    @Slot(str)
+    def _on_qr_read(self, text: str) -> None:
+        self.gauge_log.set_qr(text)
 
     def load_model(self, model_path: Path) -> None:
         self.worker.set_model_path(model_path)
@@ -179,6 +189,7 @@ class AppContext(QObject):
         model and filters stay active until another job is chosen."""
         self.current_part_no = part_no
         self.worker.set_part_no(part_no)
+        self.gauge_log.set_part(part_no)
         if part_no is None:
             jobs.clear_last_part()
         else:

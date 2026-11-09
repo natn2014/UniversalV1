@@ -605,6 +605,11 @@ TH = {
     "Unit": "หน่วย",
     "Judge by is not set to Gauge Reader. Choose it on the AI Model page to use this.": "ไม่ได้ตั้งให้ตัดสินโดยการอ่านเกจ เลือกได้ที่หน้าโมเดล AI เพื่อใช้งาน",
     "Gauge: MAX must be above MIN, and Value at Start must differ from Value at End.": "เกจ: MAX ต้องมากกว่า MIN และค่าที่จุดเริ่มกับจุดสุดสเกลต้องต่างกัน",
+    "Gauge Data": "ข้อมูลเกจ",
+    "Box No.": "กล่องที่",
+    "Avg Value": "ค่าเฉลี่ย",
+    "Gauge: points out of position (STANDBY)": "เกจ: ตำแหน่งจุดไม่ถูกต้อง (STANDBY)",
+    "One reading a second, saved per job and day. The chart shows the last 1000.": "บันทึกค่าทุกวินาที แยกตามงานและวัน กราฟแสดง 1000 ค่าล่าสุด",
     # --- Training Options ----------------------------------------------------
     "Training Options": "ตัวเลือกการเทรน",
     "Augmentation": "การเพิ่มข้อมูลภาพ",
@@ -631,6 +636,9 @@ TH = {
 # Strings with values in them: {} is kept as is (a part number, a count...)
 # and translated itself when it is in TH.
 FORMATS = {
+    "Box Summary ({})": "สรุปตามกล่อง ({})",
+    "Readings: {}   ·   Box now: {}": "จำนวนค่า: {}   ·   กล่องปัจจุบัน: {}",
+    "Gauge data: {}": "ข้อมูลเกจ: {}",
     "OVER: {} > MAX {}": "เกิน: {} > MAX {}",
     "UNDER: {} < MIN {}": "ต่ำกว่า: {} < MIN {}",
     "Part: {}": "ชิ้นงาน: {}",

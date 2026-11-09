@@ -14,6 +14,7 @@ from PySide6.QtCore import QThread, Signal
 from PySide6.QtGui import QImage
 
 from .image_adjust import ImageAdjust
+from .gauge_log import QR_SCAN_INTERVAL_S, read_qr
 from .marking.short_name import ShortNameReader, pad_box, valid_short_name
 from .optional_deps import YOLO
 from .perspective import PerspectiveWarp, Quad
@@ -96,6 +97,7 @@ def nearest_allowed_fps(value: float) -> int:
 class VideoWorker(QThread):
     frame_ready = Signal(QImage, list, list)  # image, detections, vision tool results
     status = Signal(str)
+    qr_read = Signal(str)  # a QR code seen in the frame (gauge jobs)
     resolution_changed = Signal(int, int)  # what the camera actually delivers
     camera_connected = Signal(bool)  # False while lost / waiting, True once frames flow
     camera_index_changed = Signal(int)  # camera came back under another index
@@ -127,6 +129,8 @@ class VideoWorker(QThread):
         self._short_name_expected = ""
         self._short_name = ShortNameReader(get_engine)
         self._inference_args: dict = {}
+        self._qr_scan = False
+        self._qr_scanned_at = float("-inf")
 
     def set_camera_index(self, index: Optional[int]) -> None:
         self._camera_index = index
@@ -135,6 +139,10 @@ class VideoWorker(QThread):
         """Extra arguments for the model call (a gauge job's conf / iou / imgsz);
         none = Ultralytics' defaults. Read once per frame."""
         self._inference_args = dict(args or {})
+
+    def set_qr_scan(self, enabled: bool) -> None:
+        """Look for a QR code every few seconds (the box number of a gauge job)."""
+        self._qr_scan = enabled
 
     def set_model_path(self, path: Optional[Path]) -> None:
         self._model_path = path
@@ -392,6 +400,12 @@ class VideoWorker(QThread):
             warp = self._warp
             if warp is not None:
                 frame = warp.apply(frame)
+
+            if self._qr_scan and time.monotonic() - self._qr_scanned_at >= QR_SCAN_INTERVAL_S:
+                self._qr_scanned_at = time.monotonic()  # the whole frame: the label is beside the gauge
+                text = read_qr(frame)
+                if text:
+                    self.qr_read.emit(text)
 
             tool_results = []
             tools = self._tools

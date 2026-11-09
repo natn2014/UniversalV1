@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from . import jobs, ng_log
 from .context import AppContext
+from .tabs.gauge_data_tab import GaugeDataTab
 from .tabs.job_change_tab import JobChangeTab
 from .tabs.log_tab import LogTab
 from .tabs.monitor_tab import MonitorTab
@@ -52,6 +53,7 @@ class MainWindow(QWidget):
         self.job_change_tab = JobChangeTab(self.ctx)
         self.train_tab = TrainTab(self.ctx)
         self.log_tab = LogTab()
+        self.gauge_data_tab = GaugeDataTab(self.ctx)
 
         self.job_change_tab.job_selected.connect(self._on_job_selected)
         self.job_change_tab.scan_requested.connect(self._open_barcode_scan_dialog)
@@ -69,6 +71,10 @@ class MainWindow(QWidget):
         self.tabs.addTab(self.job_change_tab, "Job Change")
         self.tabs.addTab(self.train_tab, "Train")
         self.log_tab_index = self.tabs.addTab(self.log_tab, "Log")
+        self.tabs.addTab(self.gauge_data_tab, "Gauge Data")
+        self.tabs.setTabIcon(self.tabs.indexOf(self.gauge_data_tab), badge_icon("gauge"))
+        self.ctx.judge_mode_changed.connect(self._on_judge_mode_changed)
+        self._on_judge_mode_changed(self.ctx.filters.judge_mode)
         # Same badges as the panel headers: image-processing tools vs AI.
         self.tabs.setTabIcon(self.tabs.indexOf(self.tools_tab), badge_icon("vision"))
         self.tabs.setTabIcon(self.tabs.indexOf(self.train_tab), badge_icon("ai"))
@@ -91,6 +97,13 @@ class MainWindow(QWidget):
         self.ctx.relay.restart()
         self._trim_ng_log()
         self._auto_load_last_config()
+
+    def _on_judge_mode_changed(self, mode: str) -> None:
+        """The Gauge Data tab only exists for gauge jobs."""
+        gauge = mode == "gauge"
+        self.tabs.setTabVisible(self.tabs.indexOf(self.gauge_data_tab), gauge)
+        # Seven tabs must fit a 1024-wide panel, or Monitor scrolls out of reach.
+        self.tabs.tabBar().setStyleSheet("QTabBar::tab { padding: 10px 12px; }" if gauge else "")
 
     # Monitor-tab actions, kept here as the window's public controls.
 
@@ -327,6 +340,7 @@ class MainWindow(QWidget):
         if not self.confirm_unsaved():
             event.ignore()
             return
+        self.gauge_data_tab.shutdown()
         self.stop_stream()
         self.ctx.relay.shutdown()  # outputs off, poll thread stopped
         # Must fully join: destroying a QThread that's still running aborts

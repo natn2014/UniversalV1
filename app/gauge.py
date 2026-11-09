@@ -12,10 +12,11 @@ Two different pairs of numbers, easily confused:
 import math
 from collections import deque
 from dataclasses import asdict, dataclass, field
+from itertools import permutations, product
 from typing import Deque, Dict, List, Optional, Tuple
 
-# The model's own names have 1 = End and 2 = Start; which is which doesn't
-# matter, as read_gauge() takes the left one of the two as Start.
+# The model's own names have 1 = End and 2 = Start, and it mixes them up (see
+# _candidates); read_gauge() takes the left one of the two as Start.
 CLASS_CENTER, CLASS_START, CLASS_END, CLASS_TIP = 0, 1, 2, 3
 
 # What the gauge model was tuned with: its points are small and sit close
@@ -26,6 +27,8 @@ GAUGE_INFERENCE = {"conf": 0.10, "iou": 0.35, "imgsz": 640}
 # Ratios to the dial's radius, so they hold at any camera resolution.
 MIN_SPAN_RATIO = 0.25  # Start to End
 MIN_NEEDLE_RATIO = 0.2  # Center to Tip
+ORDER_TOLERANCE_RATIO = 0.05  # how far a box centre may stray past Start / End
+TOP_CANDIDATES = 3  # boxes tried per point; the model runs at a low confidence
 
 VALUE_DECIMALS = 4  # the value is judged as shown, so 0.0700 is never "> 0.0700"
 
@@ -75,6 +78,7 @@ class GaugeReading:
     value: float = 0.0
     percent: float = 0.0  # needle position along the scale, Start = 0, End = 100
     points: Dict[str, Point] = field(default_factory=dict)  # center, start, end, tip
+    problem: bool = False  # all points found, but not where a gauge has them
 
     @property
     def read(self) -> bool:
@@ -104,35 +108,55 @@ def needle_ratio(center: Point, start: Point, end: Point, tip: Point) -> Optiona
     return 1.0 if needle < sweep + (360 - sweep) / 2 else 0.0
 
 
-def _best_points(detections: List[dict]) -> Dict[int, Point]:
-    """The centre of the most confident box of each gauge class, by class id."""
-    best: Dict[int, dict] = {}
+def _top(found: List[Tuple[float, Point]], count: int) -> List[Tuple[float, Point]]:
+    return sorted(found, key=lambda c: c[0], reverse=True)[:count]
+
+
+def _candidates(detections: List[dict]) -> tuple:
+    """(centers, scale ends, tips), each [(conf, box centre)], most confident
+    first. Start and End are one pool: the model was trained with left-right
+    mirroring, so its Start / End labels can't be trusted, only where they are."""
+    centers, ends, tips = [], [], []
     for det in detections:
         cls_id = det.get("cls_id")
-        if cls_id in (CLASS_CENTER, CLASS_START, CLASS_END, CLASS_TIP):
-            if cls_id not in best or det.get("conf", 0.0) > best[cls_id].get("conf", 0.0):
-                best[cls_id] = det
-    return {c: ((d["x1"] + d["x2"]) / 2, (d["y1"] + d["y2"]) / 2) for c, d in best.items()}
+        role = {CLASS_CENTER: centers, CLASS_START: ends, CLASS_END: ends, CLASS_TIP: tips}.get(cls_id)
+        if role is not None:
+            role.append((det.get("conf", 0.0), ((det["x1"] + det["x2"]) / 2, (det["y1"] + det["y2"]) / 2)))
+    return _top(centers, TOP_CANDIDATES), _top(ends, TOP_CANDIDATES + 1), _top(tips, TOP_CANDIDATES)
+
+
+def in_position(center: Point, start: Point, end: Point, tip: Point) -> bool:
+    """The left-to-right order of a real gauge: Start, then Center and Tip,
+    then End; and nothing that can't be a dial (see the ratios above)."""
+    radius = (_distance(center, start) + _distance(center, end)) / 2
+    margin = ORDER_TOLERANCE_RATIO * radius
+    return (radius > 0
+            and start[0] - margin <= center[0] <= end[0] + margin
+            and start[0] - margin <= tip[0] <= end[0] + margin
+            and _distance(start, end) >= MIN_SPAN_RATIO * radius
+            and _distance(center, tip) >= MIN_NEEDLE_RATIO * radius)
 
 
 def read_gauge(detections: List[dict], spec: GaugeSpec) -> GaugeReading:
-    """All four points are needed, the centre too: without it there is no
-    angle to measure, and a wrong number could pass a bad part."""
+    """Takes the most confident set of points that is in position, so a wrong
+    box the model is surer of can't replace a right one. All four points are
+    needed, the centre too: without it there is no angle to measure."""
     if not spec.valid:
         return GaugeReading()
-    found = _best_points(detections)
-    if len(found) < 4:
+    centers, ends, tips = _candidates(detections)
+    if not centers or not tips or len(ends) < 2:
         return GaugeReading()
-    center, start, end, tip = found[CLASS_CENTER], found[CLASS_START], found[CLASS_END], found[CLASS_TIP]
-    if start[0] > end[0]:  # Start is the left end of the scale
-        start, end = end, start
-    radius = (_distance(center, start) + _distance(center, end)) / 2
-    if (radius <= 0 or _distance(start, end) < MIN_SPAN_RATIO * radius
-            or _distance(center, tip) < MIN_NEEDLE_RATIO * radius):
-        return GaugeReading()
+    best, best_score = None, -1.0
+    for (c_conf, center), (t_conf, tip), ((a_conf, start), (b_conf, end)) in product(centers, tips, permutations(ends, 2)):
+        score = c_conf + t_conf + a_conf + b_conf
+        if start[0] < end[0] and score > best_score and in_position(center, start, end, tip):
+            best, best_score = (center, start, end, tip), score
+    if best is None:
+        return GaugeReading(problem=True)
+    center, start, end, tip = best
     ratio = needle_ratio(center, start, end, tip)
     if ratio is None:
-        return GaugeReading()
+        return GaugeReading(problem=True)
     value = round(spec.value_at_start + ratio * (spec.value_at_end - spec.value_at_start), VALUE_DECIMALS)
     side = OVER if value > spec.spec_max else UNDER if value < spec.spec_min else OK
     return GaugeReading(side, value, ratio * 100, {"center": center, "start": start, "end": end, "tip": tip})

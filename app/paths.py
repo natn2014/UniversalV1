@@ -12,6 +12,8 @@ CAPTURES_LABELS_DIR = CAPTURES_DIR / "labels"
 # NG log: ng_logs/<part>/<timestamp>.jpg (annotated frame) + <timestamp>_thumb.jpg
 NG_LOGS_DIR = ROOT_DIR / "ng_logs"
 NG_THUMB_SUFFIX = "_thumb.jpg"
+# Gauge readings (app/gauge_log.py): gauge_logs/<part>/YYYY_MM_DD_log.csv
+GAUGE_LOGS_DIR = ROOT_DIR / "gauge_logs"
 NG_THUMB_SIZE = QSize(160, 120)  # 5 across fit the 1024-wide kiosk screen
 NG_THUMBS_PER_PART = 5
 NO_PART_NAME = "No Part"

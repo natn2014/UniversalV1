@@ -5,6 +5,7 @@ hidapi
 pyzbar
 pytesseract
 tesserocr
+matplotlib
 
 # opencv-python-headless (not opencv-python) avoids bundling its own Qt
 # plugins, which otherwise conflict with PySide6's at runtime.

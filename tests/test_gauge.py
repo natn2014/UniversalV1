@@ -7,14 +7,17 @@ import math
 import os
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtGui import QImage, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+import app.gauge_log as gauge_log_mod  # noqa: E402
 import app.jobs as jobs_mod  # noqa: E402
 import app.ng_log as ng_log_mod  # noqa: E402
 import app.paths as paths_mod  # noqa: E402
@@ -47,6 +50,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SCALE = GaugeSpec(value_at_start=0.0, value_at_end=100.0, unit="%", spec_min=20.0, spec_max=80.0)
 CENTER = (500.0, 500.0)
 RADIUS = 200.0
+NEEDLE = 130.0  # short enough to stay between Start and End all round the dial
 # A 270 degree dial, Start lower left and End lower right; screen angles (y down).
 START_ANGLE, SWEEP = 135.0, 270.0
 
@@ -65,7 +69,7 @@ def dial(percent: float = None, tip_angle: float = None) -> list:
     if tip_angle is None:
         tip_angle = START_ANGLE + SWEEP * percent / 100
     return [det(CLASS_CENTER, CENTER), det(CLASS_START, on_dial(START_ANGLE)),
-            det(CLASS_END, on_dial(START_ANGLE + SWEEP)), det(CLASS_TIP, on_dial(tip_angle, 150))]
+            det(CLASS_END, on_dial(START_ANGLE + SWEEP)), det(CLASS_TIP, on_dial(tip_angle, NEEDLE))]
 
 
 def reading(side: str, percent: float = 50.0) -> GaugeReading:
@@ -125,6 +129,50 @@ class Geometry(unittest.TestCase):
 
     def test_no_sweep(self):
         self.assertIsNone(needle_ratio((0, 0), (1, 1), (2, 2), (0, 5)))
+
+
+class Position(unittest.TestCase):
+    def test_labels_swapped_by_the_model_still_read(self):
+        dets = dial(25)
+        dets[1]["cls_id"], dets[2]["cls_id"] = CLASS_END, CLASS_START
+        self.assertAlmostEqual(read_gauge(dets, SCALE).value, 25.0, places=2)
+
+    def test_both_ends_labelled_the_same_still_read(self):
+        dets = dial(25)
+        dets[2]["cls_id"] = CLASS_START
+        self.assertAlmostEqual(read_gauge(dets, SCALE).value, 25.0, places=2)
+
+    def test_center_left_of_start_is_refused(self):
+        dets = dial(50)
+        dets[0] = det(CLASS_CENTER, (250.0, 500.0))
+        result = read_gauge(dets, SCALE)
+        self.assertEqual(result.side, NO_READ)
+        self.assertTrue(result.problem)
+
+    def test_tip_right_of_end_is_refused(self):
+        dets = dial(50)
+        dets[3] = det(CLASS_TIP, (900.0, 450.0))
+        self.assertTrue(read_gauge(dets, SCALE).problem)
+
+    def test_a_surer_box_in_the_wrong_place_loses(self):
+        dets = dial(50, )
+        dets[3]["conf"] = 0.3
+        dets.append(det(CLASS_TIP, (900.0, 450.0), conf=0.95))
+        self.assertAlmostEqual(read_gauge(dets, SCALE).value, 50.0, places=2)
+
+    def test_most_confident_valid_set_wins(self):
+        dets = dial(50)
+        dets.append(det(CLASS_TIP, on_dial(START_ANGLE + SWEEP * 0.75, NEEDLE), conf=0.5))
+        self.assertAlmostEqual(read_gauge(dets, SCALE).value, 50.0, places=2)
+
+    def test_box_jitter_at_the_edge_is_allowed(self):
+        dets = dial(50)
+        start_x = on_dial(START_ANGLE)[0]
+        dets[3] = det(CLASS_TIP, (start_x - 3, 400.0))  # within the small margin
+        self.assertTrue(read_gauge(dets, SCALE).read)
+
+    def test_missing_point_is_not_a_position_problem(self):
+        self.assertFalse(read_gauge(dial(50)[:3], SCALE).problem)
 
 
 class Limits(unittest.TestCase):
@@ -305,6 +353,7 @@ class App(unittest.TestCase):
             mock.patch.object(jobs_mod, "PART_CONFIGS_DIR", root / "jobs"),
             mock.patch.object(jobs_mod, "LAST_PART_FILE", root / "jobs" / ".last_part"),
             mock.patch.object(ng_log_mod, "NG_LOGS_DIR", root / "ng"),
+            mock.patch.object(paths_mod, "GAUGE_LOGS_DIR", root / "gauge"),
             mock.patch.object(settings_tab_mod, "find_cameras", return_value=[]),
             mock.patch("app.tower.TowerController.connect_device"),
             mock.patch("app.main_window.MainWindow.confirm_unsaved", return_value=True),
@@ -332,6 +381,7 @@ class App(unittest.TestCase):
         self.ctx.settings.set(state_hold_ms=0, mark_hold_ms=0, ok_count=0, ng_count=0)
         self.monitor._reset_judgement()
         self.monitor._preview = False
+        self.ctx.gauge_log.set_part(None)
         self.image = QImage(1000, 1000, QImage.Format_RGB888)
         self.image.fill(0)
 
@@ -399,6 +449,53 @@ class App(unittest.TestCase):
         self.assertEqual(sum("_OVER" in i for i in images), 1)
         self.assertEqual(self.ctx.settings["ng_count"], 1)
 
+    def test_readings_are_recorded_but_not_in_preview(self):
+        before = len(self.ctx.gauge_log.rows)
+        self.frames(50, 5)
+        self.assertEqual(len(self.ctx.gauge_log.rows), before + 1)  # 1 a second, not 1 a frame
+        self.ctx.gauge_log._last_at = float("-inf")
+        self.monitor._reset_judgement()
+        self.monitor._preview = True
+        self.frames(50, 5)
+        self.assertEqual(len(self.ctx.gauge_log.rows), before + 1)
+
+    def test_gauge_data_tab_only_for_gauge_jobs(self):
+        index = self.win.tabs.indexOf(self.win.gauge_data_tab)
+        self.assertTrue(self.win.tabs.isTabVisible(index))
+        self.settings.set_judge_mode("required")
+        self.assertFalse(self.win.tabs.isTabVisible(index))
+        self.assertFalse(self.ctx.worker._qr_scan)
+        self.settings.set_judge_mode("gauge")
+        self.assertTrue(self.ctx.worker._qr_scan)
+
+    def test_all_tabs_fit_a_1024_panel_in_both_languages(self):
+        self.win.resize(1024, 768)
+        bar = self.win.tabs.tabBar()
+        room = 1024 - self.win.tabs.cornerWidget(Qt.TopRightCorner).sizeHint().width() - 24
+        for language in ("en", "th"):
+            self.win.set_language(language)
+            APP.processEvents()
+            self.assertLessEqual(bar.sizeHint().width(), room, language)
+        self.win.set_language("en")
+
+    def test_switching_language_keeps_the_reading_and_saves_nothing_extra(self):
+        self.clear_ng()
+        self.frames(85, 5)
+        self.win.set_language("th")
+        self.monitor._show_judge_mode()
+        self.assertTrue(self.monitor._gauge_reading.read)
+        self.frames(85, 5)
+        self.win.set_language("en")
+        self.assertEqual(len(self.ng_images()), 1)
+
+    def test_out_of_position_shows_a_note_not_ng(self):
+        dets = dial(50)
+        dets[0] = det(CLASS_CENTER, (250.0, 500.0))
+        for _ in range(5):
+            self.monitor.on_frame(self.image, dets, [])
+        self.assertEqual(self.ctx.settings["ng_count"], 0)
+        self.assertIn("position", self.monitor.layout_label.text())
+
     def test_no_reading_is_standby_with_nothing_saved(self):
         self.clear_ng()
         for _ in range(5):
@@ -413,6 +510,81 @@ class App(unittest.TestCase):
         self.frames(85, 5)
         self.assertEqual(self.ctx.settings["ng_count"], 0)
         self.assertEqual(self.ng_images(), [])
+
+
+class DataRecord(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        patcher = mock.patch.object(paths_mod, "GAUGE_LOGS_DIR", Path(self.tmp.name))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.log = gauge_log_mod.GaugeDataLog()
+        self.log.set_part("P1")
+
+    def test_box_label_matches_the_original(self):
+        self.assertEqual(gauge_log_mod.next_box_label("Box No.38"), "Box No.39")
+        self.assertEqual(gauge_log_mod.next_box_label("Box No.43"), "Box No.1")
+        self.assertEqual(gauge_log_mod.next_box_label("box no.5"), "Box No.6")  # always the chart's spelling
+        self.assertEqual(gauge_log_mod.next_box_label("OTHER"), "OTHER")
+        self.assertEqual(len(gauge_log_mod.box_labels()), 43)
+
+    def test_csv_same_columns_as_the_original(self):
+        when = datetime(2026, 11, 9, 12, 0, 1, 5)
+        self.log.record(0.0777, 0.0, when)
+        path = Path(self.tmp.name) / "P1" / "2026_11_09_log.csv"
+        self.assertEqual(path.read_text().splitlines(),
+                         ["Timestamp,Converted Value,QR Code Data", "2026-11-09 12:00:01.000005,0.0777,N/A"])
+
+    def test_one_reading_a_second(self):
+        self.assertTrue(self.log.record(1.0, 10.0))
+        self.assertFalse(self.log.record(2.0, 10.5))
+        self.assertTrue(self.log.record(3.0, 11.0))
+        self.assertEqual([r[1] for r in self.log.rows], [1.0, 3.0])
+
+    def test_qr_ignored_until_the_gauge_is_read(self):
+        self.log.set_qr("Box No.7")
+        self.assertEqual(self.log.qr, "N/A")
+        self.log.record(1.0, 0.0)
+        self.log.set_qr("Box No.7")
+        self.assertEqual(self.log.qr, "Box No.8")
+        self.log.record(1.0, 2.0)
+        self.assertEqual(self.log.rows[-1][2], "Box No.8")
+
+    def test_buffer_keeps_the_last_1000(self):
+        for i in range(1005):
+            self.log.record(float(i), float(i) * 2)
+        self.assertEqual(len(self.log.rows), 1000)
+        self.assertEqual(self.log.rows[0][1], 5.0)
+
+    def test_restart_brings_back_todays_rows_and_skips_damage(self):
+        self.log.record(1.5, 0.0)
+        path = gauge_log_mod.daily_log_path("P1", datetime.now())
+        with open(path, "a") as f:
+            f.write("2026-01-01 00:00:00,not-a-num")  # power lost mid-line
+        again = gauge_log_mod.GaugeDataLog()
+        again.set_part("P1")
+        self.assertEqual([r[1] for r in again.rows], [1.5])
+
+    def test_jobs_are_separate(self):
+        self.log.record(1.0, 0.0)
+        self.log.set_part("P2")
+        self.assertEqual(len(self.log.rows), 0)
+
+    def test_summary_lowest_first(self):
+        rows = [("t", 3.0, "Box No.1"), ("t", 1.0, "Box No.2"), ("t", 2.0, "Box No.2")]
+        self.assertEqual(gauge_log_mod.box_summary(rows), [("Box No.2", 1.5), ("Box No.1", 3.0)])
+
+    def test_real_qr_label(self):
+        import cv2
+        frame = cv2.imread(str(ROOT / "tests" / "data" / "no_gauge_frame.png"))
+        self.assertEqual(gauge_log_mod.read_qr(frame), "Box No.38")
+
+    def test_chart_renders_with_data_and_empty(self):
+        from app.tabs.gauge_data_tab import render_box_plot
+        for rows in ([], [("t", 0.05 + i / 1000, "Box No.3") for i in range(20)] + [("t", 0.07, "N/A")]):
+            image = render_box_plot(rows, 700, 400, "MPa")
+            self.assertEqual((image.width(), image.height()), (700, 400))
 
 
 @unittest.skipUnless(YOLO is not None and (ROOT / "weights" / "gauge_epoch-100.pt").exists(), "needs Ultralytics and the model")

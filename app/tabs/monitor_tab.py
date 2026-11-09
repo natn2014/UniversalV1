@@ -1051,14 +1051,17 @@ class MonitorTab(QWidget):
         unread = bool(ocr) and ocr["state"] == "unreadable"
         self._set_warning(self.missing_label, tr(issue) if issue else "")
         if filters.by_gauge:
+            raw_reading = read_gauge(detections, filters.gauge)
             self._gauge_reading = self._gauge_hold.update(
-                read_gauge(detections, filters.gauge), time.monotonic(), self._ctx.settings["mark_hold_ms"] / 1000.0)
+                raw_reading, time.monotonic(), self._ctx.settings["mark_hold_ms"] / 1000.0)
             self._ctx.gauge_reading_changed.emit(self._gauge_reading)
             self._set_warning(self.missing_label, tr(out_of_spec_text(self._gauge_reading, filters.gauge)))
         layout = self._ctx.filters.layout_warnings(detections)
         notes = [tr(f"Layout: {'; '.join(layout)}")] if layout else []
         if unread:
             notes.append(tr("Short name: not read (STANDBY)"))
+        if filters.by_gauge and raw_reading.problem:
+            notes.append(tr("Gauge: points out of position (STANDBY)"))
         self._set_warning(self.layout_label, "   ·   ".join(notes))
 
         if not self._preview:
@@ -1078,6 +1081,8 @@ class MonitorTab(QWidget):
             if filters.by_gauge and self._gauge_gate.update(
                     self._gauge_reading.side, state == "RED" and not relay.has_input("trigger"), counted == "RED"):
                 self._pending_ng_save = True
+            if filters.by_gauge and self._gauge_reading.read:
+                self._record_gauge()
             self._keep_short_name_zoom(image, detections, ocr, issue, state)
             # Required marks all OK but the short name read wrong: kept while the NG lasts.
             if state != "RED":
@@ -1218,6 +1223,12 @@ class MonitorTab(QWidget):
             draw_label(painter, x1, y1, det["label"], color)
         self._draw_short_name_zoom(painter, image)
 
+    def _record_gauge(self) -> None:
+        try:
+            self._ctx.gauge_log.record(self._gauge_reading.value, time.monotonic())
+        except OSError as exc:
+            self._ctx.status.emit(f"Gauge data save failed: {exc}")
+
     def _draw_gauge(self, painter: QPainter) -> None:
         """Scale ends in yellow, needle green / red, and the value with its limit."""
         reading, spec = self._gauge_reading, self._ctx.filters.gauge
@@ -1297,6 +1308,7 @@ class MonitorTab(QWidget):
         by_marks = filters.by_marks
         if self._judge_mode_shown == filters.judge_mode:
             return
+        mode_changed = self._judge_mode_shown is not None  # None: only re-titling (language)
         self._judge_mode_shown = filters.judge_mode
         badge, title = (("gauge", "Gauge Reader") if filters.by_gauge else
                         ("mark", "Required Marks") if by_marks else ("ai", "AI Detections"))
@@ -1304,9 +1316,10 @@ class MonitorTab(QWidget):
         self.table.setVisible(not by_marks and not filters.by_gauge)
         self.mark_table.setVisible(by_marks)
         self.gauge_table.setVisible(filters.by_gauge)
-        self._gauge_hold.reset()
-        self._gauge_gate.reset()
-        self._gauge_reading = GaugeReading()
+        if mode_changed:
+            self._gauge_hold.reset()
+            self._gauge_gate.reset()
+            self._gauge_reading = GaugeReading()
         if by_marks:
             self._update_mark_table(self._ctx.filters.mark_results(self._current_frame_detections))
 
