@@ -586,6 +586,27 @@ TH = {
     "Training needs the GPU, so monitoring will stop.\n\nStop monitoring and start training?": "การเทรนต้องใช้ GPU การตรวจจะหยุด\n\nหยุดการตรวจและเริ่มเทรน?",
     "Training started...": "เริ่มเทรนแล้ว...",
     "No NG recorded yet.": "ยังไม่มีบันทึก NG",
+    # --- Training Options ----------------------------------------------------
+    "Training Options": "ตัวเลือกการเทรน",
+    "Augmentation": "การเพิ่มข้อมูลภาพ",
+    "Augmentation makes varied copies of each image while training": "ระหว่างเทรนจะสร้างภาพหลายแบบจากภาพเดิม",
+    "Preset:": "รูปแบบ:",
+    "Off": "ปิด",
+    "Light": "เบา",
+    "Strong": "แรง",
+    "Mirror left-right": "กลับภาพซ้าย-ขวา",
+    "Flip upside-down": "กลับภาพบน-ล่าง",
+    "Leave off for printed text and parts whose left/right or up/down matters.": "ปิดไว้สำหรับตัวพิมพ์และชิ้นงานที่ทิศซ้าย/ขวาหรือบน/ล่างมีผล",
+    "Epochs:": "จำนวนรอบ (Epochs):",
+    "More epochs = longer training; stops early when it stops improving.": "รอบมากขึ้น = เทรนนานขึ้น และจะหยุดเองเมื่อไม่ดีขึ้น",
+    "Preview — what the trainer sees": "ตัวอย่างภาพที่ใช้เทรน",
+    "Refresh Preview": "สุ่มตัวอย่างใหม่",
+    "Open a dataset with labelled images in the Train tab to see a preview.": "เปิดชุดข้อมูลที่ติด Label แล้วในแท็บเทรนเพื่อดูตัวอย่าง",
+    "Making preview...": "กำลังสร้างตัวอย่าง...",
+    "Random samples. Refresh to see others.": "ตัวอย่างแบบสุ่ม กดสุ่มใหม่เพื่อดูภาพอื่น",
+    "No changes: trains on the images exactly as captured.": "ไม่เปลี่ยนภาพ: เทรนจากภาพตามที่ถ่ายไว้",
+    "Small brightness, colour, shift and zoom changes. Best for a fixed camera station.": "ปรับความสว่าง สี ตำแหน่ง และซูมเล็กน้อย เหมาะกับกล้องที่ติดตั้งคงที่",
+    "Bigger changes, tilt and image mixing. For few images or a changing setup.": "เปลี่ยนภาพมากขึ้น เอียงภาพ และผสมภาพ เหมาะกับภาพจำนวนน้อยหรือการติดตั้งที่เปลี่ยนบ่อย",
 }
 
 # Strings with values in them: {} is kept as is (a part number, a count...)

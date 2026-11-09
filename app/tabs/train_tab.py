@@ -20,12 +20,14 @@ from PySide6.QtWidgets import (
 
 from ..autocapture import autocapture_images_dir
 from ..context import AppContext
+from ..augmentation import build_hyp, describe
 from ..marking.classes import read_classes_file, validate_class_name, write_classes_file
 from ..optional_deps import torch
 from ..paths import CAPTURES_IMAGES_DIR, IMAGE_EXTENSIONS
 from ..theme import RUN_BUTTON_STYLES, action_button_qss, make_icon
 from ..training import TrainingWorker
 from ..widgets.annotated_image import AnnotatedImageWidget
+from ..widgets.training_options_dialog import TrainingOptionsDialog
 from ..widgets.layout import bottom_bar, top_bar
 from ..widgets.touch_input import get_text
 from ..yolo_labels import pixel_box_to_yolo, read_yolo_label_file, write_yolo_label_file, yolo_box_to_pixel
@@ -97,6 +99,9 @@ class TrainTab(QWidget):
         self.train_start_button.setMinimumWidth(190)
         self.train_start_button.setStyleSheet(action_button_qss(*RUN_BUTTON_STYLES["start"]))
         self.train_start_button.clicked.connect(self._start_training)
+        self.train_options_button = QPushButton("Training Options")
+        self.train_options_button.setFixedHeight(44)
+        self.train_options_button.clicked.connect(self._open_training_options)
         self.train_status_label = QLabel("Ready")
         # Long training messages must not widen the bottom bar.
         self.train_status_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
@@ -179,6 +184,7 @@ class TrainTab(QWidget):
         bottom_layout.addSpacing(12)
         bottom_layout.addWidget(self.train_status_label, 1)
         bottom_layout.addSpacing(8)
+        bottom_layout.addWidget(self.train_options_button)
         bottom_layout.addWidget(self.train_start_button)
 
         layout = QVBoxLayout(self)
@@ -492,15 +498,57 @@ class TrainTab(QWidget):
             ctx.stop_stream_requested.emit()
             return
 
-        images_dir = self._train_pairs[0][0].parent
-        dataset_root = images_dir.parent
+        data_yaml_path = self._write_dataset_files()
+        dataset_root = data_yaml_path.parent
+
+        # Release the Monitor tab's loaded model before training — otherwise it
+        # stays resident in memory (the stream only stops running, it never
+        # clears worker._model), and a second full model plus training's
+        # own memory needs can exceed this device's RAM. See: OOM kills observed
+        # in journalctl during training with both loaded at once.
+        ctx.worker._model = None
+        if torch is not None and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        device = "0" if (torch is not None and torch.cuda.is_available()) else "cpu"
+        settings = ctx.settings
+        config = {
+            "model_path": str(ctx.model_path),
+            "data_yaml": str(data_yaml_path),
+            "epochs": settings["train_epochs"],
+            "augment": build_hyp(settings["train_augment"], settings["train_mirror"],
+                                 settings["train_flip_ud"]),
+            "imgsz": 640,
+            "batch": 8,
+            "patience": 20,
+            "optimizer": "auto",
+            "lr0": 0.01,
+            "device": device,
+            "project": str(dataset_root / "runs"),
+            "name": "train",
+        }
+
+        self._training_worker = TrainingWorker(config)
+        self._training_worker.status_update.connect(self.train_status_label.setText)
+        self.train_status_label.setText(f"Training started ({self._training_options_text()})...")
+        self._training_worker.training_complete.connect(self._on_training_complete)
+        self._training_worker.training_error.connect(self.train_status_label.setText)
+        self._training_worker.finished.connect(self._on_training_thread_finished)
+        self.train_start_button.setEnabled(False)
+        ctx.training_active = True
+        self._training_worker.start()
+
+    def _write_dataset_files(self) -> Optional[Path]:
+        """Writes labelled.txt + data.yaml next to the images folder (used by
+        training and the augmentation preview); None without labelled images."""
+        labelled = [image for image, label in self._train_pairs if label.exists()]
+        if not labelled:
+            return None
+        dataset_root = labelled[0].parent.parent
         # Train on labelled images only: Ultralytics would take an image with
         # no label file as background and learn to ignore what's on it.
         list_path = dataset_root / "labelled.txt"
-        list_path.write_text("".join(
-            f"{image_path.resolve()}\n"
-            for image_path, label_path in self._train_pairs if label_path.exists()
-        ))
+        list_path.write_text("".join(f"{image.resolve()}\n" for image in labelled))
         data_yaml_path = dataset_root / "data.yaml"
         with data_yaml_path.open("w") as f:
             yaml.safe_dump(
@@ -514,39 +562,25 @@ class TrainTab(QWidget):
                 f,
                 sort_keys=False,
             )
+        return data_yaml_path
 
-        # Release the Monitor tab's loaded model before training — otherwise it
-        # stays resident in memory (the stream only stops running, it never
-        # clears worker._model), and a second full model plus training's
-        # own memory needs can exceed this device's RAM. See: OOM kills observed
-        # in journalctl during training with both loaded at once.
-        ctx.worker._model = None
-        if torch is not None and torch.cuda.is_available():
-            torch.cuda.empty_cache()
+    def _training_options_text(self) -> str:
+        settings = self._ctx.settings
+        return (describe(settings["train_augment"], settings["train_mirror"], settings["train_flip_ud"])
+                + f", {settings['train_epochs']} epochs")
 
-        device = "0" if (torch is not None and torch.cuda.is_available()) else "cpu"
-        config = {
-            "model_path": str(ctx.model_path),
-            "data_yaml": str(data_yaml_path),
-            "epochs": 50,
-            "imgsz": 640,
-            "batch": 8,
-            "patience": 20,
-            "optimizer": "auto",
-            "lr0": 0.01,
-            "device": device,
-            "project": str(dataset_root / "runs"),
-            "name": "train",
-        }
-
-        self._training_worker = TrainingWorker(config)
-        self._training_worker.status_update.connect(self.train_status_label.setText)
-        self._training_worker.training_complete.connect(self._on_training_complete)
-        self._training_worker.training_error.connect(self.train_status_label.setText)
-        self._training_worker.finished.connect(self._on_training_thread_finished)
-        self.train_start_button.setEnabled(False)
-        ctx.training_active = True
-        self._training_worker.start()
+    @Slot()
+    def _open_training_options(self) -> None:
+        settings = self._ctx.settings
+        data_yaml = self._write_dataset_files() if self._classes else None
+        dialog = TrainingOptionsDialog(
+            settings["train_augment"], settings["train_mirror"], settings["train_flip_ud"],
+            settings["train_epochs"], data_yaml, parent=self)
+        if dialog.exec() != TrainingOptionsDialog.Accepted:
+            return
+        settings.set(train_augment=dialog.preset, train_mirror=dialog.mirror,
+                     train_flip_ud=dialog.flip_ud, train_epochs=dialog.epochs)
+        self.train_status_label.setText(f"Saved: {self._training_options_text()}")
 
     @Slot(str)
     def _on_training_complete(self, best_path: str) -> None:

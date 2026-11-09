@@ -1,0 +1,29 @@
+{
+  "part_no": "TEST",
+  "model_path": null,
+  "confidence_threshold": 0.6,
+  "max_detections": 3,
+  "target_class_1": null,
+  "target_class_2": null,
+  "target_gate": "OR",
+  "selected_classes": [],
+  "perspective": [
+    [
+      0.1302,
+      0.2885
+    ],
+    [
+      0.8424,
+      0.2885
+    ],
+    [
+      0.8264,
+      0.983
+    ],
+    [
+      0.1399,
+      0.9802
+    ]
+  ],
+  "roi": null
+}

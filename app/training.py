@@ -47,6 +47,9 @@ class TrainingWorker(QThread):
                 val=True,
                 amp=True,
                 workers=0,
+                # Augmentation preset (app/augmentation.py); always includes
+                # fliplr/flipud so Ultralytics' default mirroring can't apply.
+                **self.config.get("augment", {}),
             )
             best_path = Path(results.save_dir) / "weights" / "best.pt"
             self.training_complete.emit(str(best_path))

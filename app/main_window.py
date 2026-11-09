@@ -337,6 +337,21 @@ class MainWindow(QWidget):
         super().closeEvent(event)
 
 
+ALREADY_RUNNING_TEXT = (
+    "UniversalV1 is already running.\n\n"
+    "If it was started automatically, stop it first:\n"
+    "systemctl --user stop universalv1"
+)
+
+
+def _show_already_running(app: QApplication) -> None:
+    """Tells the user, then exits 0 (so systemd doesn't restart-loop). The
+    box closes itself, so a copy started without anyone watching can't hang."""
+    box = QMessageBox(QMessageBox.Warning, "UniversalV1", ALREADY_RUNNING_TEXT)
+    QTimer.singleShot(10000, box.accept)
+    box.exec()
+
+
 def main() -> None:
     app = QApplication(sys.argv)
     # One copy only: two would fight over the camera, the tower light and the
@@ -344,8 +359,9 @@ def main() -> None:
     lock = QLockFile(str(Path(QStandardPaths.writableLocation(QStandardPaths.TempLocation)) / "universalv1-app.lock"))
     lock.setStaleLockTime(0)  # a lock left by a crashed copy is taken over (its process is gone)
     if not lock.tryLock(100):
-        QMessageBox.warning(None, "UniversalV1", "The inspection app is already running.")
-        sys.exit(1)
+        print(ALREADY_RUNNING_TEXT.replace("\n\n", " ").replace("\n", " "), file=sys.stderr)
+        _show_already_running(app)
+        sys.exit(0)
     app.setStyleSheet(DARK_INDUSTRIAL_QSS)
     hints = HintWrapper(app)
     app.installEventFilter(hints)

@@ -66,7 +66,8 @@ The tool design and the per-tool details are in [core_function.md](core_function
   - Jobs are switched with touch tiles or a barcode scanned by the camera (Code 39 / AIM extended).
 - **Capture and Train:**
   - **Capture** saves frames with YOLO labels.
-  - The Train tab lets you correct a box's class and fine-tune the model on the device.
+  - The Train tab lets you draw, delete and correct boxes, and fine-tune the model on the device.
+  - **Training Options**: augmentation preset (Off / Light / Strong), mirror and upside-down flips (off by default), epochs, and a preview of the images exactly as the trainer sees them.
 - **Kiosk mode:**
   - Starts full screen on boot through a systemd user service.
   - Reloads the last job automatically.
@@ -222,7 +223,8 @@ Only one copy of the app runs at a time: a second start says "already running" a
   - เลือกงานด้วยปุ่มบนจอ หรือสแกนบาร์โค้ดผ่านกล้อง (Code 39 / AIM extended)
 - **Capture และ Train:**
   - ปุ่ม **Capture** บันทึกภาพพร้อม Label รูปแบบ YOLO
-  - แท็บ Train ใช้แก้ไขคลาสของกรอบ และเทรนโมเดลต่อ (Fine-tune) บนเครื่องได้
+  - แท็บ Train ใช้วาด ลบ และแก้ไขคลาสของกรอบ และเทรนโมเดลต่อ (Fine-tune) บนเครื่องได้
+  - **Training Options:** เลือก Augmentation (Off / Light / Strong), กลับภาพซ้าย-ขวา / บน-ล่าง (ปิดไว้เป็นค่าเริ่มต้น), จำนวน Epoch และดูตัวอย่างภาพที่ใช้เทรนจริง
 - **โหมด Kiosk:**
   - เปิดเต็มจอเองเมื่อบูตเครื่อง ผ่าน systemd user service
   - โหลดงานล่าสุดให้อัตโนมัติ

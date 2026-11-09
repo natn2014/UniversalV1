@@ -21,6 +21,12 @@ DEFAULT_APP_SETTINGS = {
     "auto_start": True,
     # Camera capture size "WxH"; falls back to 640x480 if the camera can't.
     "camera_resolution": "1920x1080",
+    # Training options (Train tab): augmentation preset, flips, epochs.
+    # Mirror defaults off: it breaks printed text and left/right parts.
+    "train_augment": "light",
+    "train_mirror": False,
+    "train_flip_ud": False,
+    "train_epochs": 50,
     # OK/NG cycle counters, persisted so a kiosk restart doesn't lose them.
     "ok_count": 0,
     "ng_count": 0,
@@ -86,7 +92,9 @@ def save_app_settings(settings: dict) -> None:
 # Written to disk at once: counters and operator toggles outside Settings.
 # Every other key is a Settings value: live in memory at once, on disk only
 # after commit() (the Settings tab's Save), back to the saved value on revert().
-IMMEDIATE_KEYS = {"ok_count", "ng_count", "buzzer_enabled", "language"}
+IMMEDIATE_KEYS = {"ok_count", "ng_count", "buzzer_enabled", "language",
+                  # Training Options are saved by their own dialog, not the Settings tab.
+                  "train_augment", "train_mirror", "train_flip_ud", "train_epochs"}
 
 
 class AppSettings(QObject):

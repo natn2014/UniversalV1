@@ -1,0 +1,40 @@
+{
+  "part_no": "8850304144380",
+  "model_path": "/home/orin_nano/dev/Wire_harness_module/RR00_undertest.pt",
+  "confidence_threshold": 0.6,
+  "max_detections": 3,
+  "target_class_1": "Lead",
+  "target_class_2": "NoTape",
+  "target_gate": "OR",
+  "selected_classes": [
+    "Backside",
+    "Lead",
+    "LeadFree",
+    "NoTape",
+    "WhiteTape"
+  ],
+  "roi": [
+    0.1324,
+    0.0603,
+    0.9254,
+    0.9166
+  ],
+  "perspective": [
+    [
+      0.1302,
+      0.2885
+    ],
+    [
+      0.8424,
+      0.2885
+    ],
+    [
+      0.8264,
+      0.983
+    ],
+    [
+      0.1399,
+      0.9802
+    ]
+  ]
+}
