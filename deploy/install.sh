@@ -31,7 +31,8 @@
 #                     system Tesseract; skipped if it can't build: pytesseract works)
 #   10 verify         every import, torch on the GPU, the model files, the tests
 #   11 power          nvpmodel 25 W (MAXN SUPER trips this board's over-current
-#                     protection and reboots it)
+#                     protection and reboots it); fan profile "cool", so long
+#                     inference and training runs stay cooler
 #   12 autostart      GDM automatic login, no screen lock, the systemd user service
 
 set -Eeuo pipefail
@@ -47,6 +48,8 @@ SERVICE_NAME="universalv1.service"
 SERVICE_DIR="$HOME/.config/systemd/user"
 TORCH_INDEX="https://pypi.org/simple"   # CUDA 13 aarch64 wheels that see the Orin GPU (see requirements.txt)
 MARK_MODEL="weights/MarkV9_best.pt"     # app/paths.py MARK_MODEL_PATH
+FAN_CONF=/etc/nvfancontrol.conf
+FAN_STATUS=/var/lib/nvfancontrol/status
 
 FROM_STEP=1
 CHECK_ONLY=0
@@ -284,7 +287,12 @@ EOF
 }
 
 step_power() {
-    step 11 "Power mode 25 W"
+    step 11 "Power mode 25 W and fan"
+    set_power_mode
+    set_fan_profile
+}
+
+set_power_mode() {
     command -v nvpmodel >/dev/null || { warn "nvpmodel not found: set the power mode by hand"; return; }
     local current
     current=$(nvpmodel -q 2>/dev/null | head -1)
@@ -300,6 +308,33 @@ step_power() {
         ok "power mode: $(nvpmodel -q 2>/dev/null | head -1)"
     else
         warn "power mode left at $current"
+    fi
+}
+
+fan_profile() { grep -oP '^\s*FAN_DEFAULT_PROFILE\s+\K\S+' "$FAN_CONF" 2>/dev/null || echo "-"; }
+
+set_fan_profile() {
+    # nvfancontrol stays in charge (the fan still follows the temperature), on
+    # its faster "cool" curve. It keeps the profile it last ran in its status
+    # file, which wins over the config, so that file is removed while it is
+    # stopped; the start runs even if the removal fails, so the fan is never left
+    # without its controller.
+    [ -f "$FAN_CONF" ] || { warn "no $FAN_CONF: fan left as it is"; return; }
+    local current
+    current=$(fan_profile)
+    if [ "$current" = "cool" ]; then
+        ok "fan profile cool"
+        return
+    fi
+    grep -qP '^\s*FAN_PROFILE\s+cool\b' "$FAN_CONF" || { warn "no cool profile in $FAN_CONF; fan left at $current"; return; }
+    if confirm "Set the fan profile to cool (now: $current)? Faster fan, cooler board, a little louder."; then
+        run sudo cp -n "$FAN_CONF" "$FAN_CONF.before-universalv1"
+        run sudo sed -i -E 's/^(\s*FAN_DEFAULT_PROFILE\s+)\S+/\1cool/' "$FAN_CONF"
+        run sudo sh -c "systemctl stop nvfancontrol; rm -f $FAN_STATUS; systemctl start nvfancontrol"
+        systemctl is-active --quiet nvfancontrol || die "nvfancontrol did not start again: sudo systemctl start nvfancontrol"
+        ok "fan profile cool (old file kept as $FAN_CONF.before-universalv1)"
+    else
+        warn "fan profile left at $current"
     fi
 }
 
@@ -352,6 +387,7 @@ check_only() {
     "$PY" -c "import torch; assert torch.cuda.is_available()" 2>/dev/null && ok "torch sees the GPU" || warn "torch does not see the GPU"
     [ -f /etc/udev/rules.d/99-patlite-lr6.rules ] && ok "tower light rule" || warn "no tower light rule: run --from 3"
     nvpmodel -q 2>/dev/null | head -1 | grep -q 25W && ok "power 25W" || warn "power mode: $(nvpmodel -q 2>/dev/null | head -1)"
+    [ "$(fan_profile)" = "cool" ] && ok "fan profile cool" || warn "fan profile: $(fan_profile) (cool: run --from 11)"
     grep -q "^AutomaticLoginEnable=true" /etc/gdm3/custom.conf 2>/dev/null && ok "automatic login" || warn "no automatic login"
     systemctl --user is-enabled "$SERVICE_NAME" >/dev/null 2>&1 && ok "service enabled ($(systemctl --user is-active "$SERVICE_NAME" 2>/dev/null))" \
         || warn "service not enabled: run --from 12"

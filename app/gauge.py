@@ -10,7 +10,7 @@ Two different pairs of numbers, easily confused:
 """
 
 import math
-from collections import deque
+from collections import Counter, deque
 from dataclasses import asdict, dataclass, field
 from itertools import permutations, product
 from typing import Deque, Dict, List, Optional, Tuple
@@ -27,8 +27,8 @@ GAUGE_INFERENCE = {"conf": 0.10, "iou": 0.35, "imgsz": 640}
 # Geometry that can't be a real gauge: no reading rather than a wrong one.
 # Ratios to the dial's radius, so they hold at any camera resolution.
 MIN_SIDE_RATIO = 0.15  # how far Start and End are to the left / right of Center
-MIN_NEEDLE_RATIO = 0.2  # Center to Tip
-ORDER_TOLERANCE_RATIO = 0.05  # how far the Tip may stray past Start / End
+MIN_NEEDLE_RATIO = 0.2  # Center to Tip, at least
+MAX_NEEDLE_RATIO = 1.3  # and at most: a Tip box beyond that is off the dial
 TOP_CANDIDATES = 3  # boxes tried per point; the model runs at a low confidence
 
 VALUE_DECIMALS = 4  # the value is judged as shown, so 0.0700 is never "> 0.0700"
@@ -140,27 +140,35 @@ def _candidates(detections: List[dict]) -> tuple:
 
 
 def labelled_points(detections: List[dict]) -> List[Tuple[str, Point]]:
-    """What the model found, for the view while there is no reading: each mark
-    once, and a scale end named by its side of Center, whatever its class."""
+    """What the model found, for the view while there is no reading: a gauge
+    has one of each point, so only the most confident Center, Tip, Start and
+    End are shown. A scale end is named by its side of Center, whatever its
+    class; without a Center its side is unknown, so the two surest are shown."""
     centers, ends, tips = _candidates(detections)
-    named = [("Center", point) for _, point in centers] + [("Tip", point) for _, point in tips]
-    for _, point in ends:
-        side = "Start/End" if not centers else "Start" if point[0] < centers[0][1][0] else "End"
-        named.append((side, point))
+    named = [("Center", centers[0][1])] if centers else []
+    if tips:
+        named.append(("Tip", tips[0][1]))
+    if not centers:
+        return named + [("Start/End", point) for _, point in ends[:2]]
+    pivot = centers[0][1][0]
+    for side, on_side in (("Start", lambda x: x < pivot), ("End", lambda x: x >= pivot)):
+        point = next((p for _, p in ends if on_side(p[0])), None)  # ends are surest first
+        if point is not None:
+            named.append((side, point))
     return named
 
 
 def in_position(center: Point, start: Point, end: Point, tip: Point) -> bool:
-    """Start on the left of Center and End on its right, the Tip between them;
-    and nothing that can't be a dial (see the ratios above)."""
+    """Start on the left of Center and End on its right, and a Tip on the dial;
+    nothing that can't be a dial (see the ratios above). The Tip is checked by
+    its distance only: a long pointer near Start or End reaches further out
+    than the scale ends, so it can be left of Start or right of End."""
     radius = (_distance(center, start) + _distance(center, end)) / 2
     side = MIN_SIDE_RATIO * radius
-    margin = ORDER_TOLERANCE_RATIO * radius
     return (radius > 0
             and start[0] <= center[0] - side
             and end[0] >= center[0] + side
-            and start[0] - margin <= tip[0] <= end[0] + margin
-            and _distance(center, tip) >= MIN_NEEDLE_RATIO * radius)
+            and MIN_NEEDLE_RATIO * radius <= _distance(center, tip) <= MAX_NEEDLE_RATIO * radius)
 
 
 def read_gauge(detections: List[dict], spec: GaugeSpec) -> GaugeReading:
@@ -242,6 +250,51 @@ class GaugeHold:
             return self._last or GaugeReading()
         self.reset()
         return GaugeReading()
+
+
+class PointSmoother:
+    """Steadies the points drawn on screen and in saved images; the value and
+    the verdict don't use it (they come from GaugeHold). Time passed in, so it
+    is testable.
+
+    The model's boxes shift a few pixels from frame to frame, so each named
+    point moves ALPHA of the way to its new place. A jump longer than
+    JUMP_RATIO of the frame width (the next gauge arriving) is taken at once,
+    and a point the model misses for a moment stays for `hold_s`. A name seen
+    twice in one frame (two scale ends without a Center) is drawn as it is."""
+
+    ALPHA = 0.5
+    JUMP_RATIO = 0.04  # about 75 px at 1920 wide: a third of the dial's radius
+
+    def __init__(self) -> None:
+        self._points: Dict[str, Tuple[Point, float]] = {}
+
+    def reset(self) -> None:
+        self._points.clear()
+
+    def update(self, named: List[Tuple[str, Point]], now: float, hold_s: float,
+               frame_width: float) -> List[Tuple[str, Point]]:
+        counts = Counter(name for name, _ in named)
+        jump = self.JUMP_RATIO * frame_width
+        out: List[Tuple[str, Point]] = []
+        for name, point in named:
+            if counts[name] > 1:
+                out.append((name, point))
+                continue
+            last = self._points.get(name)
+            if last is not None and _distance(last[0], point) <= jump:
+                (lx, ly), _ = last
+                point = (lx + self.ALPHA * (point[0] - lx), ly + self.ALPHA * (point[1] - ly))
+            self._points[name] = (point, now)
+            out.append((name, point))
+        for name, (point, at) in list(self._points.items()):
+            if counts[name]:
+                continue
+            if now - at <= hold_s:
+                out.append((name, point))
+            else:
+                del self._points[name]
+        return out
 
 
 class GaugeCaptureGate:

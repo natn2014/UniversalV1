@@ -705,6 +705,11 @@ QLabel#monitorPartModel {{
     font-size: 32pt;  /* 2.5x the base 13pt: read from the line */
     font-weight: 700;
 }}
+QLabel#monitorPartModelCompact {{
+    color: #e8ecf0;
+    font-size: 20pt;  /* a small panel such as 1024x768: a long part number still fits */
+    font-weight: 700;
+}}
 QLabel#judgementBanner {{
     font-size: 15pt;
     font-weight: 800;

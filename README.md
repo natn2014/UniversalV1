@@ -69,7 +69,7 @@ These two GIFs use a drawn dial and made-up readings, with the dial's points sup
 - **In range:** OK. **Over MAX or under MIN:** NG, with tower light, buzzer, relay and NG count, like a missing Required Mark.
 - **No reading** (any of the four points not found): STANDBY, never NG.
 - **Images:** saved to the Log tab, annotated and tagged OVER or UNDER: one when it goes out of spec, and one more if it swings straight from OVER to UNDER or back. A gauge that stays out of spec saves nothing more.
-- **Position check:** Start must be on the left of Center and End on its right, with the Tip between them. Position decides the name: a scale end the model calls End on the left is treated as Start, and the reverse. If no set of points fits, the job shows STANDBY with a note.
+- **Position check:** Start must be on the left of Center and End on its right, and the Tip on the dial (its distance from Center is checked, so a long pointer may reach past Start or End). Position decides the name: a scale end the model calls End on the left is treated as Start, and the reverse. If no set of points fits, the job shows STANDBY with a note.
 - **Measurement:** counted from End to Tip, where End to Start is 100%. With the default settings, End is 0 and Start is 0.1 MPa.
 - **Gauge Data tab** (gauge jobs only): one reading a second is saved to `gauge_logs/<part>/YYYY_MM_DD_log.csv` (Timestamp, Converted Value, QR Code Data). The tab shows a box plot for Box No.1-43 and each box's average from every reading of the chosen day. Tap up to 3 days in the Days list to compare them side by side, one colour per day. **Export** copies a From-To date range to a USB drive, one CSV file per day, in a new `gauge_export/` folder. The box number comes from the QR label in view.
 - Set an ROI around the gauge so it fills the model's view. If the camera is mounted upside down, turn on mirror and flip under Settings > Camera.
@@ -127,7 +127,7 @@ What it sets up, in this order:
 - **System packages:** zbar, Tesseract, the Qt/X11 libraries and fonts with Thai.
 - **The tower light's udev rule.**
 - **Python packages:** PyTorch with CUDA (first, checked on the GPU), OpenCV *headless*, Ultralytics, PySide6 and the OCR modules. Versions are pinned in `deploy/constraints-jetson.txt`.
-- **Power mode 25 W.**
+- **Power mode 25 W and the fan profile `cool`** (faster fan; it still follows the temperature).
 - **Start at boot:** automatic login and the `universalv1` service.
 
 > Install `opencv-python-headless`, not `opencv-python`. The non-headless build brings its own Qt plugins, and they clash with PySide6. The installer removes the `opencv-python` that Ultralytics pulls in.
@@ -247,7 +247,7 @@ GIF ทั้งสองนี้ใช้หน้าปัดที่วา�
 - ค่าอยู่ระหว่าง MIN ถึง MAX (รวมค่าขอบ): OK
 - เกิน MAX หรือต่ำกว่า MIN: NG พร้อมไฟสัญญาณ เสียงเตือน รีเลย์ และตัวนับ NG
 - อ่านค่าไม่ได้: STANDBY ไม่นับเป็น NG
-- ตรวจตำแหน่ง: Start ต้องอยู่ทางซ้ายของ Center และ End ต้องอยู่ทางขวา โดยใช้ตำแหน่งเป็นตัวกำหนดชื่อ หากโมเดลตรวจพบ End ทางซ้ายจะถือเป็น Start และในทางกลับกัน
+- ตรวจตำแหน่ง: Start ต้องอยู่ทางซ้ายของ Center และ End ต้องอยู่ทางขวา โดยใช้ตำแหน่งเป็นตัวกำหนดชื่อ หากโมเดลตรวจพบ End ทางซ้ายจะถือเป็น Start และในทางกลับกัน ส่วน Tip ตรวจจากระยะห่างจาก Center (เข็มยาวอาจเลยตำแหน่ง Start หรือ End ได้)
 - ส่งออกข้อมูล: แท็บ **Gauge Data** กด **Export** เลือกวันที่เริ่มต้น วันที่สิ้นสุด และไดรฟ์ USB ระบบคัดลอกไฟล์ CSV วันละ 1 ไฟล์ไปยังโฟลเดอร์ใหม่ `gauge_export/`
 - การวัด: นับจาก End ไปยัง Tip โดย End ถึง Start เท่ากับ 100% ค่าเริ่มต้นคือ End = 0 และ Start = 0.1 MPa
 - บันทึกภาพลงแท็บ Log พร้อมป้าย OVER หรือ UNDER เมื่อค่าออกนอกช่วง 1 ภาพ และอีก 1 ภาพเมื่อค่าเปลี่ยนจาก OVER เป็น UNDER หรือกลับกันโดยตรง

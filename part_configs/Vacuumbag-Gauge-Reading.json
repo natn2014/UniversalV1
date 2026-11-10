@@ -1,6 +1,6 @@
 {
   "part_no": "Vacuumbag-Gauge-Reading",
-  "model_path": "/home/orin_nano/dev_AI/UniversalV1/weights/gauge_epoch-100.pt",
+  "model_path": "/home/orin_nano/dev_AI/UniversalV1/weights/gauge_vacuumbag_I.pt",
   "confidence_threshold": 0.0,
   "max_detections": 0,
   "target_class_1": null,
@@ -21,12 +21,19 @@
     "value_at_start": 0.1,
     "value_at_end": 0.0,
     "unit": "MPa",
-    "spec_min": 0.0,
+    "spec_min": 0.06,
     "spec_max": 0.1
   },
   "perspective": null,
   "roi": null,
-  "autocapture_masters": [],
+  "autocapture_masters": [
+    {
+      "image": "Vacuumbag-Gauge-Reading/master_20261109_162218_209.jpg"
+    },
+    {
+      "image": "Vacuumbag-Gauge-Reading/master_20261109_162657_854.jpg"
+    }
+  ],
   "tools": [],
   "tools_gate": "AND",
   "mm_per_px": null

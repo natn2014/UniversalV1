@@ -14,8 +14,8 @@ sudo reboot
 ```
 
 Run it as the user the kiosk runs as, not with `sudo`. It asks for the sudo
-password for the system steps, and asks before turning on automatic login and
-changing the power mode (`--yes` skips the questions).
+password for the system steps, and asks before turning on automatic login,
+changing the power mode and setting the fan profile (`--yes` skips the questions).
 
 After the reboot the desktop logs in by itself, and the app starts the last job
 and begins inspecting.
@@ -34,7 +34,7 @@ and begins inspecting.
 | 8 | pyside6 | Qt user interface |
 | 9 | extras | hidapi, pyzbar, pytesseract, tesserocr (fast OCR; optional) |
 | 10 | verify | every import, the GPU, the model file, the test suite |
-| 11 | power | nvpmodel 25 W (MAXN SUPER trips over-current on this board) |
+| 11 | power | nvpmodel 25 W (MAXN SUPER trips over-current on this board); fan profile `cool` in `/etc/nvfancontrol.conf` (the old file is kept as `.before-universalv1`) |
 | 12 | autostart | GDM automatic login, no screen lock / blanking, systemd user service |
 
 Versions are pinned in `deploy/constraints-jetson.txt` (frozen from the working

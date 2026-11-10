@@ -40,6 +40,7 @@ from ..gauge import (
     GaugeCaptureGate,
     GaugeHold,
     GaugeReading,
+    PointSmoother,
     format_value,
     gauge_state,
     labelled_points,
@@ -71,6 +72,8 @@ from ..widgets.video_view import VideoView
 from ..yolo_labels import pixel_box_to_yolo, write_yolo_label_file
 
 TOOLBAR_HEIGHT = 40
+# Below this window height (a 1024x768 panel) Part and Model use the smaller size.
+COMPACT_WINDOW_HEIGHT = 900
 ICON_SIZE = QSize(20, 20)
 GAUGE_POINT_COLOR = "#2f8fff"
 GAUGE_POINT_SIZE = 10.0  # screen pixels across
@@ -100,6 +103,8 @@ class MonitorTab(QWidget):
         self._mark_hold = MarkHold()
         self._pending_ng_save: bool = False
         self._gauge_hold = GaugeHold()
+        self._point_smoother = PointSmoother()
+        self._gauge_points: list = []  # (name, point) as drawn, smoothed
         self._gauge_gate = GaugeCaptureGate()
         self._gauge_reading = GaugeReading()
         self._stop_requested: bool = False
@@ -490,6 +495,21 @@ class MonitorTab(QWidget):
 
     # --- Info strip, judgement and buzzer toggle ------------------------
 
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._fit_part_model()
+
+    def _fit_part_model(self) -> None:
+        """Part and Model large on a big screen, smaller on a small one, where
+        32pt cuts a long part number off and takes the image's height."""
+        compact = self.window().height() < COMPACT_WINDOW_HEIGHT
+        name = "monitorPartModelCompact" if compact else "monitorPartModel"
+        for label in (self.part_label, self.model_label):
+            if label.objectName() != name:
+                label.setObjectName(name)
+                label.style().unpolish(label)  # the style sheet keys on the name
+                label.style().polish(label)
+
     def _refresh_monitor_info(self, *_) -> None:
         part = part_label(self._ctx.current_part_no) or "—"
         model_path = self._ctx.model_path
@@ -561,6 +581,8 @@ class MonitorTab(QWidget):
         self._latch.reset()
         self._mark_hold.reset()
         self._gauge_hold.reset()
+        self._point_smoother.reset()
+        self._gauge_points = []
         self._gauge_gate.reset()
         self._gauge_reading = GaugeReading()
         self._short_name_zoom = None
@@ -1059,6 +1081,10 @@ class MonitorTab(QWidget):
                 raw_reading, time.monotonic(), self._ctx.settings["mark_hold_ms"] / 1000.0)
             self._ctx.gauge_reading_changed.emit(self._gauge_reading)
             self._set_warning(self.missing_label, tr(out_of_spec_text(self._gauge_reading, filters.gauge)))
+            # Once a frame, not in paint: a repaint must not move the points.
+            self._gauge_points = self._point_smoother.update(
+                self._gauge_named_points(detections), time.monotonic(),
+                self._ctx.settings["mark_hold_ms"] / 1000.0, image.width())
         layout = self._ctx.filters.layout_warnings(detections)
         notes = [tr(f"Layout: {'; '.join(layout)}")] if layout else []
         if unread:
@@ -1240,26 +1266,34 @@ class MonitorTab(QWidget):
         painter.drawPoint(point)
         draw_label(painter, point.x(), point.y(), name, color)
 
+    def _gauge_named_points(self, detections: list) -> list:
+        """The points to draw this frame: the reading's set once read, else
+        what the model sees, to show why there is no reading."""
+        reading = self._gauge_reading
+        if reading.read:
+            return [(key.capitalize(), point) for key, point in reading.points.items()]
+        return labelled_points(detections)
+
     def _draw_gauge(self, painter: QPainter, detections: list) -> None:
-        """Each detection as a dot at its centre, as in Gauge_reader-main, and
-        the needle from Center to Tip in green / red with the value and limit.
-        Without a reading, what the model sees, to show why there is none."""
+        """Each point as a dot (as in Gauge_reader-main), smoothed over frames,
+        and once read the needle from Center to Tip in green / red with the
+        value and limit. `detections` are already in the smoothed points."""
         reading, spec = self._gauge_reading, self._ctx.filters.gauge
         painter.setBrush(Qt.NoBrush)
-        if not reading.read:
-            for name, point in labelled_points(detections):
-                self._draw_gauge_point(painter, QPointF(*point), name, GAUGE_POINT_COLOR)
-            return
         color = QColor(OK_GREEN if reading.side == GAUGE_OK else NG_RED)
-        points = {k: QPointF(*p) for k, p in reading.points.items()}
-        painter.setPen(overlay_pen(painter, color, 3.0))
-        painter.drawLine(points["center"], points["tip"])
-        for key, point in points.items():
-            self._draw_gauge_point(painter, point, key.capitalize(), color if key == "tip" else GAUGE_POINT_COLOR)
-        text =tr(out_of_spec_text(reading, spec)) or format_value(reading.value, spec)
-        # Above the dial, clear of the needle.
-        radius = QLineF(points["center"], points["start"]).length()
-        draw_label(painter, points["center"].x(), points["center"].y() - radius, text, color)
+        named = [(name, QPointF(*point)) for name, point in self._gauge_points]
+        points = dict(named)
+        if reading.read and "Center" in points and "Tip" in points:
+            painter.setPen(overlay_pen(painter, color, 3.0))
+            painter.drawLine(points["Center"], points["Tip"])
+        for name, point in named:
+            self._draw_gauge_point(painter, point, name,
+                                   color if reading.read and name == "Tip" else GAUGE_POINT_COLOR)
+        if reading.read and "Center" in points and "Start" in points:
+            text = tr(out_of_spec_text(reading, spec)) or format_value(reading.value, spec)
+            # Above the dial, clear of the needle.
+            radius = QLineF(points["Center"], points["Start"]).length()
+            draw_label(painter, points["Center"].x(), points["Center"].y() - radius, text, color)
 
     def _update_gauge_table(self) -> None:
         reading, spec = self._gauge_reading, self._ctx.filters.gauge
@@ -1332,6 +1366,8 @@ class MonitorTab(QWidget):
         self.gauge_table.setVisible(filters.by_gauge)
         if mode_changed:
             self._gauge_hold.reset()
+            self._point_smoother.reset()
+            self._gauge_points = []
             self._gauge_gate.reset()
             self._gauge_reading = GaugeReading()
         if by_marks:

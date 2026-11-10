@@ -37,6 +37,7 @@ from app.gauge import (  # noqa: E402
     GaugeHold,
     GaugeReading,
     GaugeSpec,
+    PointSmoother,
     gauge_state,
     labelled_points,
     needle_ratio,
@@ -157,10 +158,18 @@ class Position(unittest.TestCase):
         self.assertEqual(result.side, NO_READ)
         self.assertTrue(result.problem)
 
-    def test_tip_right_of_end_is_refused(self):
+    def test_tip_off_the_dial_is_refused(self):
         dets = dial(50)
-        dets[3] = det(CLASS_TIP, (900.0, 450.0))
+        dets[3] = det(CLASS_TIP, (900.0, 450.0))  # twice the radius out
         self.assertTrue(read_gauge(dets, SCALE).problem)
+
+    def test_long_pointer_past_start_reads(self):
+        # The station's vacuum gauge: near -0.09 its pointer reaches left of the Start tick.
+        tip_angle = START_ANGLE + SWEEP * 0.2
+        dets = dial(tip_angle=tip_angle)
+        dets[3] = det(CLASS_TIP, on_dial(tip_angle, RADIUS * 0.97))
+        self.assertLess(dets[3]["x1"] + 5, on_dial(START_ANGLE)[0])
+        self.assertAlmostEqual(read_gauge(dets, SCALE).value, 20.0, places=1)
 
     def test_a_surer_box_in_the_wrong_place_loses(self):
         dets = dial(50, )
@@ -173,10 +182,10 @@ class Position(unittest.TestCase):
         dets.append(det(CLASS_TIP, on_dial(START_ANGLE + SWEEP * 0.75, NEEDLE), conf=0.5))
         self.assertAlmostEqual(read_gauge(dets, SCALE).value, 50.0, places=2)
 
-    def test_box_jitter_at_the_edge_is_allowed(self):
+    def test_tip_past_end_reads(self):
         dets = dial(50)
-        start_x = on_dial(START_ANGLE)[0]
-        dets[3] = det(CLASS_TIP, (start_x - 3, 400.0))  # within the small margin
+        end_x = on_dial(START_ANGLE + SWEEP)[0]
+        dets[3] = det(CLASS_TIP, (end_x + 20, 420.0))
         self.assertTrue(read_gauge(dets, SCALE).read)
 
     def test_position_replaces_the_class(self):
@@ -220,12 +229,51 @@ class Position(unittest.TestCase):
         dets = [det(CLASS_CENTER, CENTER), det(CLASS_START, point), det(CLASS_END, point, conf=0.5)]
         self.assertEqual([name for name, _ in labelled_points(dets)], ["Center", "Start"])
 
+    def test_view_shows_one_of_each_point(self):
+        x, y = CENTER
+        dets = dial(50) + [det(CLASS_CENTER, (x + 60, y + 40), conf=0.5), det(CLASS_CENTER, (x - 70, y), conf=0.4),
+                           det(CLASS_TIP, (x + 20, y + 150), conf=0.3),
+                           det(CLASS_START, (x - 120, y + 190), conf=0.6), det(CLASS_END, (x + 150, y + 100), conf=0.5)]
+        named = labelled_points(dets)
+        self.assertEqual(sorted(name for name, _ in named), ["Center", "End", "Start", "Tip"])
+        points = dict(named)
+        self.assertEqual(points["Center"], CENTER)  # the surest one
+        self.assertEqual(points["Start"], on_dial(START_ANGLE))
+        self.assertEqual(points["End"], on_dial(START_ANGLE + SWEEP))
+
     def test_without_a_center_the_side_is_unknown(self):
         dets = [det(CLASS_END, on_dial(START_ANGLE))]
         self.assertEqual([name for name, _ in labelled_points(dets)], ["Start/End"])
 
     def test_missing_point_is_not_a_position_problem(self):
         self.assertFalse(read_gauge(dial(50)[:3], SCALE).problem)
+
+
+class Smoothing(unittest.TestCase):
+    W = 1920.0
+
+    def test_small_shifts_are_steadied(self):
+        s = PointSmoother()
+        s.update([("Center", (100.0, 100.0))], 0.0, 1.0, self.W)
+        out = dict(s.update([("Center", (110.0, 100.0))], 0.1, 1.0, self.W))
+        self.assertEqual(out["Center"], (105.0, 100.0))  # half way
+
+    def test_a_jump_is_taken_at_once(self):
+        s = PointSmoother()
+        s.update([("Center", (100.0, 100.0))], 0.0, 1.0, self.W)
+        out = dict(s.update([("Center", (400.0, 100.0))], 0.1, 1.0, self.W))  # the next gauge
+        self.assertEqual(out["Center"], (400.0, 100.0))
+
+    def test_a_missed_point_stays_for_the_hold_time(self):
+        s = PointSmoother()
+        s.update([("Center", (100.0, 100.0)), ("Tip", (50.0, 60.0))], 0.0, 1.0, self.W)
+        self.assertIn("Tip", dict(s.update([("Center", (100.0, 100.0))], 0.5, 1.0, self.W)))
+        self.assertNotIn("Tip", dict(s.update([("Center", (100.0, 100.0))], 1.6, 1.0, self.W)))
+
+    def test_a_name_twice_is_drawn_as_it_is(self):
+        s = PointSmoother()
+        named = [("Start/End", (10.0, 10.0)), ("Start/End", (90.0, 10.0))]
+        self.assertEqual(s.update(named, 0.0, 1.0, self.W), named)
 
 
 class Limits(unittest.TestCase):
@@ -540,6 +588,7 @@ class App(unittest.TestCase):
     def test_without_a_reading_the_detections_still_show_as_points(self):
         from app.tabs.monitor_tab import GAUGE_POINT_COLOR
         self.monitor._reset_judgement()
+        self.monitor.on_frame(self.image, dial(50), [])  # one frame: not read yet
         pixel = self.paint_overlay(dial(50))
         self.assertEqual(pixel(500, 370), GAUGE_POINT_COLOR)
         self.assertEqual(pixel(500, 440), "#000000")  # no needle until it is read
@@ -548,6 +597,7 @@ class App(unittest.TestCase):
         self.monitor._reset_judgement()
         point = on_dial(START_ANGLE)
         dets = [det(CLASS_CENTER, CENTER), det(CLASS_START, point), det(CLASS_END, point, conf=0.5)]
+        self.monitor.on_frame(self.image, dets, [])
         with mock.patch("app.tabs.monitor_tab.draw_label") as label:
             self.paint_overlay(dets)
         self.assertEqual([call.args[3] for call in label.call_args_list], ["Center", "Start"])
@@ -568,6 +618,15 @@ class App(unittest.TestCase):
         self.assertEqual(messages, ["Up to 3 days at once: tap one to remove it first."])
         self.assertEqual(tab._selection.slots, days[:3])
         tab._selection.reset(date.today())
+
+    def test_part_and_model_smaller_on_a_small_screen(self):
+        # The style is only applied to a shown window; which one is chosen is what matters.
+        for (width, height), name in (((1024, 768), "monitorPartModelCompact"), ((1920, 1080), "monitorPartModel")):
+            self.win.resize(width, height)
+            self.monitor._fit_part_model()
+            self.assertEqual(self.monitor.part_label.objectName(), name)
+            self.assertEqual(self.monitor.model_label.objectName(), name)
+        self.win.resize(1024, 768)
 
     def test_gauge_data_tab_only_for_gauge_jobs(self):
         index = self.win.tabs.indexOf(self.win.gauge_data_tab)
