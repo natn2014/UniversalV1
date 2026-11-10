@@ -56,9 +56,9 @@ A job can judge a dial gauge instead of marks: **Settings > AI Model > Judge by 
 | 1. Reading and judging | 2. Comparing days |
 |---|---|
 | ![Gauge reading demo](docs/gifs/gauge_reading.gif) | ![Gauge data demo](docs/gifs/gauge_data.gif) |
-| **Monitor** tab: the value is read from the needle and checked against MIN and MAX. Out of spec is NG, and the image is saved tagged OVER or UNDER. | **Gauge Data** tab: a box plot for each box from every reading of the day. Tap up to 3 days to compare them in different colours. |
+| **Monitor** tab: the value is read from the needle and checked against MIN and MAX. Out of spec is NG, and the image is saved tagged OVER or UNDER. | **Gauge Data** tab: a box plot for each box from every reading of the day. Tap up to 3 days to compare them in different colours; **Export** copies a date range to a USB drive. |
 
-These two GIFs use a drawn dial and made-up readings, with the dial's points supplied directly instead of found by the model. Everything after detection is the real app. Remake them with `tools/make_readme_gifs.py gauge`.
+Recorded on the station's screen (1024x768) with the live camera, the retrained model `gauge_vacuumbag_I.pt` and the job's real readings. The Monitor part runs at 2x speed.
 
 | Setting | Meaning |
 |---|---|
@@ -240,9 +240,9 @@ Only one copy of the app runs at a time: a second start says "already running" a
 | 1. การอ่านค่าและตัดสินผล | 2. เปรียบเทียบข้อมูลแต่ละวัน |
 |---|---|
 | ![ตัวอย่างการอ่านเกจ](docs/gifs/gauge_reading.gif) | ![ตัวอย่างแท็บ Gauge Data](docs/gifs/gauge_data.gif) |
-| แท็บ **Monitor** อ่านค่าจากเข็มแล้วเทียบกับ MIN และ MAX หากเกินช่วงจะเป็น NG และบันทึกภาพพร้อมป้าย OVER หรือ UNDER | แท็บ **Gauge Data** แสดง Box plot ของแต่ละกล่องจากทุกค่าของวัน แตะเลือกได้สูงสุด 3 วันเพื่อเปรียบเทียบด้วยสีที่ต่างกัน |
+| แท็บ **Monitor** อ่านค่าจากเข็มแล้วเทียบกับ MIN และ MAX หากเกินช่วงจะเป็น NG และบันทึกภาพพร้อมป้าย OVER หรือ UNDER | แท็บ **Gauge Data** แสดง Box plot ของแต่ละกล่องจากทุกค่าของวัน แตะเลือกได้สูงสุด 3 วันเพื่อเปรียบเทียบด้วยสีที่ต่างกัน และ **Export** คัดลอกข้อมูลตามช่วงวันที่ไปยัง USB |
 
-GIF ทั้งสองนี้ใช้หน้าปัดที่วาดขึ้นและข้อมูลสมมติ โดยป้อนตำแหน่งจุดบนหน้าปัดให้โดยตรง ไม่ได้ให้โมเดลตรวจจับ ขั้นตอนหลังการตรวจจับทั้งหมดเป็นโปรแกรมจริง
+บันทึกจากหน้าจอเครื่องจริง (1024x768) ด้วยกล้องจริง โมเดลที่เทรนใหม่ `gauge_vacuumbag_I.pt` และข้อมูลจริงของงาน ส่วนของ Monitor เล่นเร็ว 2 เท่า
 
 - ค่าอยู่ระหว่าง MIN ถึง MAX (รวมค่าขอบ): OK
 - เกิน MAX หรือต่ำกว่า MIN: NG พร้อมไฟสัญญาณ เสียงเตือน รีเลย์ และตัวนับ NG

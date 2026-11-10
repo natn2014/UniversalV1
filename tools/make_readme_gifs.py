@@ -1,26 +1,19 @@
-"""Record the README GIFs of the image-processing tools and the gauge reader, offscreen.
+"""Record the README GIFs of the image-processing tools, offscreen.
 
-The real widgets (Tool Catalog, Tools tab, Monitor, Gauge Data) are driven on
-drawn scenes, so the GIFs can be remade whenever the UI changes. No camera or
-tower light is used and all data goes to a temporary folder, so this can run
-beside the station app:
+The real widgets (Tool Catalog, Tools tab) are driven on drawn scenes, so the
+GIFs can be remade whenever the UI changes. No camera or tower light is used
+and all data goes to a temporary folder, so this can run beside the station app:
 
-    QT_QPA_PLATFORM=offscreen .venv/bin/python tools/make_readme_gifs.py [gauge]
+    QT_QPA_PLATFORM=offscreen .venv/bin/python tools/make_readme_gifs.py
 
 Output: docs/gifs/{tool_catalog,eyedropper,pattern_search,counted_pixels}.gif
-        docs/gifs/{gauge_reading,gauge_data}.gif ("gauge" makes only these)
-
-The gauge GIFs show a drawn dial with its four points supplied directly, not
-found by the model: everything after detection is the real code.
+(The gauge GIFs are screen recordings of the running station, not made here.)
 """
 
-import csv
 import io
-import math
 import os
 import sys
 import tempfile
-from datetime import date, datetime, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -311,186 +304,6 @@ def gif_counted_pixels() -> None:
     save_gif("counted_pixels.gif", frames, durations)
 
 
-# --- the gauge GIFs -------------------------------------------------------------
-
-GAUGE_GIF_WIDTH = 768  # as the other Monitor GIFs
-GAUGE_JOB = "GAUGE-DEMO"
-GAUGE_SPEC = {"value_at_start": 0.1, "value_at_end": 0.0, "unit": "MPa", "spec_min": 0.03, "spec_max": 0.07}
-DIAL_CENTER = (640, 360)
-DIAL_RADIUS = 300
-SCALE_RADIUS = 270  # the Start and End points
-NEEDLE_LENGTH = 185  # inside Start and End left to right, as read_gauge requires
-DIAL_START, DIAL_SWEEP = 135.0, 270.0  # screen degrees, clockwise
-
-
-def dial_point(percent: float, radius: float) -> tuple:
-    angle = math.radians(DIAL_START + DIAL_SWEEP * percent / 100)
-    return DIAL_CENTER[0] + radius * math.cos(angle), DIAL_CENTER[1] + radius * math.sin(angle)
-
-
-def dial_value(percent: float) -> float:
-    start, end = GAUGE_SPEC["value_at_start"], GAUGE_SPEC["value_at_end"]
-    return start + (end - start) * percent / 100
-
-
-def dial_scene(percent: float) -> np.ndarray:
-    img = np.full((720, 1280, 3), 66, np.uint8)
-    cv2.circle(img, DIAL_CENTER, DIAL_RADIUS + 22, (150, 150, 155), -1, cv2.LINE_AA)
-    cv2.circle(img, DIAL_CENTER, DIAL_RADIUS + 8, (238, 238, 234), -1, cv2.LINE_AA)
-    ink = (35, 35, 35)
-    for step in range(0, 101, 2):
-        major = step % 10 == 0
-        outer = tuple(round(v) for v in dial_point(step, DIAL_RADIUS - 8))
-        inner = tuple(round(v) for v in dial_point(step, DIAL_RADIUS - (42 if major else 24)))
-        cv2.line(img, outer, inner, ink, 4 if major else 2, cv2.LINE_AA)
-        if step % 20 == 0:
-            x, y = dial_point(step, DIAL_RADIUS - 76)
-            cv2.putText(img, f"{dial_value(step):.2f}", (round(x) - 32, round(y) + 9), cv2.FONT_HERSHEY_DUPLEX,
-                        0.75, ink, 2, cv2.LINE_AA)
-    cv2.putText(img, "MPa", (DIAL_CENTER[0] - 38, DIAL_CENTER[1] + 190), cv2.FONT_HERSHEY_DUPLEX, 1.0, ink, 2, cv2.LINE_AA)
-    tip = tuple(round(v) for v in dial_point(percent, NEEDLE_LENGTH))
-    cv2.line(img, DIAL_CENTER, tip, (25, 25, 25), 7, cv2.LINE_AA)
-    cv2.circle(img, DIAL_CENTER, 20, (25, 25, 25), -1, cv2.LINE_AA)
-    return img
-
-
-def dial_points(percent: float) -> list:
-    from app.gauge import CLASS_CENTER, CLASS_END, CLASS_START, CLASS_TIP
-
-    points = ((CLASS_CENTER, "Center", DIAL_CENTER), (CLASS_START, "Start", dial_point(0, SCALE_RADIUS)),
-              (CLASS_END, "End", dial_point(100, SCALE_RADIUS)), (CLASS_TIP, "Tip", dial_point(percent, NEEDLE_LENGTH)))
-    size = 16
-    return [{"x1": x - size, "y1": y - size, "x2": x + size, "y2": y + size, "cls_id": cls_id, "conf": 0.9,
-             "class_name": name} for cls_id, name, (x, y) in points]
-
-
-def gif_gauge_reading(win) -> None:
-    frames, durations = [], []
-
-    def show(percent, text, ms):
-        for _ in range(5):  # what GaugeHold needs to settle on this position
-            win.monitor_tab.on_frame(qimage(dial_scene(percent)), dial_points(percent), [])
-        settle()
-        frames.append(captioned(to_pil(win.grab()), text, GAUGE_GIF_WIDTH))
-        durations.append(ms)
-
-    def sweep(first, last, text):
-        direction = 5 if last > first else -5
-        for percent in range(first, last, direction):
-            show(percent, text(percent), 220)
-
-    def live(percent):
-        return f"Needle at {dial_value(percent):.3f} MPa, limits 0.030 to 0.070"
-
-    win.tabs.setCurrentWidget(win.monitor_tab)
-    show(50, "In spec: OK", 2000)
-    ok_frame = frames[-1]
-    sweep(50, 15, live)
-    show(15, "Over MAX: NG, and the image is saved tagged OVER", 2800)
-    over_frame = frames[-1]
-    sweep(15, 50, live)
-    show(50, "Back in spec: OK", 1600)
-    sweep(50, 85, live)
-    show(85, "Under MIN: NG, and the image is saved tagged UNDER", 2800)
-    sweep(85, 50, live)
-    save_gif("gauge_reading.gif", frames, durations, palette_from=[ok_frame, over_frame])
-
-
-def write_demo_days(part: str) -> None:
-    """Three days of readings, the middle one running high."""
-    from app import gauge_log
-
-    rng = np.random.default_rng(7)
-    today = date.today()
-    for back, center in ((0, 0.050), (1, 0.056), (2, 0.046)):
-        day = today - timedelta(days=back)
-        path = gauge_log.daily_log_path(part, day)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        start = datetime(day.year, day.month, day.day, 8)
-        with open(path, "w", newline="") as f:
-            writer = csv.writer(f)
-            writer.writerow(gauge_log.CSV_HEADER)
-            for i in range(43 * 200):
-                box = i % 43 + 1
-                value = round(float(rng.normal(center + box / 43 * 0.008, 0.004)), 4)
-                writer.writerow([start + timedelta(seconds=i), value, f"Box No.{box}"])
-
-
-def gif_gauge_data(win) -> None:
-    tab = win.gauge_data_tab
-    frames, durations = [], []
-
-    def wait_for_chart():
-        settle()
-        while tab._redraw or (tab._worker is not None and tab._worker.isRunning()):
-            APP.processEvents()
-        settle()
-
-    def shot(text, ms, row=None):
-        img = to_pil(win.grab())
-        if row is not None:
-            p = widget_point(win, tab.day_list.viewport(), tab.day_list.visualItemRect(tab.day_list.item(row)).center())
-            img = tap(img, (p.x(), p.y()))
-        frames.append(captioned(img, text, GAUGE_GIF_WIDTH))
-        durations.append(ms)
-
-    def tap_day(row, text):
-        shot(text, 700, row)
-        tab._on_day_clicked(tab.day_list.item(row))
-        wait_for_chart()
-        shot(text, 2400)
-
-    write_demo_days(GAUGE_JOB)
-    win.tabs.setCurrentWidget(tab)
-    tab.refresh()
-    wait_for_chart()
-    tab.refresh()  # the first one was laid out before the tab had its size
-    wait_for_chart()
-    shot("Every reading of the day, box by box", 2800)
-    tap_day(1, "Tap another day: it is added in its own colour")
-    tap_day(2, "Up to 3 days side by side, with each day's averages")
-    tap_day(1, "Tap a day again to remove it")
-    save_gif("gauge_data.gif", frames, durations, palette_from=[frames[4], frames[0]])  # 4: all three days
-
-
-def gauge_gifs(root: Path) -> None:
-    from app import ng_log, paths
-    from app.tabs import settings_tab
-
-    patches = [
-        mock.patch.object(paths, "MARK_MODEL_PATH", root / "missing.pt"),
-        mock.patch.object(jobs, "LAST_PART_FILE", root / ".last_part"),
-        mock.patch.object(ng_log, "NG_LOGS_DIR", root / "ng"),
-        mock.patch.object(paths, "GAUGE_LOGS_DIR", root / "gauge"),
-        mock.patch.object(settings_tab, "find_cameras", return_value=[]),
-        mock.patch("app.tower.TowerController.connect_device"),
-        mock.patch("app.main_window.MainWindow.confirm_unsaved", return_value=True),
-        mock.patch("app.tabs.monitor_tab.MonitorTab.ensure_live", return_value=False),
-    ]
-    for patch in patches:
-        patch.start()
-    try:
-        from app.main_window import MainWindow
-        win = MainWindow()
-        win.resize(1024, 768)
-        win.ctx.set_current_part(GAUGE_JOB)
-        win.settings_tab.set_gauge(GAUGE_SPEC)
-        win.settings_tab.set_judge_mode("gauge")
-        win.ctx.settings.set(state_hold_ms=0, mark_hold_ms=0, ok_count=0, ng_count=0)
-        win.show()
-        settle()
-        win.ctx.worker.isRunning = lambda: True  # no camera here: shown as it is on the line
-        win.monitor_tab._refresh_run_button()
-        gif_gauge_reading(win)
-        del win.ctx.worker.isRunning
-        gif_gauge_data(win)
-        win.gauge_data_tab.shutdown()
-        win.ctx.relay.shutdown()
-    finally:
-        for patch in patches:
-            patch.stop()
-
-
 def main() -> int:
     APP.setStyleSheet(DARK_INDUSTRIAL_QSS)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -498,12 +311,10 @@ def main() -> int:
     with mock.patch.object(settings_mod, "APP_SETTINGS_FILE", tmp / "app_settings.json"), \
             mock.patch.object(jobs, "PART_CONFIGS_DIR", tmp), \
             mock.patch.object(context_mod, "TOOLS_DIR", tmp / "tools"):
-        if sys.argv[1:] != ["gauge"]:
-            gif_catalog()
-            gif_eyedropper(tmp)
-            gif_pattern_search()
-            gif_counted_pixels()
-        gauge_gifs(tmp)
+        gif_catalog()
+        gif_eyedropper(tmp)
+        gif_pattern_search()
+        gif_counted_pixels()
     return 0
 
 
