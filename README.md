@@ -54,7 +54,7 @@ Recorded on the real station, with the live camera and a real harness.
 ## Installation
 
 ```bash
-git clone https://github.com/natn2014/UniversalV1.git
+git clone -b imageprocessing https://github.com/natn2014/UniversalV1.git ~/dev/UniversalV1
 cd UniversalV1
 
 # System library for barcode decoding
