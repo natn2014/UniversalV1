@@ -113,12 +113,9 @@ The Train tab's **Training Options** set the augmentation preset, flips and epoc
 On a Jetson Orin Nano (Ubuntu 24.04 / JetPack, CUDA 13), the installer does everything in a checked order and sets up the start at boot:
 
 ```bash
-git clone git@github.com:natn2014/UniversalV1.git ~/dev/UniversalV1
+git clone -b imageprocessing https://github.com/natn2014/UniversalV1.git ~/dev/UniversalV1
 cd ~/dev/UniversalV1
-git checkout imageprocessing
-# copy the model files that are not in git, e.g. weights/MarkV9_best.pt
 ./deploy/install.sh
-sudo reboot
 ```
 
 Run it as the user the kiosk runs as, not with `sudo`; it asks for the sudo password itself. **See [deploy/INSTALL.md](deploy/INSTALL.md)** for the 12 steps, resuming after a failure (`--from N`), checking an install (`--check`) and the day-to-day commands.
