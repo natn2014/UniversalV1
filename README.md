@@ -113,7 +113,7 @@ The Train tab's **Training Options** set the augmentation preset, flips and epoc
 On a Jetson Orin Nano (Ubuntu 24.04 / JetPack, CUDA 13), the installer does everything in a checked order and sets up the start at boot:
 
 ```bash
-git clone -b imageprocessing https://github.com/natn2014/UniversalV1.git ~/dev/UniversalV1
+git clone https://github.com/natn2014/UniversalV1.git ~/dev/UniversalV1
 cd ~/dev/UniversalV1
 ./deploy/install.sh
 ```
