@@ -96,8 +96,9 @@ class Window(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         cls.win.set_language("en")
-        cls.win.ctx.relay.shutdown()
-        cls.win.hide()
+        # close() runs the app's own shutdown, which joins its threads (the Gauge
+        # Data chart worker too); a QThread still running at exit aborts Python.
+        cls.win.close()
         cls.win.deleteLater()
         for p in cls.patches:
             p.stop()

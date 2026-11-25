@@ -97,6 +97,10 @@ confirm() {
     read -r -p "  $1 [y/N] " answer
     [[ "$answer" =~ ^[Yy] ]]
 }
+# sudo -v asks for a password whenever any sudoers entry needs one, even when a
+# NOPASSWD: ALL entry also matches (this Jetson's default image has both), so
+# passwordless sudo is tried first.
+sudo_ready() { sudo -n true 2>/dev/null || sudo -v; }
 pip_install() { run "$PIP" install --no-input -c "$CONSTRAINTS" "$@"; }
 pyver() { "$PY" -c "import importlib.metadata as m; print(m.version('$1'))" 2>/dev/null || echo "-"; }
 
@@ -125,7 +129,7 @@ step_preflight() {
     curl -fsS --max-time 10 -o /dev/null https://pypi.org/simple/pip/ || die "no internet (pypi.org)"
     ok "internet"
     [ -f "$CONSTRAINTS" ] || die "missing $CONSTRAINTS"
-    sudo -v || die "sudo needed for the system steps"
+    sudo_ready || die "sudo needed for the system steps"
     ok "sudo"
 }
 
@@ -232,6 +236,12 @@ step_ultralytics() {
     "$PY" -c "import cv2, ultralytics; print(ultralytics.__version__, cv2.__version__)" >>"$LOG" 2>&1 \
         || die "ultralytics / cv2 do not import"
     ok "ultralytics $(pyver ultralytics), torch still $(pyver torch)"
+    # A fresh install has usage analytics on ("sync"): every model load starts a
+    # thread posting to the internet, and Python exiting while it runs segfaults
+    # (the gauge tests did, on a fresh R39.2 Jetson). A kiosk sends nothing out.
+    "$PY" -c "from ultralytics import settings; settings.update({'sync': False}); assert not settings['sync']" \
+        >>"$LOG" 2>&1 || die "could not turn off Ultralytics analytics (sync)"
+    ok "Ultralytics analytics off (sync=False)"
 }
 
 step_pyside() {
@@ -425,7 +435,7 @@ log "===== install started (from step $FROM_STEP) as $USER in $APP_DIR ====="
 echo "${BOLD}UniversalV1 installer${RESET}  ($APP_DIR, log: $LOG)"
 STEPS=(step_preflight step_system step_devices step_venv step_torch step_opencv step_ultralytics
        step_pyside step_extras step_verify step_power step_autostart)
-[ "$FROM_STEP" -ge 2 ] && sudo -v
+[ "$FROM_STEP" -ge 2 ] && { sudo_ready || die "sudo needed for the system steps"; }
 for i in "${!STEPS[@]}"; do
     n=$((i + 1))
     [ "$n" -lt "$FROM_STEP" ] && continue

@@ -470,7 +470,7 @@ class App(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.ctx.relay.shutdown()
+        cls.win.close()  # the app's own shutdown: joins its threads (relay, chart worker)
         cls.win.deleteLater()
         for p in cls.patches:
             p.stop()
