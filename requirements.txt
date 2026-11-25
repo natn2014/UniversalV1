@@ -3,6 +3,9 @@ ultralytics
 opencv-python-headless
 hidapi
 pyzbar
+pytesseract
+tesserocr
+matplotlib
 
 # opencv-python-headless (not opencv-python) avoids bundling its own Qt
 # plugins, which otherwise conflict with PySide6's at runtime.
@@ -12,6 +15,18 @@ pyzbar
 # feature. Needs the `libzbar0` system package (already present on this
 # Jetson; on a fresh image: `sudo apt install libzbar0`). No pip-installable
 # substitute exists — pyzbar only binds to the system library via ctypes.
+
+# pytesseract wraps the system `tesseract` OCR engine for the rule-based OCR
+# tool (app/vision/ocr.py). Needs the `tesseract-ocr` system package (with
+# English data; on a fresh image: `sudo apt install tesseract-ocr`). Without
+# it the OCR tool reports "OCR engine not installed" and everything else runs.
+
+# tesserocr runs Tesseract inside the app (the model stays loaded): ~10 ms a
+# read instead of ~190 ms for pytesseract, which starts tesseract per call.
+# Used when installed (pytesseract otherwise). Building it on the Jetson needs
+# `sudo apt install libtesseract-dev libleptonica-dev`; its wheel brings its
+# own Tesseract and uses the system's English data in
+# /usr/share/tesseract-ocr/*/tessdata.
 
 # hidapi drives the PATLITE LR6-USB tower light (patlite_lr6.py, vendored
 # from https://github.com/natn2014/TowerLightUSB). On Linux this also needs

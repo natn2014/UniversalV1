@@ -1,0 +1,153 @@
+"""Measurement tools: Width, Edge Presence, Pitch and Diameter. Values are in
+pixels, or mm when the job is calibrated (`Tool.mm_per_px`, set by the runner)."""
+
+from typing import List, Optional, Tuple
+
+import cv2
+import numpy as np
+
+from .base import Tool, overlay_item, register
+from .edges import find_edges, gradient, profile
+
+Edge = Tuple[float, float]
+
+
+def _matches(strength: float, polarity: str) -> bool:
+    return polarity == "any" or (polarity == "rising") == (strength > 0)
+
+
+class ScanTool(Tool):
+    """Tools that scan a profile along `direction` ("x" or "y")."""
+
+    def scan(self, patch: np.ndarray) -> np.ndarray:
+        return profile(self.gray(patch), self.direction)
+
+    def edge_line(self, pos: float, patch: np.ndarray, ok: bool, label: str = "") -> dict:
+        h, w = patch.shape[:2]
+        pts = [pos, 0, pos, h] if self.direction == "x" else [0, pos, w, pos]
+        return overlay_item("line", pts, ok, label)
+
+
+@register("width")
+class WidthTool(ScanTool):
+    """Distance between two edges along the scan direction."""
+
+    PARAMS = {"direction": "x", "threshold": 20, "polarity_1": "any", "polarity_2": "any",
+              "edge_pair": "outer", "smooth": 1.0}
+
+    def pick_pair(self, edges: List[Edge]) -> Optional[Tuple[Edge, Edge]]:
+        if self.edge_pair == "strongest":
+            top = sorted(sorted(edges, key=lambda e: -abs(e[1]))[:2])
+            pair = (top[0], top[1]) if len(top) == 2 else None
+            if pair and _matches(pair[0][1], self.polarity_1) and _matches(pair[1][1], self.polarity_2):
+                return pair
+            return None
+        if self.edge_pair == "first_rising_falling":
+            for i, first in enumerate(edges):
+                if first[1] > 0:
+                    nxt = next((e for e in edges[i + 1:] if e[1] < 0), None)
+                    return (first, nxt) if nxt else None
+            return None
+        first = next((e for e in edges if _matches(e[1], self.polarity_1)), None)
+        last = next((e for e in reversed(edges) if _matches(e[1], self.polarity_2)), None)
+        return (first, last) if first and last and last[0] > first[0] else None
+
+    def process(self, patch, origin):
+        edges = find_edges(self.scan(patch), self.threshold, "any", smooth=self.smooth)
+        pair = self.pick_pair(edges)
+        if pair is None:
+            return self.fail("edge not found")
+        (e1, _), (e2, _) = pair
+        px = e2 - e1
+        value = self.scale(px)
+        h, w = patch.shape[:2]
+        text = f"{value:.2f} {self.unit}"
+        mid = h / 2 if self.direction == "x" else w / 2
+        dim = [e1, mid, e2, mid] if self.direction == "x" else [mid, e1, mid, e2]
+        res = self.result(value, text=text, extra={"edge1": e1, "edge2": e2, "px": px})
+        res.overlay = [self.edge_line(e1, patch, res.ok), self.edge_line(e2, patch, res.ok),
+                       overlay_item("line", dim, res.ok, text)]
+        return res
+
+
+@register("edge_presence")
+class EdgePresenceTool(ScanTool):
+    """Strength of the strongest edge of the wanted polarity; OK when it
+    reaches `low` (default 20 gray levels per px)."""
+
+    PARAMS = {"direction": "x", "polarity": "any", "smooth": 1.0}
+    DEFAULT_LOW = 20.0
+
+    def process(self, patch, origin):
+        g = gradient(self.scan(patch), self.smooth)
+        if len(g) == 0:
+            return self.fail("empty ROI")
+        signed = {"rising": g, "falling": -g}.get(self.polarity, np.abs(g))
+        i = int(np.argmax(signed))
+        value = max(float(signed[i]), 0.0)
+        res = self.result(value, extra={"position": i + 0.5})
+        res.overlay = [self.edge_line(i + 0.5, patch, res.ok, f"{value:.0f}")]
+        return res
+
+
+@register("pitch")
+class PitchTool(ScanTool):
+    """Number and spacing of repeated edges (pins, terminals). With the default
+    rising polarity each pin is counted once. `measure` picks the value."""
+
+    PARAMS = {"direction": "x", "polarity": "rising", "threshold": 20, "measure": "count", "smooth": 1.0}
+
+    def process(self, patch, origin):
+        edges = find_edges(self.scan(patch), self.threshold, self.polarity, smooth=self.smooth)
+        pos = [e[0] for e in edges]
+        gaps = np.diff(pos) if len(pos) > 1 else np.array([])
+        stats = {"count": float(len(pos))}
+        if len(gaps):
+            stats.update(mean=float(gaps.mean()) * self.scale(1), min=float(gaps.min()) * self.scale(1),
+                         max=float(gaps.max()) * self.scale(1))
+        if self.measure not in stats:
+            return self.fail("not enough edges")
+        res = self.result(stats[self.measure], text=f"{len(pos)} edges", extra={**stats, "positions": pos})
+        res.overlay = [self.edge_line(p, patch, res.ok) for p in pos]
+        return res
+
+
+MIN_CIRCLE_POINTS = 10
+INLIER_PX = 2.0
+
+
+def fit_circle(xs: np.ndarray, ys: np.ndarray) -> Tuple[float, float, float]:
+    """Algebraic least-squares circle (Kasa): x^2 + y^2 = a x + b y + c."""
+    a = np.column_stack([xs, ys, np.ones_like(xs)])
+    (p, q, c), *_ = np.linalg.lstsq(a, xs ** 2 + ys ** 2, rcond=None)
+    cx, cy = p / 2.0, q / 2.0
+    return float(cx), float(cy), float(np.sqrt(max(c + cx ** 2 + cy ** 2, 0.0)))
+
+
+@register("diameter")
+class DiameterTool(Tool):
+    """Diameter of the round feature in the ROI, fitted to its Canny edge points."""
+
+    PARAMS = {"canny_lo": 50, "canny_hi": 150}
+
+    def process(self, patch, origin):
+        edges = cv2.Canny(cv2.GaussianBlur(self.gray(patch), (3, 3), 0), self.canny_lo, self.canny_hi)
+        ys, xs = np.nonzero(edges)
+        if len(xs) < MIN_CIRCLE_POINTS:
+            return self.fail("circle not found")
+        xs, ys = xs.astype(np.float64), ys.astype(np.float64)
+        cx, cy, r = fit_circle(xs, ys)
+        dist = np.hypot(xs - cx, ys - cy)
+        # Outliers pull the first fit off; judge them against the median radius.
+        keep = np.abs(dist - np.median(dist)) <= INLIER_PX
+        if keep.sum() >= MIN_CIRCLE_POINTS:
+            cx, cy, r = fit_circle(xs[keep], ys[keep])
+            dist = np.hypot(xs[keep] - cx, ys[keep] - cy)
+        rms = float(np.sqrt(np.mean((dist - r) ** 2)))
+        value = self.scale(2 * r)
+        text = f"{value:.2f} {self.unit}"
+        res = self.result(value, text=text, extra={"center": [cx, cy], "radius": r, "rms": rms})
+        res.overlay = [overlay_item("circle", [cx, cy, r], res.ok, text),
+                       overlay_item("line", [cx - 4, cy, cx + 4, cy], res.ok),
+                       overlay_item("line", [cx, cy - 4, cx, cy + 4], res.ok)]
+        return res

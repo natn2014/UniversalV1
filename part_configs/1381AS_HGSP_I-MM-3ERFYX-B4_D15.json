@@ -1,0 +1,50 @@
+{
+  "part_no": "1381AS/HGSP/I-MM-3ERFYX-B4/D15",
+  "model_path": "/home/jetson/dev/UniversalV1/weights/MarkV9_best.pt",
+  "confidence_threshold": 0.0,
+  "max_detections": 3,
+  "target_class_1": null,
+  "target_class_2": null,
+  "target_gate": "OR",
+  "selected_classes": [
+    "short_name",
+    "sni_mark"
+  ],
+  "judge_mode": "required",
+  "required_classes": [
+    "short_name"
+  ],
+  "mark_conf": {
+    "short_name": 0.4
+  },
+  "check_layout": false,
+  "short_name_expected": "D1",
+  "perspective": [
+    [
+      0.2092,
+      0.0701
+    ],
+    [
+      0.7359,
+      0.0
+    ],
+    [
+      0.7967,
+      0.6899
+    ],
+    [
+      0.2033,
+      0.8904
+    ]
+  ],
+  "roi": [
+    0.0796,
+    0.1292,
+    0.7352,
+    0.9858
+  ],
+  "autocapture_masters": [],
+  "tools": [],
+  "tools_gate": "AND",
+  "mm_per_px": null
+}

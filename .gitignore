@@ -7,6 +7,13 @@ __pycache__/
 app_settings.json
 part_configs/.last_part
 ng_logs/
+gauge_logs/
 captures/
+_autocapture_/
 runs/
 .ui_assets/
+samples/
+datasets/
+
+# Runtime logs (deploy/run_app.sh, deploy/install.sh)
+logs/

@@ -1,0 +1,29 @@
+{
+  "part_no": "TestAddMaster",
+  "model_path": null,
+  "confidence_threshold": 0.0,
+  "max_detections": 0,
+  "target_class_1": null,
+  "target_class_2": null,
+  "target_gate": "OR",
+  "selected_classes": [],
+  "perspective": null,
+  "roi": null,
+  "autocapture_masters": [
+    {
+      "class_name": "master_2",
+      "image": "TestAddMaster/master_20261026_150833_663.jpg"
+    },
+    {
+      "class_name": "master_2",
+      "image": "TestAddMaster/master_20261026_150833_730.jpg"
+    },
+    {
+      "class_name": "master_3",
+      "image": "TestAddMaster/master_20261026_150833_793.jpg"
+    }
+  ],
+  "tools": [],
+  "tools_gate": "AND",
+  "mm_per_px": null
+}

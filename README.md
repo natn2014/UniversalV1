@@ -20,6 +20,62 @@ Recorded on the real station, with the live camera and a real harness.
 | ![Settings demo](docs/gifs/settings.gif) | ![Train demo](docs/gifs/train.gif) |
 | **Settings** tab: confidence, max detections and state hold time take effect immediately on the live view. | **Train** tab: pick an image, tap a box, choose the right class, **Confirm**. |
 
+## Image-processing tools (Keyence IV4 / CV-X style)
+
+Next to YOLO, each job can hold rule-based **vision tools**. They work like the tools of a Keyence IV4 / CV-X vision sensor: each one checks one thing in its own area of the image, and together they decide OK / NG (gate **AND** or **OR**, together with YOLO). They are set up in the **Tools** tab.
+
+| 1. Tool Catalog | 2. Eyedropper (Pick Color / Pick Gray) |
+|---|---|
+| ![Tool Catalog demo](docs/gifs/tool_catalog.gif) | ![Eyedropper demo](docs/gifs/eyedropper.gif) |
+| **Add Tool** opens the catalog. Tap a category, then a tool: the **Application Navigator** on the right explains it with an example. **Add** (or a double tap) confirms, then you drag the tool's area on the image. | Tap the color (or gray level) to count on the image, and tap more spots to add them. **− Narrower / + Wider** adjust it in steps. What is counted is shown live in yellow. |
+| **3. Pattern Search** | **4. What each tool counts** |
+| ![Pattern Search demo](docs/gifs/pattern_search.gif) | ![Counted pixels demo](docs/gifs/counted_pixels.gif) |
+| Teach one mark (drag a box around it). Every copy is then found at any angle and counted, with its score and angle. | Area, Edge Pixels, Blob Count and Color Prohibit show exactly the pixels they count: see-through yellow, or red for a forbidden color. |
+
+| Category | Tools |
+|---|---|
+| Position | **Position Adjust**: finds the part, and the other tools follow it when it moves or turns |
+| Color | **Color Area** (% of the taught color), **Color Average** (ΔE to the master), **Color Prohibit** (NG on a forbidden color) |
+| Brightness | **Area (mono)**, **Brightness Average**, **Edge Pixels**, **Shading Uniformity** |
+| Measure | **Width**, **Edge Presence**, **Pitch**, **Diameter** (px, or mm after **Calibrate mm**) |
+| Text & Code | **OCR Text** (Tesseract), **Code QR / 1D** (zbar). They run at 2 Hz in their own thread, so the live view stays at full frame rate. |
+| Pattern & Count | **Outline**, **Pattern Search** (ShapeTrax-style, any angle), **Blob Count** |
+
+How to set up a tool:
+1. **Tools** tab. The camera starts live; **Snapshot** freezes a frame and **Resume Live** goes back.
+2. **Add Tool** → pick it in the catalog → drag its area on the image. Pattern Search then asks for a box around one copy of the pattern.
+3. **Teach** (from the frozen frame), or **Pick Color / Pick Gray** for the color and brightness tools.
+4. Set the OK range under **Limits**. **Set from current ±10 %** is a quick start. Tools are saved with the job and judged live on the Monitor tab.
+
+The tool design and the per-tool details are in [core_function.md](core_function.md); the development log is in [develop_record.md](develop_record.md). The GIFs above are drawn scenes recorded offscreen by `tools/make_readme_gifs.py`.
+
+## Gauge Reader
+
+A job can judge a dial gauge instead of marks: **Settings > AI Model > Judge by > Gauge Reader**, then set the limits on the **Gauge Reader** page. It uses `weights/gauge_epoch-100.pt`, which finds the dial's Center, Start, End and needle Tip; the value comes from the needle's angle.
+
+| 1. Reading and judging | 2. Comparing days |
+|---|---|
+| ![Gauge reading demo](docs/gifs/gauge_reading.gif) | ![Gauge data demo](docs/gifs/gauge_data.gif) |
+| **Monitor** tab: the value is read from the needle and checked against MIN and MAX. Out of spec is NG, and the image is saved tagged OVER or UNDER. | **Gauge Data** tab: a box plot for each box from every reading of the day. Tap up to 3 days to compare them in different colours; **Export** copies a date range to a USB drive. |
+
+Recorded on the station's screen (1024x768) with the live camera, the retrained model `gauge_vacuumbag_I.pt` and the job's real readings. The Monitor part runs at 2x speed.
+
+| Setting | Meaning |
+|---|---|
+| Value at Start / End | What the dial shows at the left / right end of its scale (default 0.1 and 0 MPa) |
+| Unit | Shown after the value |
+| MIN / MAX | The OK range, limits included |
+
+- **In range:** OK. **Over MAX or under MIN:** NG, with tower light, buzzer, relay and NG count, like a missing Required Mark.
+- **No reading** (any of the four points not found): STANDBY, never NG.
+- **Images:** saved to the Log tab, annotated and tagged OVER or UNDER: one when it goes out of spec, and one more if it swings straight from OVER to UNDER or back. A gauge that stays out of spec saves nothing more.
+- **Position check:** Start must be on the left of Center and End on its right, and the Tip on the dial (its distance from Center is checked, so a long pointer may reach past Start or End). Position decides the name: a scale end the model calls End on the left is treated as Start, and the reverse. If no set of points fits, the job shows STANDBY with a note.
+- **Measurement:** counted from End to Tip, where End to Start is 100%. With the default settings, End is 0 and Start is 0.1 MPa.
+- **Gauge Data tab** (gauge jobs only): one reading a second is saved to `gauge_logs/<part>/YYYY_MM_DD_log.csv` (Timestamp, Converted Value, QR Code Data). The tab shows a box plot for Box No.1-43 and each box's average from every reading of the chosen day. Tap up to 3 days in the Days list to compare them side by side, one colour per day. **Export** copies a From-To date range to a USB drive, one CSV file per day, in a new `gauge_export/` folder. The box number comes from the QR label in view.
+- Set an ROI around the gauge so it fills the model's view. If the camera is mounted upside down, turn on mirror and flip under Settings > Camera.
+
+The Train tab's **Training Options** set the augmentation preset, flips and epochs, with a preview of what the trainer sees.
+
 ## Features
 
 - **Live detection:** Ultralytics YOLO runs on the Jetson GPU (CUDA). You can filter by confidence, class and a maximum number of detections.
@@ -37,7 +93,8 @@ Recorded on the real station, with the live camera and a real harness.
   - Jobs are switched with touch tiles or a barcode scanned by the camera (Code 39 / AIM extended).
 - **Capture and Train:**
   - **Capture** saves frames with YOLO labels.
-  - The Train tab lets you correct a box's class and fine-tune the model on the device.
+  - The Train tab lets you draw, delete and correct boxes, and fine-tune the model on the device.
+  - **Training Options**: augmentation preset (Off / Light / Strong), mirror and upside-down flips (off by default), epochs, and a preview of the images exactly as the trainer sees them.
 - **Kiosk mode:**
   - Starts full screen on boot through a systemd user service.
   - Reloads the last job automatically.
@@ -53,84 +110,73 @@ Recorded on the real station, with the live camera and a real harness.
 
 ## Installation
 
+On a Jetson Orin Nano (Ubuntu 24.04 / JetPack, CUDA 13), the installer does everything in a checked order and sets up the start at boot:
+
 ```bash
 git clone -b imageprocessing https://github.com/natn2014/UniversalV1.git ~/dev/UniversalV1
-cd UniversalV1
-
-# System library for barcode decoding
-sudo apt install libzbar0
-
-# Python environment
-python3 -m venv .venv
-source .venv/bin/activate
-
-# 1) Install CUDA-enabled torch FIRST (matches the Jetson's CUDA)
-pip install torch torchvision --index-url https://pypi.org/simple
-# 2) Then the rest
-pip install -r requirements.txt
+cd ~/dev/UniversalV1
+./deploy/install.sh
 ```
 
-> Install `opencv-python-headless`, not `opencv-python`. The non-headless build brings its own Qt plugins, and they clash with PySide6.
+Run it as the user the kiosk runs as, not with `sudo`; it asks for the sudo password itself. **See [deploy/INSTALL.md](deploy/INSTALL.md)** for the 12 steps, resuming after a failure (`--from N`), checking an install (`--check`) and the day-to-day commands.
 
-### Tower light permissions (udev)
+What it sets up, in this order:
+- **System packages:** zbar, Tesseract, the Qt/X11 libraries and fonts with Thai.
+- **The tower light's udev rule.**
+- **Python packages:** PyTorch with CUDA (first, checked on the GPU), OpenCV *headless*, Ultralytics, PySide6 and the OCR modules. Versions are pinned in `deploy/constraints-jetson.txt`.
+- **Power mode 25 W and the fan profile `cool`** (faster fan; it still follows the temperature).
+- **Start at boot:** automatic login and the `universalv1` service.
 
-```bash
-sudo cp deploy/99-patlite-lr6.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules && sudo udevadm trigger
-sudo usermod -aG plugdev $USER    # log out/in afterwards
-```
+> Install `opencv-python-headless`, not `opencv-python`. The non-headless build brings its own Qt plugins, and they clash with PySide6. The installer removes the `opencv-python` that Ultralytics pulls in.
 
 ## Running
 
+After the install and a reboot, the app starts by itself: the desktop logs in, the app opens full screen, loads the last job and starts inspecting.
+
+To run it by hand (with the service stopped):
+
 ```bash
-source .venv/bin/activate
-python3 main.py
+systemctl --user stop universalv1
+.venv/bin/python main.py
 ```
 
-The window opens full screen. Choose a model and camera in **Settings**, or pick a job in **Job Change**, then press **Start** on the Monitor tab.
+Choose a model and camera in **Settings**, or pick a job in **Job Change**. Inspection starts on its own when the app opens with a job (Settings > Camera > *Start inspecting when the app opens*), or press **Start** on the Monitor tab.
 
-## Kiosk autostart (boot → app)
+## Start at boot (kiosk)
 
-1. Install the user service:
+`./deploy/install.sh` sets this up (step 12): GDM automatic login, no screen lock, and the systemd user service `universalv1`. The service starts `deploy/run_app.sh` with the desktop session and restarts the app if it crashes.
 
-   ```bash
-   mkdir -p ~/.config/systemd/user
-   cp deploy/wire-harness-detector.service ~/.config/systemd/user/
-   systemctl --user daemon-reload
-   systemctl --user enable --now wire-harness-detector.service
-   ```
+```bash
+systemctl --user status  universalv1    # running?
+systemctl --user restart universalv1    # restart the app
+systemctl --user stop    universalv1    # stop it (e.g. before running main.py by hand)
+journalctl --user -u universalv1 -f     # service messages
+tail -f logs/app.log                    # the app's output
+./deploy/install.sh --check             # what is installed / missing
+./deploy/install.sh --remove-service    # no more auto start
+```
 
-   The service file contains absolute paths (`/home/orin_nano/dev/Wire_harness_module`). Edit them if you clone the repo somewhere else.
-
-2. Enable automatic login, so the desktop session and the app start without a keyboard. In `/etc/gdm3/custom.conf`, under `[daemon]`:
-
-   ```ini
-   AutomaticLoginEnable = true
-   AutomaticLogin = orin_nano
-   ```
-
-3. Useful commands:
-
-   ```bash
-   systemctl --user status  wire-harness-detector.service
-   systemctl --user restart wire-harness-detector.service
-   systemctl --user stop    wire-harness-detector.service   # before running main.py by hand
-   journalctl --user -u wire-harness-detector.service -f    # live log
-   ```
-
-Only one copy of the app can use the camera and tower light at a time. Stop the service before starting `main.py` manually.
+Only one copy of the app runs at a time: a second start says "already running" and exits (the camera and tower light can only be used by one).
 
 ## Project layout
 
 | Path | Purpose |
 |---|---|
-| `main.py` | The application (PySide6 UI, camera and YOLO worker, tower light, jobs, training) |
+| `main.py` | Entry point (`python3 main.py`); the application lives in `app/` |
+| `app/main_window.py` | Main window: hosts the tabs and the cross-tab flows (switching jobs, barcode scan, shutdown) |
+| `app/tabs/` | One widget per tab: Monitor, Settings, Tools, Job Change, Train, Log |
+| `app/vision/` | Rule-based vision tools (no Qt): position, color, brightness, measure, OCR / code, outline, pattern search, blob count; the slow-tool thread and the total judgement |
+| `app/context.py` | `AppContext`: state the tabs share (video worker, filters, current part, model, settings, tower light) |
+| `app/camera.py`, `app/tower.py`, `app/judgement.py` | Camera + YOLO worker, tower light/buzzer controller, OK/NG decision and hold-time latch |
+| `app/jobs.py`, `app/ng_log.py`, `app/settings.py`, `app/paths.py` | Saved jobs, NG image log, `app_settings.json`, data paths |
+| `app/widgets/`, `app/theme.py` | Reusable widgets and dialogs; dark industrial stylesheet and icons |
 | `patlite_lr6.py` | PATLITE LR6-USB driver (from [TowerLightUSB](https://github.com/natn2014/TowerLightUSB)) |
 | `part_configs/<part>.json` | Saved jobs, one per part number |
 | `*.pt`, `weights/` | YOLO models |
-| `deploy/` | systemd service and udev rule |
+| `deploy/` | Installer (`install.sh`, guide `INSTALL.md`), pinned versions, the `universalv1` service and its launcher, tower light udev rule |
 | `docs/` | User manuals, screenshots and demo GIFs (`docs/gifs/`) |
 | `tools/record_demo_gifs.py` | Re-records the demo GIFs from the running app (live camera; uses scratch copies of all data) |
+| `tools/make_tool_thumbs.py`, `tools/make_readme_gifs.py` | Draw the Tool Catalog example pictures (`app/assets/tool_thumbs/`) and record the vision-tool GIFs offscreen |
 | `tools/code39.py` | Code 39 / Code 39 Extended label renderer (mock labels for demos and tests) |
 | `.claude/skills/industrial-hmi-ui/` | Claude Code skill: this app's UI/UX design system (theme module `industrial_theme.py`, layout recipes) for reuse in other apps |
 | `app_settings.json` *(runtime)* | Buzzer, hold time and OK/NG counters (git-ignored) |
@@ -141,9 +187,10 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 
 | Symptom | Check |
 |---|---|
-| "Tower Light: Not Connected" | Check the USB cable and the udev rule above. Make sure no other copy of the app is running. |
+| "Tower Light: Not Connected" | Check the USB cable and the udev rule (`./deploy/install.sh --check`; install it with `--from 3`). Make sure no other copy of the app is running. |
 | Camera does not open | Another process is using it: the service, a second app, or the barcode dialog. Stop it, then press **Scan Cameras** in Settings. |
-| App restarts in a loop after boot | Run `journalctl --user -u wire-harness-detector.service`. The service must not hard-code `DISPLAY`. |
+| App restarts in a loop after boot | Run `journalctl --user -u universalv1` and look at `logs/app.log`. |
+| App does not start after boot | `./deploy/install.sh --check`: automatic login and the service must both be on (`--from 12`). |
 | First Start takes about 10 s | Normal. The GPU compiles its kernels on the first inference (Orin is compute capability 8.7). |
 | Training is killed | The device ran out of RAM. Training already uses batch 8 and workers 0. Close other programs and stop the Monitor stream. |
 
@@ -169,6 +216,39 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 | ![ตัวอย่างแท็บ Settings](docs/gifs/settings.gif) | ![ตัวอย่างแท็บ Train](docs/gifs/train.gif) |
 | แท็บ **Settings** ค่า Confidence, Max Detections และ State hold time มีผลกับภาพสดทันที | แท็บ **Train** เลือกภาพ แตะกรอบ เลือกคลาสที่ถูกต้อง แล้วกด **Confirm** |
 
+### เครื่องมือประมวลผลภาพ (แบบ Keyence IV4 / CV-X)
+
+นอกจาก YOLO แล้ว แต่ละงานสามารถมี **เครื่องมือตรวจสอบภาพ** แบบกฎ (rule-based) ได้ เหมือนเครื่องมือของเซนเซอร์ภาพ Keyence IV4 / CV-X เครื่องมือแต่ละตัวตรวจสิ่งเดียวในพื้นที่ของตัวเอง แล้วรวมผลเป็น OK / NG (แบบ **AND** หรือ **OR** ร่วมกับ YOLO) ตั้งค่าได้ที่แท็บ **Tools**
+
+| 1. Tool Catalog | 2. ดูดสี (Pick Color / Pick Gray) |
+|---|---|
+| ![ตัวอย่าง Tool Catalog](docs/gifs/tool_catalog.gif) | ![ตัวอย่างการดูดสี](docs/gifs/eyedropper.gif) |
+| กด **Add Tool** เลือกหมวด แล้วเลือกเครื่องมือ ช่อง **Application Navigator** ด้านขวาอธิบายพร้อมภาพตัวอย่าง กด **Add** (หรือแตะ 2 ครั้ง) แล้วลากพื้นที่บนภาพ | แตะสี (หรือระดับความสว่าง) ที่ต้องการนับบนภาพ แตะจุดอื่นเพิ่มได้ ปรับด้วย **− Narrower / + Wider** ส่วนที่นับจะแสดงเป็นสีเหลืองทันที |
+| **3. Pattern Search** | **4. สิ่งที่เครื่องมือนับ** |
+| ![ตัวอย่าง Pattern Search](docs/gifs/pattern_search.gif) | ![ตัวอย่างพิกเซลที่นับ](docs/gifs/counted_pixels.gif) |
+| สอนเครื่องหมาย 1 ตัว (ลากกรอบรอบมัน) ระบบจะค้นหาทุกตัวได้ทุกมุม พร้อมนับจำนวน คะแนน และมุม | Area, Edge Pixels, Blob Count และ Color Prohibit แสดงพิกเซลที่นับจริง เป็นสีเหลืองโปร่ง หรือสีแดงสำหรับสีต้องห้าม |
+
+รายละเอียดเครื่องมือทั้งหมดอยู่ใน [core_function.md](core_function.md)
+
+### การอ่านเกจ (Gauge Reader)
+
+ตั้งค่าได้ที่ **ตั้งค่า > โมเดล AI > ตัดสินโดย > อ่านเกจ** แล้วกำหนดค่าในหน้า **อ่านเกจ** โปรแกรมใช้โมเดล `weights/gauge_epoch-100.pt`
+
+| 1. การอ่านค่าและตัดสินผล | 2. เปรียบเทียบข้อมูลแต่ละวัน |
+|---|---|
+| ![ตัวอย่างการอ่านเกจ](docs/gifs/gauge_reading.gif) | ![ตัวอย่างแท็บ Gauge Data](docs/gifs/gauge_data.gif) |
+| แท็บ **Monitor** อ่านค่าจากเข็มแล้วเทียบกับ MIN และ MAX หากเกินช่วงจะเป็น NG และบันทึกภาพพร้อมป้าย OVER หรือ UNDER | แท็บ **Gauge Data** แสดง Box plot ของแต่ละกล่องจากทุกค่าของวัน แตะเลือกได้สูงสุด 3 วันเพื่อเปรียบเทียบด้วยสีที่ต่างกัน และ **Export** คัดลอกข้อมูลตามช่วงวันที่ไปยัง USB |
+
+บันทึกจากหน้าจอเครื่องจริง (1024x768) ด้วยกล้องจริง โมเดลที่เทรนใหม่ `gauge_vacuumbag_I.pt` และข้อมูลจริงของงาน ส่วนของ Monitor เล่นเร็ว 2 เท่า
+
+- ค่าอยู่ระหว่าง MIN ถึง MAX (รวมค่าขอบ): OK
+- เกิน MAX หรือต่ำกว่า MIN: NG พร้อมไฟสัญญาณ เสียงเตือน รีเลย์ และตัวนับ NG
+- อ่านค่าไม่ได้: STANDBY ไม่นับเป็น NG
+- ตรวจตำแหน่ง: Start ต้องอยู่ทางซ้ายของ Center และ End ต้องอยู่ทางขวา โดยใช้ตำแหน่งเป็นตัวกำหนดชื่อ หากโมเดลตรวจพบ End ทางซ้ายจะถือเป็น Start และในทางกลับกัน ส่วน Tip ตรวจจากระยะห่างจาก Center (เข็มยาวอาจเลยตำแหน่ง Start หรือ End ได้)
+- ส่งออกข้อมูล: แท็บ **Gauge Data** กด **Export** เลือกวันที่เริ่มต้น วันที่สิ้นสุด และไดรฟ์ USB ระบบคัดลอกไฟล์ CSV วันละ 1 ไฟล์ไปยังโฟลเดอร์ใหม่ `gauge_export/`
+- การวัด: นับจาก End ไปยัง Tip โดย End ถึง Start เท่ากับ 100% ค่าเริ่มต้นคือ End = 0 และ Start = 0.1 MPa
+- บันทึกภาพลงแท็บ Log พร้อมป้าย OVER หรือ UNDER เมื่อค่าออกนอกช่วง 1 ภาพ และอีก 1 ภาพเมื่อค่าเปลี่ยนจาก OVER เป็น UNDER หรือกลับกันโดยตรง
+
 ### ความสามารถหลัก
 
 - **ตรวจจับแบบเรียลไทม์:** ใช้ Ultralytics YOLO บน GPU ของ Jetson (CUDA) กรองผลได้ตามค่าความมั่นใจ (Confidence) คลาส และจำนวนสูงสุดที่ตรวจจับ
@@ -186,7 +266,8 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
   - เลือกงานด้วยปุ่มบนจอ หรือสแกนบาร์โค้ดผ่านกล้อง (Code 39 / AIM extended)
 - **Capture และ Train:**
   - ปุ่ม **Capture** บันทึกภาพพร้อม Label รูปแบบ YOLO
-  - แท็บ Train ใช้แก้ไขคลาสของกรอบ และเทรนโมเดลต่อ (Fine-tune) บนเครื่องได้
+  - แท็บ Train ใช้วาด ลบ และแก้ไขคลาสของกรอบ และเทรนโมเดลต่อ (Fine-tune) บนเครื่องได้
+  - **Training Options:** เลือก Augmentation (Off / Light / Strong), กลับภาพซ้าย-ขวา / บน-ล่าง (ปิดไว้เป็นค่าเริ่มต้น), จำนวน Epoch และดูตัวอย่างภาพที่ใช้เทรนจริง
 - **โหมด Kiosk:**
   - เปิดเต็มจอเองเมื่อบูตเครื่อง ผ่าน systemd user service
   - โหลดงานล่าสุดให้อัตโนมัติ
@@ -202,63 +283,53 @@ Only one copy of the app can use the camera and tower light at a time. Stop the 
 
 ### การติดตั้ง
 
-```bash
-git clone https://github.com/natn2014/UniversalV1.git
-cd UniversalV1
-sudo apt install libzbar0                 # ไลบรารีสำหรับอ่านบาร์โค้ด
-python3 -m venv .venv
-source .venv/bin/activate
-pip install torch torchvision --index-url https://pypi.org/simple   # ติดตั้ง torch (CUDA) ก่อน
-pip install -r requirements.txt
-```
-
-ติดตั้งสิทธิ์ใช้งานไฟสัญญาณ (udev):
+บน Jetson Orin Nano (Ubuntu 24.04 / JetPack, CUDA 13) ใช้สคริปต์ติดตั้ง ซึ่งติดตั้งทีละขั้นตามลำดับที่ตรวจสอบแล้ว และตั้งค่าให้เปิดโปรแกรมเองเมื่อบูตเครื่อง:
 
 ```bash
-sudo cp deploy/99-patlite-lr6.rules /etc/udev/rules.d/
-sudo udevadm control --reload-rules && sudo udevadm trigger
-sudo usermod -aG plugdev $USER            # จากนั้น Logout แล้ว Login ใหม่
+git clone git@github.com:natn2014/UniversalV1.git ~/dev/UniversalV1
+cd ~/dev/UniversalV1
+git checkout imageprocessing
+# คัดลอกไฟล์โมเดลที่ไม่อยู่ใน git เช่น weights/MarkV9_best.pt
+./deploy/install.sh
+sudo reboot
 ```
+
+ให้รันด้วยผู้ใช้ที่ใช้งานเครื่อง (ไม่ต้องใส่ `sudo` สคริปต์จะถามรหัสผ่านเอง) **ดูรายละเอียดใน [deploy/INSTALL.md](deploy/INSTALL.md)** ทั้ง 12 ขั้นตอน การติดตั้งต่อหลังแก้ปัญหา (`--from N`) และการตรวจสอบ (`--check`)
 
 ### การเปิดใช้งาน
 
+หลังติดตั้งและรีบูต โปรแกรมจะเปิดเอง (Login อัตโนมัติ เปิดเต็มจอ โหลดงานล่าสุด และเริ่มตรวจทันที)
+
+เปิดเองด้วยมือ (หยุด service ก่อน):
+
 ```bash
-source .venv/bin/activate
-python3 main.py
+systemctl --user stop universalv1
+.venv/bin/python main.py
 ```
 
 ### เปิดโปรแกรมอัตโนมัติเมื่อบูตเครื่อง (Kiosk)
 
-```bash
-mkdir -p ~/.config/systemd/user
-cp deploy/wire-harness-detector.service ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable --now wire-harness-detector.service
-```
-
-เปิด Auto Login ในไฟล์ `/etc/gdm3/custom.conf` ใต้หัวข้อ `[daemon]`:
-
-```ini
-AutomaticLoginEnable = true
-AutomaticLogin = orin_nano
-```
+`./deploy/install.sh` ตั้งค่าให้แล้ว (ขั้นที่ 12): Login อัตโนมัติ ไม่ล็อกหน้าจอ และ service `universalv1`
 
 คำสั่งที่ใช้บ่อย:
 
 ```bash
-systemctl --user status  wire-harness-detector.service   # ดูสถานะ
-systemctl --user restart wire-harness-detector.service   # รีสตาร์ทโปรแกรม
-systemctl --user stop    wire-harness-detector.service   # หยุดก่อนเปิด main.py เอง
-journalctl --user -u wire-harness-detector.service -f    # ดู Log
+systemctl --user status  universalv1    # ดูสถานะ
+systemctl --user restart universalv1    # รีสตาร์ทโปรแกรม
+systemctl --user stop    universalv1    # หยุดก่อนเปิด main.py เอง
+journalctl --user -u universalv1 -f     # ดู Log ของ service
+tail -f logs/app.log                    # ดู Log ของโปรแกรม
+./deploy/install.sh --check             # ตรวจว่าติดตั้งครบหรือไม่
 ```
 
-> ไฟล์ service ระบุ path เต็ม (`/home/orin_nano/dev/Wire_harness_module`) หากติดตั้งไว้ที่อื่นต้องแก้ path ในไฟล์ด้วย และกล้องกับไฟสัญญาณใช้งานได้ครั้งละ 1 โปรแกรมเท่านั้น
+> โปรแกรมเปิดได้ครั้งละ 1 ตัว ถ้าเปิดซ้ำจะแจ้งว่า "already running" แล้วปิดตัวเอง (กล้องและไฟสัญญาณใช้ได้ครั้งละโปรแกรมเดียว)
 
 ### การแก้ปัญหาเบื้องต้น
 
 | อาการ | วิธีตรวจสอบ |
 |---|---|
-| "Tower Light: Not Connected" | ตรวจสาย USB และกฎ udev ด้านบน และตรวจว่าไม่มีโปรแกรมอื่นเปิดค้างอยู่ |
+| "Tower Light: Not Connected" | ตรวจสาย USB และกฎ udev (`./deploy/install.sh --check` ติดตั้งด้วย `--from 3`) และตรวจว่าไม่มีโปรแกรมอื่นเปิดค้างอยู่ |
+| ไม่เปิดเองหลังบูต | `./deploy/install.sh --check` ต้องเปิด Login อัตโนมัติและ service (`--from 12`) |
 | กล้องไม่เปิด | มีโปรแกรมอื่นใช้กล้องอยู่ (service, โปรแกรมที่เปิดซ้อน หรือหน้าต่างสแกนบาร์โค้ด) ให้ปิดก่อน แล้วกด **Scan Cameras** ในหน้า Settings |
 | กด Start ครั้งแรกช้าประมาณ 10 วินาที | เป็นเรื่องปกติ GPU ต้องคอมไพล์ในการประมวลผลครั้งแรก |
 | โปรแกรมถูกปิดระหว่างเทรน | หน่วยความจำ (RAM) ไม่พอ ให้หยุด Monitor และปิดโปรแกรมอื่นก่อนเทรน |
