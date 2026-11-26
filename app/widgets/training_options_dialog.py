@@ -57,7 +57,7 @@ class TrainingOptionsDialog(QDialog):
     samples exactly as Ultralytics will produce them."""
 
     def __init__(self, preset: str, mirror: bool, flip_ud: bool, epochs: int,
-                 data_yaml: Optional[Path], parent=None) -> None:
+                 data_yaml: Optional[Path], parent=None, rotate_any: bool = False) -> None:
         super().__init__(parent)
         self.setWindowTitle("Training Options")
         self.setModal(True)
@@ -77,6 +77,12 @@ class TrainingOptionsDialog(QDialog):
         self.mirror_check.setChecked(mirror)
         self.flip_ud_check = QCheckBox("Flip upside-down")
         self.flip_ud_check.setChecked(flip_ud)
+        self.rotate_check = QCheckBox("Any rotation (0–360°)")
+        self.rotate_check.setChecked(rotate_any)
+        self.rotate_hint = QLabel("Turns each sample to any angle. For orientation (pose) models "
+                                  "that must find the part lying any way round.")
+        self.rotate_hint.setObjectName("hint")
+        self.rotate_hint.setWordWrap(True)
         self.flip_hint = QLabel("Leave off for printed text and parts whose left/right or up/down matters.")
         self.flip_hint.setObjectName("hint")
         self.flip_hint.setWordWrap(True)
@@ -109,7 +115,7 @@ class TrainingOptionsDialog(QDialog):
         self.save_button.clicked.connect(self.accept)
 
         for signal in (self.preset_combo.currentIndexChanged, self.mirror_check.toggled,
-                       self.flip_ud_check.toggled):
+                       self.flip_ud_check.toggled, self.rotate_check.toggled):
             signal.connect(self._on_options_changed)
 
         self._build_layout()
@@ -137,6 +143,9 @@ class TrainingOptionsDialog(QDialog):
         body.addWidget(self.mirror_check)
         body.addWidget(self.flip_ud_check)
         body.addWidget(self.flip_hint)
+        body.addSpacing(8)
+        body.addWidget(self.rotate_check)
+        body.addWidget(self.rotate_hint)
         body.addSpacing(8)
         body.addLayout(row(QLabel("Epochs:"), None, self.epochs_spin))
         epochs_hint = QLabel("More epochs = longer training; stops early when it stops improving.")
@@ -198,6 +207,10 @@ class TrainingOptionsDialog(QDialog):
         return self.flip_ud_check.isChecked()
 
     @property
+    def rotate_any(self) -> bool:
+        return self.rotate_check.isChecked()
+
+    @property
     def epochs(self) -> int:
         return self.epochs_spin.value()
 
@@ -221,7 +234,8 @@ class TrainingOptionsDialog(QDialog):
             return
         self.preview_status.setText(tr("Making preview..."))
         self.preview_button.setEnabled(False)
-        self._worker = PreviewWorker(self._data_yaml, build_hyp(self.preset, self.mirror, self.flip_ud))
+        self._worker = PreviewWorker(self._data_yaml, build_hyp(self.preset, self.mirror, self.flip_ud,
+                                                                 self.rotate_any))
         self._worker.done.connect(self._on_preview_done)
         self._worker.failed.connect(self._on_preview_failed)
         self._worker.finished.connect(self._on_worker_finished)

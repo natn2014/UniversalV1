@@ -26,6 +26,8 @@ DEFAULT_APP_SETTINGS = {
     "train_augment": "light",
     "train_mirror": False,
     "train_flip_ud": False,
+    # Turn samples by up to ±180° (orientation / pose models).
+    "train_rotate_any": False,
     "train_epochs": 50,
     # OK/NG cycle counters, persisted so a kiosk restart doesn't lose them.
     "ok_count": 0,
@@ -94,7 +96,8 @@ def save_app_settings(settings: dict) -> None:
 # after commit() (the Settings tab's Save), back to the saved value on revert().
 IMMEDIATE_KEYS = {"ok_count", "ng_count", "buzzer_enabled", "language",
                   # Training Options are saved by their own dialog, not the Settings tab.
-                  "train_augment", "train_mirror", "train_flip_ud", "train_epochs"}
+                  "train_augment", "train_mirror", "train_flip_ud", "train_rotate_any",
+                  "train_epochs"}
 
 
 class AppSettings(QObject):

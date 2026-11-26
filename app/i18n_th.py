@@ -648,6 +648,47 @@ TH = {
     "No changes: trains on the images exactly as captured.": "ไม่เปลี่ยนภาพ: เทรนจากภาพตามที่ถ่ายไว้",
     "Small brightness, colour, shift and zoom changes. Best for a fixed camera station.": "ปรับความสว่าง สี ตำแหน่ง และซูมเล็กน้อย เหมาะกับกล้องที่ติดตั้งคงที่",
     "Bigger changes, tilt and image mixing. For few images or a changing setup.": "เปลี่ยนภาพมากขึ้น เอียงภาพ และผสมภาพ เหมาะกับภาพจำนวนน้อยหรือการติดตั้งที่เปลี่ยนบ่อย",
+    # --- Pose (orientation) datasets, Orientation tool ----------------------
+    "Make Pose Dataset": "สร้างชุดข้อมูล Pose",
+    "Turn this dataset into a pose dataset: each box gets keypoints (e.g. head, tail) so a model can learn which way the part faces.":
+        "เปลี่ยนชุดข้อมูลนี้เป็นแบบ Pose: แต่ละกรอบมีจุดสำคัญ (เช่น หัว ท้าย) เพื่อให้โมเดลเรียนรู้ว่าชิ้นงานหันไปทางไหน",
+    "Detect": "ตรวจจับ",
+    "Type:": "ประเภท:",
+    "Keypoints": "จุดสำคัญ",
+    "Select a box to place its points.": "เลือกกรอบเพื่อวางจุด",
+    "Hidden": "ถูกบัง",
+    "The next point is covered: tap where it would be. It is saved as hidden.":
+        "จุดถัดไปถูกบังอยู่: แตะตรงที่จุดนั้นควรอยู่ จะบันทึกเป็นจุดที่ถูกบัง",
+    "Re-place": "วางใหม่",
+    "Clear the selected box's points and tap them again.": "ล้างจุดของกรอบที่เลือกแล้วแตะวางใหม่",
+    "Names": "ชื่อจุด",
+    "Rename the keypoints (keypoints.txt).": "เปลี่ยนชื่อจุดสำคัญ (keypoints.txt)",
+    "Drag a dot to move it. Select a box to place its points.": "ลากจุดเพื่อย้าย เลือกกรอบเพื่อวางจุด",
+    "Points placed. Draw the next box or go to the next image.": "วางจุดครบแล้ว วาดกรอบถัดไปหรือไปภาพถัดไป",
+    "Select a box first.": "เลือกกรอบก่อน",
+    "Keypoint Names": "ชื่อจุดสำคัญ",
+    "Keypoint names (comma separated, in order):": "ชื่อจุดสำคัญ (คั่นด้วยจุลภาค ตามลำดับ):",
+    "Give at least one keypoint name.": "ใส่ชื่อจุดสำคัญอย่างน้อย 1 ชื่อ",
+    "Any rotation (0–360°)": "หมุนได้ทุกมุม (0–360°)",
+    "Turns each sample to any angle. For orientation (pose) models that must find the part lying any way round.":
+        "หมุนภาพตัวอย่างได้ทุกมุม สำหรับโมเดลทิศทาง (Pose) ที่ต้องหาชิ้นงานที่วางในทิศใดก็ได้",
+    "Orientation\n(AI)": "ทิศทาง\n(AI)",
+    "Part facing the right way (not reversed)": "ชิ้นงานหันถูกทาง (ไม่กลับด้าน)",
+    "Finds the part with a pose model trained in the Train tab and measures which way it faces (tail → head), 0-360°. NG when it is turned or reversed. Teach sets the right direction from a good part.":
+        "หาชิ้นงานด้วยโมเดล Pose ที่เทรนในแท็บเทรน แล้ววัดว่าหันไปทางไหน (ท้าย → หัว) 0-360° เป็น NG เมื่อหมุนหรือกลับด้าน กด สอน เพื่อตั้งทิศที่ถูกจากชิ้นงานดี",
+    "The pose model (.pt) trained in the Train tab on a pose dataset. Use Browse to pick it.":
+        "โมเดล Pose (.pt) ที่เทรนในแท็บเทรนจากชุดข้อมูล Pose กด เลือกไฟล์ เพื่อเลือก",
+    "The right direction in degrees: 0 = pointing right, 90 = up, 180 = left, -90 = down. Teach sets it from a good part.":
+        "ทิศที่ถูกต้องเป็นองศา: 0 = ชี้ขวา, 90 = ชี้ขึ้น, 180 = ชี้ซ้าย, -90 = ชี้ลง กด สอน เพื่อตั้งจากชิ้นงานดี",
+    "Keypoint the arrow starts at (number shown on the dots in the Train tab; 1 = tail).":
+        "จุดเริ่มของลูกศร (หมายเลขบนจุดในแท็บเทรน; 1 = ท้าย)",
+    "Keypoint the arrow points to (0 = head).": "จุดที่ลูกศรชี้ไป (0 = หัว)",
+    "How sure (0-1) the model must be that it found the part.": "ความมั่นใจ (0-1) ที่โมเดลต้องมีว่าพบชิ้นงาน",
+    "How sure (0-1) the model must be of both keypoints. Raise it if a reversed part is sometimes read the wrong way.":
+        "ความมั่นใจ (0-1) ที่โมเดลต้องมีต่อจุดทั้งสอง เพิ่มค่านี้ถ้าบางครั้งชิ้นงานกลับด้านถูกอ่านผิดทาง",
+    "NG when more parts than this are found in the area. 0 = no limit.": "เป็น NG เมื่อพบชิ้นงานในพื้นที่มากกว่านี้ 0 = ไม่จำกัด",
+    "Browse…": "เลือกไฟล์…",
+    "Choose Pose Model": "เลือกโมเดล Pose",
 }
 
 # Strings with values in them: {} is kept as is (a part number, a count...)
@@ -754,6 +795,19 @@ FORMATS = {
     "Drag the {} area on the image": "ลากพื้นที่ {} บนภาพ",
     "Tap the {} to count on the image": "แตะ {} ที่จะนับบนภาพ",
     "Auto: master {} · {}/{}{}": "อัตโนมัติ: ภาพต้นแบบ {} · {}/{}{}",
+    "Pose ({})": "Pose ({})",
+    "Tap the {} ({}/{})": "แตะที่ {} ({}/{})",
+    "Pose dataset: {}. Select a box and tap its points, or draw new boxes.": "ชุดข้อมูล Pose: {} เลือกกรอบแล้วแตะวางจุด หรือวาดกรอบใหม่",
+    "Keypoints: {}": "จุดสำคัญ: {}",
+    "Points are already placed: keep {} names (rename only).": "วางจุดไว้แล้ว: ต้องคง {} ชื่อ (เปลี่ยนชื่อได้อย่างเดียว)",
+    "No image has all its points yet ({} still need keypoints).": "ยังไม่มีภาพที่วางจุดครบ (ยังต้องวางจุดอีก {} ภาพ)",
+    "{} labelled images still need keypoints and will be left out.\n\nTrain on the {} finished images?":
+        "ภาพที่มี label {} ภาพยังวางจุดไม่ครบและจะไม่ถูกใช้\n\nเทรนด้วยภาพที่เสร็จแล้ว {} ภาพ?",
+    "Not enough free memory to train ({} MB). Close other programs (browser, editor) or stop monitoring, then start again.":
+        "หน่วยความจำว่างไม่พอสำหรับเทรน ({} MB) ปิดโปรแกรมอื่น (เบราว์เซอร์ โปรแกรมแก้ไข) หรือหยุดการตรวจ แล้วเริ่มใหม่",
+    "Free memory {} MB: training with batch {} instead of {}.": "หน่วยความจำว่าง {} MB: เทรนด้วย batch {} แทน {}",
+    "Starting from {} (downloaded once if missing)...": "เริ่มจาก {} (ดาวน์โหลดครั้งเดียวถ้ายังไม่มี)...",
+    "Keypoint name \"{}\" must be one word.": "ชื่อจุดสำคัญ \"{}\" ต้องเป็นคำเดียว",
 }
 
 

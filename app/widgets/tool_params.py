@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QGridLayout,
@@ -34,7 +35,7 @@ from .touch_input import attach_keyboard, attach_numpad
 TOUCH_HEIGHT = 48
 
 KIND_LABELS = {
-    "position": "Position\nAdjust",
+    "position": "Position\nAdjust", "orientation": "Orientation\n(AI)",
     "color_area": "Color\nArea", "color_average": "Color\nAverage", "color_prohibit": "Color\nProhibit",
     "area": "Area\n(mono)", "brightness": "Brightness\nAverage", "edge_pixels": "Edge\nPixels", "shading": "Shading\nUniformity",
     "width": "Width", "edge_presence": "Edge\nPresence", "pitch": "Pitch", "diameter": "Diameter",
@@ -42,7 +43,7 @@ KIND_LABELS = {
     "outline": "Outline", "pattern_search": "Pattern\nSearch", "blob_count": "Blob\nCount",
 }
 CATEGORIES = [
-    ("Position", ["position"]),
+    ("Position", ["position", "orientation"]),
     ("Color", ["color_area", "color_average", "color_prohibit"]),
     ("Brightness", ["area", "brightness", "edge_pixels", "shading"]),
     ("Measure", ["width", "edge_presence", "pitch", "diameter"]),
@@ -53,6 +54,7 @@ CATEGORIES = [
 # (drawn by tools/make_tool_thumbs.py).
 KIND_USES = {
     "position": "Follow a part that moves or turns",
+    "orientation": "Part facing the right way (not reversed)",
     "color_area": "Right wire color is there",
     "color_average": "Cap / LED / label is the taught color",
     "color_prohibit": "No stain or foreign color",
@@ -75,6 +77,9 @@ KIND_USES = {
 KIND_HELP = {
     "position": "Finds a taught feature of the part and measures how far it moved or turned. "
                 "Other tools follow it, so their areas stay on the part.",
+    "orientation": "Finds the part with a pose model trained in the Train tab and measures which way "
+                   "it faces (tail → head), 0-360°. NG when it is turned or reversed. Teach sets the "
+                   "right direction from a good part.",
     "color_area": "Counts the pixels inside the taught color range, as a % of the area. "
                   "Use Pick Color and tap the color on the image.",
     "color_average": "Compares the average color of the area with the taught master (ΔE). "
@@ -415,6 +420,26 @@ class DeleteToolDialog(QDialog):
         self.cancel_button.setFocus()
 
 
+# String params holding a file path: a line edit plus a Browse button.
+FILE_PARAMS = {"model"}
+
+
+def latest_pose_weights():
+    """Folder of the newest pose model trained in the Train tab, if any
+    (a dataset's runs/ folder, in the captures or a job's auto captures)."""
+    from ..paths import AUTOCAPTURE_DIR, CAPTURES_DIR
+    found = []
+    for root in (CAPTURES_DIR, AUTOCAPTURE_DIR):
+        for pattern in ("runs/pose*/weights/best.pt", "*/runs/pose*/weights/best.pt"):
+            try:
+                found += root.glob(pattern)
+            except OSError:
+                pass
+    if not found:
+        return None
+    return max(found, key=lambda p: p.stat().st_mtime).parent
+
+
 # Values that are taught or internal, not for hand editing.
 HIDDEN_PARAMS = {"pre", "template_roi", "taught_center", "ref_edge", "ref_strength", "ref_sign", "ref_lab"}
 _EDGE = ["any", "rising", "falling"]
@@ -500,6 +525,15 @@ PARAM_HINTS = {
     "aspect_min": "Lowest width / height of a blob to count it. 0 = no limit.",
     "aspect_max": "Highest width / height of a blob to count it.",
     "circ_min": "How round a blob must be (0-1, 1 = circle). 0 = any shape.",
+    "model": "The pose model (.pt) trained in the Train tab on a pose dataset. Use Browse to pick it.",
+    "expected_angle": "The right direction in degrees: 0 = pointing right, 90 = up, 180 = left, "
+                      "-90 = down. Teach sets it from a good part.",
+    "from_kpt": "Keypoint the arrow starts at (number shown on the dots in the Train tab; 1 = tail).",
+    "to_kpt": "Keypoint the arrow points to (0 = head).",
+    "conf": "How sure (0-1) the model must be that it found the part.",
+    "kpt_conf": "How sure (0-1) the model must be of both keypoints. Raise it if a reversed part "
+                "is sometimes read the wrong way.",
+    ("orientation", "max_count"): "NG when more parts than this are found in the area. 0 = no limit.",
 }
 
 
@@ -588,8 +622,31 @@ class ToolParamsForm(QWidget):
             edit = QLineEdit(value)
             edit.textChanged.connect(lambda v, k=key: self._write(k, v))
             attach_keyboard(edit, _title(key))
+            if key in FILE_PARAMS:
+                return self._with_browse(edit)
             return edit
         return None
+
+    def _with_browse(self, edit: QLineEdit) -> QWidget:
+        """A path field with a Browse button that picks a model file."""
+        box = QWidget()
+        layout = QHBoxLayout(box)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        edit.setMinimumHeight(TOUCH_HEIGHT)
+        browse = QPushButton("Browse…")
+        browse.setMinimumHeight(TOUCH_HEIGHT)
+        browse.clicked.connect(lambda: self._browse(edit))
+        layout.addWidget(edit, 1)
+        layout.addWidget(browse)
+        return box
+
+    def _browse(self, edit: QLineEdit) -> None:
+        start = edit.text() or str(latest_pose_weights() or ROOT_DIR)
+        path, _ = QFileDialog.getOpenFileName(self, "Choose Pose Model", start,
+                                              "YOLO models (*.pt *.engine)")
+        if path:
+            edit.setText(path)
 
     def _write(self, key: str, value) -> None:
         if self._tool is not None:

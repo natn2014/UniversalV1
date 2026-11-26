@@ -211,6 +211,20 @@ Use this to improve the model when it makes mistakes.
 2. When it finishes, the new model's path is shown. It is in `captures/runs/train…/weights/best.pt`.
 3. Load it in **Settings → Load .pt Model**, test it on the Monitor tab, and **Save** the job (section 5) to keep it.
 
+**Orientation (pose) model — checking which way a part faces**
+
+A normal model draws a box, and a box looks the same when the part is turned round. A *pose* model also marks named points on the part (by default **head** and **tail**), so it can tell a reversed part from a good one.
+
+1. Open the dataset in the **Train** tab and tap **Make Pose Dataset**. Enter the point names in order (e.g. `head, tail`). The top strip then shows **Type: Pose (head, tail)**.
+2. Draw a box around the part. The panel then asks **Tap the head (1/2)**, then **Tap the tail (2/2)**. Tap each point on the picture.
+   - A point covered by something else: tap **Hidden**, then tap where the point would be.
+   - To move a point, select its box and drag the dot. **Re-place** clears the box's points so you can tap them again.
+   - A yellow arrow runs from tail to head, so you can check the direction at a glance.
+3. In **Training Options**, tick **Any rotation (0–360°)** so the model learns the part at every angle. Leave **Mirror** and **Flip** off.
+4. Tap **Start Training**. Only images where every box has all its points are used. A new pose model starts from `weights/yolo11n-pose.pt`, which is downloaded once. On a station with no internet, copy that file in by hand. The model is saved to `runs/pose…/weights/best.pt` next to the dataset.
+5. In the **Tools** tab, add **Orientation (AI)** (Position category). Draw its area, tap **Browse…** next to **Model** to pick `best.pt`, then put a good part under the camera and tap **Teach**. Teach saves the right direction as **Expected angle**.
+6. The tool shows the part's angle and how far it is from the expected one. The default tolerance is ±10°, which you can change with the low/high limits. A reversed part is about 180° off, so it is NG.
+
 ## 9. Problems and what to do
 
 | Problem | What to do |

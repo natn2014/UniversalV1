@@ -34,7 +34,7 @@ Next to YOLO, each job can hold rule-based **vision tools**. They work like the 
 
 | Category | Tools |
 |---|---|
-| Position | **Position Adjust**: finds the part, and the other tools follow it when it moves or turns |
+| Position | **Position Adjust**: finds the part, and the other tools follow it when it moves or turns. **Orientation (AI)**: a pose model trained in the Train tab finds the part's head and tail and judges which way it faces (0-360°), so a reversed part is NG. |
 | Color | **Color Area** (% of the taught color), **Color Average** (ΔE to the master), **Color Prohibit** (NG on a forbidden color) |
 | Brightness | **Area (mono)**, **Brightness Average**, **Edge Pixels**, **Shading Uniformity** |
 | Measure | **Width**, **Edge Presence**, **Pitch**, **Diameter** (px, or mm after **Calibrate mm**) |
@@ -94,10 +94,31 @@ The Train tab's **Training Options** set the augmentation preset, flips and epoc
 - **Capture and Train:**
   - **Capture** saves frames with YOLO labels.
   - The Train tab lets you draw, delete and correct boxes, and fine-tune the model on the device.
-  - **Training Options**: augmentation preset (Off / Light / Strong), mirror and upside-down flips (off by default), epochs, and a preview of the images exactly as the trainer sees them.
+  - **Training Options**: augmentation preset (Off / Light / Strong), mirror and upside-down flips (off by default), any rotation (0-360°), epochs, and a preview of the images exactly as the trainer sees them.
+  - **Pose datasets** (Make Pose Dataset): after each box, tap its named keypoints (default head, tail). Training then makes a YOLO-pose model, starting from `weights/yolo11n-pose.pt` (downloaded once), for the Orientation tool.
 - **Kiosk mode:**
   - Starts full screen on boot through a systemd user service.
   - Reloads the last job automatically.
+
+## Train a pose (Orientation) model on a GPU server
+
+Training a pose model on the Jetson runs out of memory when the desktop, an editor and a browser are open (7.5 GB shared by CPU and GPU). Train on a GPU machine such as a DGX Spark instead, then copy the model back. Neither tool needs the app's Qt interface.
+
+```bash
+git clone git@github.com:natn2014/UniversalV1.git && cd UniversalV1
+python3 -m venv .venv && .venv/bin/pip install ultralytics opencv-python-headless pyyaml numpy
+# Datasets from the head-up photos in mirror_base_img/ (head = top of the centred part)
+.venv/bin/python tools/augment_pose_dataset.py mirror_base_img datasets/mirror_base_pose --auto-head-up
+.venv/bin/python tools/augment_pose_dataset.py mirror_base_img datasets/mirror_base_pose_light --auto-head-up --light=-30,30
+# Model A: turned copies, from yolo11n-pose. Model B: + lighting copies, fine-tuned from A.
+.venv/bin/python tools/train_pose.py datasets/mirror_base_pose --name model_a --epochs 100
+.venv/bin/python tools/train_pose.py datasets/mirror_base_pose_light --name model_b --epochs 30 \
+    --model datasets/mirror_base_pose/runs/model_a/weights/best.pt
+```
+
+- `augment_pose_dataset.py` adds ±1-5° turned copies (`--angles`) and, with `--light=-30,30`, darker / brighter copies, turning each label with its image. Photos already labelled in the Train tab keep their labels.
+- `train_pose.py` writes `data.yaml` as the Train tab does and trains with **Any rotation (0-360°)** on. An interrupted run resumes from its `last.pt`.
+- Copy `datasets/<set>/runs/<name>/weights/best.pt` to the Jetson and choose it with **Browse…** in the Orientation tool. Judge a model by the tool's angle error on real parts; with two keypoints the pose mAP score is lenient.
 
 ## Hardware
 
@@ -267,10 +288,15 @@ Only one copy of the app runs at a time: a second start says "already running" a
 - **Capture และ Train:**
   - ปุ่ม **Capture** บันทึกภาพพร้อม Label รูปแบบ YOLO
   - แท็บ Train ใช้วาด ลบ และแก้ไขคลาสของกรอบ และเทรนโมเดลต่อ (Fine-tune) บนเครื่องได้
-  - **Training Options:** เลือก Augmentation (Off / Light / Strong), กลับภาพซ้าย-ขวา / บน-ล่าง (ปิดไว้เป็นค่าเริ่มต้น), จำนวน Epoch และดูตัวอย่างภาพที่ใช้เทรนจริง
+  - **Training Options:** เลือก Augmentation (Off / Light / Strong), กลับภาพซ้าย-ขวา / บน-ล่าง (ปิดไว้เป็นค่าเริ่มต้น), หมุนได้ทุกมุม (0-360°), จำนวน Epoch และดูตัวอย่างภาพที่ใช้เทรนจริง
+  - **ชุดข้อมูล Pose** (Make Pose Dataset): หลังวาดกรอบ ให้แตะจุดที่มีชื่อ (ค่าเริ่มต้น head, tail) การเทรนจะสร้างโมเดล YOLO-pose โดยเริ่มจาก `weights/yolo11n-pose.pt` (ดาวน์โหลดครั้งเดียว) สำหรับเครื่องมือ Orientation (AI) ที่ตรวจว่าชิ้นงานหันถูกทาง
 - **โหมด Kiosk:**
   - เปิดเต็มจอเองเมื่อบูตเครื่อง ผ่าน systemd user service
   - โหลดงานล่าสุดให้อัตโนมัติ
+
+### เทรนโมเดล Pose (Orientation) บนเครื่อง GPU
+
+การเทรนโมเดล Pose บน Jetson หน่วยความจำไม่พอเมื่อเปิดหน้าจอ โปรแกรมแก้ไข และเบราว์เซอร์อยู่ (CPU และ GPU ใช้ RAM 7.5 GB ร่วมกัน) ให้เทรนบนเครื่อง GPU เช่น DGX Spark แล้วคัดลอกโมเดลกลับมา คำสั่งอยู่ในหัวข้อ **Train a pose (Orientation) model on a GPU server** ด้านบน ได้ไฟล์ `datasets/<ชุดข้อมูล>/runs/<ชื่อ>/weights/best.pt` แล้วเลือกด้วยปุ่ม **Browse…** ในเครื่องมือ Orientation
 
 ### อุปกรณ์
 

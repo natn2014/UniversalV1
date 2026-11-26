@@ -182,7 +182,7 @@ def tool_value_text(result: ToolResult, calibrated: bool) -> str:
     if result.kind in ("ocr", "code") and result.text:
         text = result.text.splitlines()[0][:24]
     else:
-        text = f"{result.value:.2f}"
+        text = f"{result.value:+.1f}°" if result.kind == "orientation" else f"{result.value:.2f}"
         if calibrated and result.kind in MM_KINDS:
             text += " mm"
     if "age_ms" in result.extra:

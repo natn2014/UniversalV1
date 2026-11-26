@@ -88,6 +88,28 @@ def position(img):
     tag(img, True)
 
 
+def orientation(img):
+    """Two connectors with a latch at the head end: the left faces the right
+    way (arrow tail -> head, green), the right one is in reversed (red)."""
+    for cx, angle, ok in ((150, 0, True), (340, 180, False)):
+        color = GREEN if ok else RED
+        body = cv2.boxPoints(((cx, 160), (100, 150), angle)).astype(np.int32)
+        cv2.fillPoly(img, [body], (190, 190, 190), AA)
+        cv2.polylines(img, [body], True, (110, 110, 110), 2, AA)
+        sign = -1 if angle == 0 else 1  # latch on top when right way up
+        latch_y = 160 + sign * 88
+        cv2.rectangle(img, (cx - 26, min(latch_y, 160 + sign * 72)), (cx + 26, max(latch_y, 160 + sign * 72)),
+                      (150, 150, 150), -1, AA)
+        head, tail = (cx, 160 + sign * 55), (cx, 160 - sign * 55)
+        cv2.arrowedLine(img, tail, head, YELLOW, 4, AA, tipLength=0.3)
+        cv2.circle(img, head, 10, (80, 80, 255), -1, AA)
+        cv2.circle(img, tail, 8, (255, 200, 60), -1, AA)
+        cv2.polylines(img, [body], True, color, 4, AA)
+    label(img, "90.0", (100, 285), 0.8, GREEN)
+    label(img, "-90.0", (285, 285), 0.8, RED)
+    tag(img, False)
+
+
 def color_area(img):
     housing(img, 40, 50, 150, 260)
     for y, c in zip((85, 130, 175, 220), ((40, 40, 210), (200, 90, 30), (30, 200, 230), (50, 160, 50))):
@@ -290,7 +312,7 @@ SCENES = {
     "edge_pixels": edge_pixels, "shading": shading, "width": width,
     "edge_presence": edge_presence, "pitch": pitch, "diameter": diameter,
     "ocr": ocr, "code": code, "outline": outline, "pattern_search": pattern_search,
-    "blob_count": blob_count,
+    "blob_count": blob_count, "orientation": orientation,
 }
 
 

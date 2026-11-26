@@ -35,18 +35,25 @@ PRESET_HINTS = {
 }
 DEFAULT_PRESET = "light"
 FLIP_PROBABILITY = 0.5
+# "Any rotation": turn every sample by up to ±180°, for orientation (pose)
+# models that must find the head/tail of a part lying any way round.
+ANY_ROTATION_DEGREES = 180.0
 
 
-def build_hyp(preset: str, mirror: bool = False, flip_ud: bool = False) -> Dict[str, float]:
+def build_hyp(preset: str, mirror: bool = False, flip_ud: bool = False,
+              rotate_any: bool = False) -> Dict[str, float]:
     """Ultralytics hyperparameters for a preset; unknown names use the default."""
     hyp = dict(PRESETS.get(preset, PRESETS[DEFAULT_PRESET]))
     hyp["fliplr"] = FLIP_PROBABILITY if mirror else 0.0
     hyp["flipud"] = FLIP_PROBABILITY if flip_ud else 0.0
+    if rotate_any:
+        hyp["degrees"] = ANY_ROTATION_DEGREES
     return hyp
 
 
-def describe(preset: str, mirror: bool, flip_ud: bool) -> str:
+def describe(preset: str, mirror: bool, flip_ud: bool, rotate_any: bool = False) -> str:
     """Short status text, e.g. 'Augment: Light, no mirror'."""
     name = PRESET_LABELS.get(preset, PRESET_LABELS[DEFAULT_PRESET])
     flips = [f for f, on in (("mirror", mirror), ("upside-down", flip_ud)) if on]
-    return f"Augment: {name}, " + ("+".join(flips) if flips else "no mirror")
+    text = f"Augment: {name}, " + ("+".join(flips) if flips else "no mirror")
+    return text + (", any rotation" if rotate_any else "")
