@@ -306,13 +306,35 @@ def blob_count(img):
     tag(img, False, f"NG {n}/10")
 
 
+def segment(img):
+    """A triangular quarter glass seen from the back: its outline filled by
+    the model's mask, three clip seats, one sponge missing (red ring)."""
+    tri = np.array([[60, 250], [420, 250], [330, 45]], np.int32)
+    inner = np.array([[150, 222], [360, 222], [318, 110]], np.int32)
+    cv2.fillPoly(img, [tri], (85, 85, 90), AA)
+    cv2.fillPoly(img, [inner], (150, 140, 120), AA)
+    overlay = img.copy()
+    cv2.fillPoly(overlay, [tri], (60, 160, 60), AA)
+    cv2.addWeighted(overlay, 0.25, img, 0.75, 0, img)
+    cv2.polylines(img, [tri], True, GREEN, 3, AA)
+    for (cx, cy), ok in (((105, 232), True), ((385, 232), True), ((330, 80), False)):
+        if ok:
+            cv2.circle(img, (cx, cy), 17, (25, 25, 25), -1, AA)  # black sponge
+            cv2.circle(img, (cx, cy), 21, GREEN, 3, AA)
+        else:
+            cv2.circle(img, (cx, cy), 21, RED, 3, AA)
+        cv2.circle(img, (cx, cy), 7, (235, 235, 235), -1, AA)  # white clip
+    label(img, "BACK 2/3", (150, 290), 0.8, RED)
+    tag(img, False)
+
+
 SCENES = {
     "position": position, "color_area": color_area, "color_average": color_average,
     "color_prohibit": color_prohibit, "area": area, "brightness": brightness,
     "edge_pixels": edge_pixels, "shading": shading, "width": width,
     "edge_presence": edge_presence, "pitch": pitch, "diameter": diameter,
     "ocr": ocr, "code": code, "outline": outline, "pattern_search": pattern_search,
-    "blob_count": blob_count, "orientation": orientation,
+    "blob_count": blob_count, "orientation": orientation, "segment": segment,
 }
 
 

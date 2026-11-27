@@ -36,6 +36,7 @@ TOUCH_HEIGHT = 48
 
 KIND_LABELS = {
     "position": "Position\nAdjust", "orientation": "Orientation\n(AI)",
+    "segment": "Part Check\n(AI Seg)",
     "color_area": "Color\nArea", "color_average": "Color\nAverage", "color_prohibit": "Color\nProhibit",
     "area": "Area\n(mono)", "brightness": "Brightness\nAverage", "edge_pixels": "Edge\nPixels", "shading": "Shading\nUniformity",
     "width": "Width", "edge_presence": "Edge\nPresence", "pitch": "Pitch", "diameter": "Diameter",
@@ -48,7 +49,7 @@ CATEGORIES = [
     ("Brightness", ["area", "brightness", "edge_pixels", "shading"]),
     ("Measure", ["width", "edge_presence", "pitch", "diameter"]),
     ("Text & Code", ["ocr", "code"]),
-    ("Pattern & Count", ["outline", "pattern_search", "blob_count"]),
+    ("Pattern & Count", ["outline", "pattern_search", "blob_count", "segment"]),
 ]
 # The case each tool suits, shown under its tile with an example picture
 # (drawn by tools/make_tool_thumbs.py).
@@ -71,12 +72,15 @@ KIND_USES = {
     "outline": "Right part shape",
     "pattern_search": "Find & count a mark at any angle",
     "blob_count": "Count terminals, find a missing one",
+    "segment": "Right side up, all small parts fitted",
 }
 # What each tool does and when to pick it: the Application Navigator text of
 # the Tool Catalog (as on Keyence's CV-X).
 KIND_HELP = {
     "position": "Finds a taught feature of the part and measures how far it moved or turned. "
                 "Other tools follow it, so their areas stay on the part.",
+    "segment": "Finds the part with a segmentation model, tells which side faces the camera and "
+               "counts the small parts (e.g. sponges) on it. NG on the wrong side or a wrong count.",
     "orientation": "Finds the part with a pose model trained in the Train tab and measures which way "
                    "it faces (tail → head), 0-360°. NG when it is turned or reversed. Teach sets the "
                    "right direction from a good part.",
@@ -445,6 +449,7 @@ HIDDEN_PARAMS = {"pre", "template_roi", "taught_center", "ref_edge", "ref_streng
 _EDGE = ["any", "rising", "falling"]
 CHOICES = {
     ("position", "mode"): ["2d", "x", "y"],
+    ("segment", "expected_side"): ["back", "front", "any"],
     ("outline", "mode"): ["template", "shape"],
     ("area", "polarity"): ["bright", "dark"],
     ("blob_count", "polarity"): ["bright", "dark"],
@@ -534,6 +539,15 @@ PARAM_HINTS = {
     "kpt_conf": "How sure (0-1) the model must be of both keypoints. Raise it if a reversed part "
                 "is sometimes read the wrong way.",
     ("orientation", "max_count"): "NG when more parts than this are found in the area. 0 = no limit.",
+    ("segment", "model"): "The segmentation model (.pt), e.g. weights/d92_quarter_glass_seg.pt. Use Browse to pick it.",
+    "expected_side": "Which side must face the camera: back, front or any.",
+    "front_class": "Model class name of the part seen from the front.",
+    "back_class": "Model class name of the part seen from the back.",
+    "item_class": "Model class name of the small parts to count on the back side.",
+    "item_conf": "How sure (0-1) the model must be to count a small part.",
+    "both_sides": "On: one part is OK only after both its sides were checked (front, and back with all small parts), "
+                  "in either order. Off: each image is judged alone against Expected side.",
+    "reset_s": "Seconds without a part before a half-checked part is forgotten (the next part starts fresh).",
 }
 
 

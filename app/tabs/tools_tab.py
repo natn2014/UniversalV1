@@ -51,6 +51,7 @@ from ..vision.base import Tool, ToolResult, create
 from ..vision.calibration import calibrate_from_width
 from ..vision.runner import run_tools
 from ..vision.total import total_state
+from ..widgets.part_check_panel import PartCheckPanel
 from ..widgets.layout import SIDE_PANEL_WIDTH, VIDEO_MIN_SIZE, bottom_bar, make_card, top_bar
 from ..widgets.touch_input import attach_numpad, get_double
 from ..widgets.tool_overlay import draw_overlay, overlay_pen, tool_value_text
@@ -184,6 +185,8 @@ class ToolsTab(QWidget):
         self.calibrate_button = self._button("Calibrate mm", self._on_calibrate_clicked)
         self.calibrate_button.setIcon(make_icon("ruler", "#e0e0e0"))
 
+        self.part_check_panel = PartCheckPanel()  # Part Check (AI Seg): the operator checklist
+        self.part_check_panel.hide()
         self.live_label = QLabel("—")
         self.live_label.setObjectName("currentPart")
         self.live_label.setWordWrap(True)  # a long reason ("search area ...") must not widen the panel
@@ -300,6 +303,7 @@ class ToolsTab(QWidget):
         right_layout.setSpacing(8)
         right_layout.addWidget(list_panel)
         right_layout.addLayout(buttons)
+        right_layout.addWidget(self.part_check_panel)
         right_layout.addWidget(self.pick_card)
         right_layout.addWidget(limits_card)
         right_layout.addWidget(params_card)
@@ -571,7 +575,8 @@ class ToolsTab(QWidget):
             res = self._results.get(tool.name)
             value = QTableWidgetItem(tool_value_text(res, mm) if res else "—")
             value.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            pending = res is not None and res.extra.get("pending")
+            # pending: a slow tool's first read; waiting: Part Check needs the other side
+            pending = res is not None and (res.extra.get("pending") or res.extra.get("waiting"))
             verdict = QTableWidgetItem("—" if res is None else "…" if pending else ("OK" if res.ok else "NG"))
             verdict.setTextAlignment(Qt.AlignCenter)
             if pending:
@@ -589,7 +594,11 @@ class ToolsTab(QWidget):
         tool = self.selected_tool()
         res = self._results.get(tool.name) if tool else None
         self.live_label.setText("Live value: —" if res is None else f"Live value: {tool_value_text(res, bool(self._ctx.mm_per_px))}"
-                                + (f"   {res.text}" if res.text and res.kind not in ("ocr", "code") else ""))
+                                + (f"   {res.text}" if res.text and res.kind not in ("ocr", "code", "segment") else ""))
+        is_part_check = tool is not None and tool.kind == "segment"
+        self.part_check_panel.setVisible(is_part_check)
+        if is_part_check:
+            self.part_check_panel.show_result(res, tool.item_class)
 
     def _update_total(self, results: List[ToolResult]) -> None:
         if not results:

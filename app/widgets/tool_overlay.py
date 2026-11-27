@@ -16,6 +16,10 @@ OVERLAY_OK = QColor(OK_GREEN).lighter(170)
 OVERLAY_NG = QColor(NG_RED).lighter(130)
 MM_KINDS = {"width", "diameter"}
 # Counted pixels (Area, Color Area): see-through yellow with a darker edge.
+# Semi-transparent fills a "poly" item may ask for with item["fill"]
+# (Part Check: the glass mask green, each sponge blue). The outline keeps
+# its OK / NG colour on top.
+FILL_COLORS = {"green": QColor(40, 220, 60, 80), "blue": QColor(30, 110, 255, 110)}
 LABEL_CHIP = QColor(0, 0, 0, 185)  # dark chip behind every label: readable on any image
 # Premultiplied BGRA (the byte order of QImage.Format_ARGB32_Premultiplied)
 # for pixel classes 0 = clear, 1 = counted, 2 = edge of the counted area.
@@ -145,7 +149,15 @@ def draw_overlay(painter: QPainter, items: List[dict]) -> None:
             painter.drawEllipse(QPointF(cx, cy), r, r)
             anchor = (cx - r, cy - r)
         elif kind == "poly" and len(pts) >= 2:
-            painter.drawPolygon(QPolygonF([QPointF(x, y) for x, y in pts]))
+            polygon = QPolygonF([QPointF(x, y) for x, y in pts])
+            fill = FILL_COLORS.get(item.get("fill", ""))
+            if fill is not None:
+                painter.save()
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(fill)
+                painter.drawPolygon(polygon)
+                painter.restore()
+            painter.drawPolygon(polygon)
             anchor = (min(p[0] for p in pts), min(p[1] for p in pts))
         elif kind == "region" and len(pts) == 2 and item.get("mask") is not None:
             draw_region(painter, int(round(pts[0])), int(round(pts[1])), item["mask"], item.get("color", "yellow"))
@@ -179,7 +191,7 @@ def tool_value_text(result: ToolResult, calibrated: bool) -> str:
     a slow tool's result shows how old it is ("…" while still waiting)."""
     if result.extra.get("pending"):
         return "…"
-    if result.kind in ("ocr", "code") and result.text:
+    if result.kind in ("ocr", "code", "segment") and result.text:
         text = result.text.splitlines()[0][:24]
     else:
         text = f"{result.value:+.1f}°" if result.kind == "orientation" else f"{result.value:.2f}"

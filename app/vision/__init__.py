@@ -16,3 +16,4 @@ from . import pattern  # noqa: F401
 from . import search  # noqa: F401
 from . import count  # noqa: F401
 from . import orientation  # noqa: F401
+from . import segment  # noqa: F401

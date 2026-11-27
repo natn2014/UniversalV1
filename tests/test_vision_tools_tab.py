@@ -315,7 +315,7 @@ class UiRules(ToolsTabTest):
     def test_add_dialog_has_a_tile_per_kind_and_returns_the_pick(self):
         dialog = AddToolDialog()
         kinds = [k for _, ks in CATEGORIES for k in ks]
-        self.assertEqual(len(kinds), 18)
+        self.assertEqual(len(kinds), 19)
         self.assertEqual(set(dialog.tiles), set(kinds))
         self.assertTrue(all(t.minimumHeight() >= 72 for t in dialog.tiles.values()))
         dialog.show_category("Measure")

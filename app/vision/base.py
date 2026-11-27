@@ -6,7 +6,8 @@ Qt: {"type", "pts", "ok", "label"} in frame pixels, where `pts` is
   rect / line / mask_box  [x1, y1, x2, y2]
   circle                  [cx, cy, r]
   text                    [x, y]
-  poly                    [[x, y], ...]
+  poly                    [[x, y], ...]; optional item["fill"] "green" / "blue"
+                          paints the inside semi-transparent
   region                  [x, y] top-left of item["mask"], a uint8 image
                           of the counted pixels (nonzero); item["color"] is
                           "yellow" / "red" (see-through fill, darker edge) or

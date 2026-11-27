@@ -62,6 +62,7 @@ from ..theme import (
     set_badge_title,
 )
 from ..vision.total import total_state
+from ..widgets.part_check_panel import PartCheckPanel
 from ..widgets.layout import SIDE_PANEL_WIDTH, VIDEO_MIN_SIZE, bottom_bar, top_bar
 from ..widgets.master_dialog import MasterDialog
 from ..widgets.master_strip import MasterStrip
@@ -310,6 +311,8 @@ class MonitorTab(QWidget):
         self.tool_table.setMinimumWidth(220)
         self.tool_table.setMaximumHeight(170)
         self.tool_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.part_check_panel = PartCheckPanel()  # Part Check (AI Seg) checklist, when the job has one
+        self.part_check_panel.hide()
         self._set_tool_panel_visible(False)
         ctx.tools_changed.connect(self._on_tools_changed)
 
@@ -371,6 +374,7 @@ class MonitorTab(QWidget):
         self._show_judge_mode()
         side_layout.addWidget(self.tool_header)
         side_layout.addWidget(self.tool_table)
+        side_layout.addWidget(self.part_check_panel)
         # In the side panel, not the bottom bar: that must fit the 1024-wide
         # kiosk screen and is already full.
         autocapture_header = QLabel("Auto Capture")
@@ -1416,6 +1420,11 @@ class MonitorTab(QWidget):
             self.tool_table.setRowCount(0)
 
     def _update_tool_table(self, tool_results: list) -> None:
+        part_check = next((r for r in tool_results if r.kind == "segment"), None)
+        self.part_check_panel.setVisible(part_check is not None)
+        if part_check is not None:
+            tool = next((t for t in self._ctx.tools if t.name == part_check.name), None) if hasattr(self._ctx, "tools") else None
+            self.part_check_panel.show_result(part_check, getattr(tool, "item_class", "sponge"))
         if not tool_results:
             self.tool_table.setRowCount(0)
             return
@@ -1423,7 +1432,7 @@ class MonitorTab(QWidget):
         mm = bool(self._ctx.mm_per_px)
         self.tool_table.setRowCount(len(tool_results))
         for row, result in enumerate(tool_results):
-            if result.extra.get("pending"):
+            if result.extra.get("pending") or result.extra.get("waiting"):  # waiting: the part's other side
                 verdict = QTableWidgetItem("…")
                 verdict.setBackground(QBrush(QColor(STANDBY_YELLOW)))
                 verdict.setForeground(QBrush(QColor("#1a1a1a")))

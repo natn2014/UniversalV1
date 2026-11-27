@@ -688,6 +688,35 @@ TH = {
         "ความมั่นใจ (0-1) ที่โมเดลต้องมีต่อจุดทั้งสอง เพิ่มค่านี้ถ้าบางครั้งชิ้นงานกลับด้านถูกอ่านผิดทาง",
     "NG when more parts than this are found in the area. 0 = no limit.": "เป็น NG เมื่อพบชิ้นงานในพื้นที่มากกว่านี้ 0 = ไม่จำกัด",
     "Browse…": "เลือกไฟล์…",
+    # --- Part Check (AI seg) tool ------------------------------------------
+    "Part Check": "ตรวจชิ้นงาน",
+    "Glass front side": "กระจกด้านหน้า",
+    "Glass back side": "กระจกด้านหลัง",
+    "Clip seal sponge": "ฟองน้ำซีลคลิป",
+    "Extra {}: {}": "{} เกิน: {}",
+    "PASS": "ผ่าน",
+    "TURN OVER": "พลิกด้าน",
+    "NO GLASS": "ไม่พบกระจก",
+    "Wrong side for this step": "ด้านไม่ถูกต้องสำหรับขั้นตอนนี้",
+    "Fit the missing parts, then show the back again": "ใส่ชิ้นส่วนที่ขาดให้ครบ แล้วแสดงด้านหลังอีกครั้ง",
+    "Show the {} side": "แสดงด้าน{}",
+    "front": "หน้า",
+    "back": "หลัง",
+    "Part Check\n(AI Seg)": "ตรวจชิ้นงาน\n(AI Seg)",
+    "Right side up, all small parts fitted": "ด้านถูกต้อง ชิ้นส่วนเล็กครบ",
+    "Finds the part with a segmentation model, tells which side faces the camera and counts the small parts (e.g. sponges) on it. NG on the wrong side or a wrong count.":
+        "หาชิ้นงานด้วยโมเดล Segmentation บอกว่าด้านไหนหันเข้ากล้อง และนับชิ้นส่วนเล็ก (เช่น ฟองน้ำ) บนชิ้นงาน เป็น NG เมื่อผิดด้านหรือจำนวนไม่ถูกต้อง",
+    "The segmentation model (.pt), e.g. weights/d92_quarter_glass_seg.pt. Use Browse to pick it.":
+        "โมเดล Segmentation (.pt) เช่น weights/d92_quarter_glass_seg.pt กด เลือกไฟล์ เพื่อเลือก",
+    "Which side must face the camera: back, front or any.": "ด้านที่ต้องหันเข้ากล้อง: back (ด้านหลัง), front (ด้านหน้า) หรือ any (ด้านใดก็ได้)",
+    "Model class name of the part seen from the front.": "ชื่อคลาสของโมเดลสำหรับชิ้นงานด้านหน้า",
+    "Model class name of the part seen from the back.": "ชื่อคลาสของโมเดลสำหรับชิ้นงานด้านหลัง",
+    "Model class name of the small parts to count on the back side.": "ชื่อคลาสของโมเดลสำหรับชิ้นส่วนเล็กที่นับบนด้านหลัง",
+    "How sure (0-1) the model must be to count a small part.": "ความมั่นใจ (0-1) ที่โมเดลต้องมีจึงจะนับชิ้นส่วนเล็ก",
+    "On: one part is OK only after both its sides were checked (front, and back with all small parts), in either order. Off: each image is judged alone against Expected side.":
+        "เปิด: ชิ้นงานจะ OK เมื่อตรวจครบทั้งสองด้านแล้ว (ด้านหน้า และด้านหลังที่มีชิ้นส่วนเล็กครบ) ลำดับใดก็ได้ ปิด: ตัดสินแต่ละภาพแยกกันตามด้านที่ต้องการ",
+    "Seconds without a part before a half-checked part is forgotten (the next part starts fresh).":
+        "จำนวนวินาทีที่ไม่พบชิ้นงานก่อนล้างผลที่ตรวจไปครึ่งเดียว (ชิ้นถัดไปเริ่มใหม่)",
     "Choose Pose Model": "เลือกโมเดล Pose",
 }
 

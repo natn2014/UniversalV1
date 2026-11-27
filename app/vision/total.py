@@ -17,8 +17,9 @@ def total_state(results: List[ToolResult], yolo_state: Optional[str], gate: str 
     """
     if not position_found or yolo_state == "YELLOW":
         return "YELLOW"
-    # A slow tool (OCR, code) still waiting for its first read of this part.
-    if any(r.extra.get("pending") for r in results):
+    # A slow tool (OCR, code) still waiting for its first read of this part,
+    # or a tool waiting for the part's other side (Part Check, both sides).
+    if any(r.extra.get("pending") or r.extra.get("waiting") for r in results):
         return "YELLOW"
     oks = [r.ok for r in results if r.kind != "position"]
     if yolo_state is not None:
